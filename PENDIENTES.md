@@ -1,5 +1,36 @@
 # PENDIENTES — JFR Switcher Multicam
 
+## Decisión tomada (27/10): NO se usa la API de Meta
+
+- Se descartó el camino de la **API de Graph / login de Meta** para iniciar el directo. El flujo real es
+  **Facebook Live Producer + la clave de transmisión pegada a mano**, y ya está resuelto en la app:
+  - Botón **«Abrir Live Producer»** que abre `https://www.facebook.com/live/producer/?target=<pagina>`
+    **forzando Chrome** (la app de Facebook se queda el enlace y abre en modo cámara, sin RTMP).
+  - El cambio de pantalla a Chrome y el regreso **no cortan el audio**: `EmisionService` (servicio en
+    primer plano, tipo `microphone|camera`) mantiene micrófono, cámara y sesión mientras la app está
+    fuera de pantalla. Verificado en la tablet (25 s en segundo plano con audio intacto).
+- **Consecuencia:** el código de la API (`studio/stream/Facebook.kt`: `live_videos`, `me/accounts`,
+  login con SDK) **ya no se usa**, pero sigue compilado. Quitarlo ahorraría peso y quitaría el botón
+  «Entrar con Facebook y elegir página». **Pendiente de decidir con Jorge** (no se borra sin su visto bueno).
+- Lo de Meta que **sí** hace falta es la **política de privacidad** pública: ya está en
+  `jorgefrosas-dotcom.github.io/jfr-switcher-legal/privacidad.html` y enlazada desde la página de
+  descargas.
+
+## Versión visible y aviso de actualización (0.2.2 y 0.2.3)
+
+- **Tablet (0.2.2):** en Ajustes, al final, sale «Versión 0.2.2 · toca para buscar actualización».
+  Al abrir la app consulta GitHub en segundo plano; si hay una versión más nueva abre un cuadro con
+  **las novedades del release** y los botones **Descargar / Ver la página / Ahora no**.
+- **Celular (0.2.3):** lo mismo, con la versión en el rótulo («JFR Camera · v0.2.3»); tocar el rótulo
+  hace la búsqueda manual.
+- La lógica vive en `core/upd/Actualizaciones.kt` (la usan las dos apps): lee
+  `api.github.com/repos/jorgefrosas-dotcom/JFR-Switcher/releases/latest`, compara versiones número por
+  número y saca los enlaces de los dos APK. Si no hay red o algo falla, **no hace nada** (nunca estorba).
+- **Importante para el futuro:** el texto del botón «Descargar» y el cuadro muestran las **notas del
+  release** de GitHub. Por eso hay que escribir ahí, en español y corto, qué cambió: es la descripción
+  que ve Jorge en la app.
+- Probado de verdad: la tablet en 0.2.2 mostró «Versión 0.2.3 disponible» con las novedades al abrirse.
+
 ## Cómo instalar en el POCO (MIUI/HyperOS) — truco que sí funciona
 
 - `adb install` normal falla con **`INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`**,
