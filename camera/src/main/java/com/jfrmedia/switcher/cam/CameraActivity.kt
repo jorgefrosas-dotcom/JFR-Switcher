@@ -1,10 +1,12 @@
 package com.jfrmedia.switcher.cam
 
 import android.Manifest
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
@@ -23,6 +25,7 @@ import com.jfrmedia.switcher.cam.databinding.ActivityCameraBinding
 import com.jfrmedia.switcher.core.media.VideoPresets
 import com.jfrmedia.switcher.core.net.QrLink
 import com.jfrmedia.switcher.core.proto.Proto
+import com.jfrmedia.switcher.core.upd.Actualizaciones
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 
@@ -110,6 +113,77 @@ class CameraActivity : AppCompatActivity(), CamEngine.Escucha {
         consultarPermiso()
 
         binding.campoIp.setText(prefs.getString(CLAVE_IP, ""))
+
+        // Versión a la vista (en el rótulo) y aviso si hay una nueva. Tocar el rótulo busca a mano.
+        binding.txtMarca.text = "JFR Camera · v${versionInstalada()}"
+        binding.txtMarca.setOnClickListener { buscarActualizacion(manual = true) }
+        buscarActualizacion(manual = false)
+    }
+
+    // ------------------------------------------------------- versión y actualizaciones
+
+    private fun versionInstalada(): String = runCatching {
+        packageManager.getPackageInfo(packageName, 0).versionName
+    }.getOrNull() ?: "?"
+
+    /** Consulta GitHub; si hay una versión más nueva, avisa. [manual] = lo pidió el usuario. */
+    private fun buscarActualizacion(manual: Boolean) {
+        val instalada = versionInstalada()
+        if (manual) Toast.makeText(this, "Buscando actualización…", Toast.LENGTH_SHORT).show()
+        Thread {
+            val ultima = Actualizaciones.ultima()
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                when {
+                    ultima == null -> if (manual) Toast.makeText(
+                        this, "No se pudo consultar: revisa la conexión", Toast.LENGTH_LONG
+                    ).show()
+
+                    !Actualizaciones.hayNueva(instalada, ultima.version) -> if (manual) Toast.makeText(
+                        this, "Estás en la última versión ($instalada)", Toast.LENGTH_LONG
+                    ).show()
+
+                    else -> avisarActualizacion(instalada, ultima)
+                }
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /** Cuadro con las novedades de la versión nueva y el botón para descargarla. */
+    private fun avisarActualizacion(instalada: String, ultima: Actualizaciones.Publicada) {
+        val notas = limpiarNotas(ultima.notas).ifEmpty { "Sin notas de esta versión." }
+        val cuerpo = "Tienes la $instalada y ya salió la ${ultima.version}.\n\nQué cambia:\n\n$notas"
+        val vista = TextView(this).apply {
+            text = cuerpo
+            setTextSize(13.5f)
+            setTextColor(ContextCompat.getColor(context, R.color.texto_principal))
+            val pad = (18 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, pad / 2)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Versión ${ultima.version} disponible")
+            .setView(android.widget.ScrollView(this).apply { addView(vista) })
+            .setPositiveButton("Descargar") { _, _ -> abrirEnNavegador(ultima.apkCamara) }
+            .setNegativeButton("Ahora no", null)
+            .show()
+    }
+
+    /** Quita el formato Markdown de las notas para que se lean bien en el cuadro. */
+    private fun limpiarNotas(texto: String): String = texto
+        .replace(Regex("(?m)^#{1,6}\\s*"), "")
+        .replace("**", "")
+        .replace("`", "")
+        .trim()
+
+    /** Abre una dirección en el navegador (Chrome si está; si no, el que haya). */
+    private fun abrirEnNavegador(url: String) {
+        val directo = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { startActivity(Intent(directo).setPackage("com.android.chrome")) }
+            .recoverCatching { startActivity(directo) }
+            .onFailure {
+                Toast.makeText(this, "No hay navegador para abrir la descarga", Toast.LENGTH_LONG).show()
+            }
     }
 
     override fun onDestroy() {
