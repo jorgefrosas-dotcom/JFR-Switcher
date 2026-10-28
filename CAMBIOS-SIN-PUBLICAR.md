@@ -12,6 +12,12 @@
 
 ## Pendiente de publicar
 
+### Los medios se recuerdan entre sesiones
+
+- **El grupo MEDIOS recuerda los últimos 10** videos y fotos: al abrir la app otra vez ya están ahí,
+  con su miniatura, **sin volver a la galería**. Si alguno ya no existe o perdió el permiso, se
+  descarta solo. Al entrar uno nuevo con la lista llena, sale el más viejo.
+
 ### Ventanas con carácter propio (27/10 noche)
 
 - **Todos los cuadros** (Ajustes, Facebook, Transiciones, Audio, Texto, emparejamiento…) estrenan tema:
@@ -43,6 +49,7 @@
 
 ## Pendiente de programar (no está hecho todavía)
 
-- **Traer a la biblioteca los medios importados** de otras fuentes (fotos y videos de la galería del
-  equipo). Hoy se cargan en el grupo MEDIOS, pero no quedan guardados en la biblioteca.
 - **Capturas (screenshots) durante la grabación**: guardarlas también en la biblioteca.
+
+> Lo de «traer a la biblioteca los medios importados» ya no aplica: la biblioteca se quitó de la
+> pantalla (27/10) y los medios ahora se recuerdan en el propio grupo MEDIOS, que es más directo.

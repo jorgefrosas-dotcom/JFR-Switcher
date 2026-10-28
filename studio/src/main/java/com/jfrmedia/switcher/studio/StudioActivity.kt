@@ -448,6 +448,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         aplicarAudioGuardado()
         }
         aplicarOrientacion()
+        // Los últimos medios de la sesión anterior: ya con la parrilla y la orientación listas.
+        cargarMediosRecientes()
 
         b.audioMeter.levelProvider = { if (recorder.isRecording) recorder.lastLevel else 0f }
 
@@ -2039,9 +2041,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private val medios = ArrayList<Medio>()
 
+    /**
+     * Hasta que se leen los medios de la sesión anterior, la parrilla se dibuja pero **no** se guarda.
+     * El primer `refreshMediaTiles()` ocurre antes de cargar; si guardara, borraría lo guardado.
+     */
+    private var mediosListos = false
+
     /** Reconstruye las tarjetas de medios + la tarjeta de agregar. */
     private fun refreshMediaTiles() {
         if (!::mediosContainer.isInitialized) return
+        // El grupo es de «recientes»: los últimos 10. Los viejos salen también de la pantalla para
+        // que lo que se ve sea exactamente lo que se guarda.
+        while (medios.size > MEDIOS_RECIENTES) medios.removeAt(0)
         mediosContainer.removeAllViews()
         val cols = columnasFuentes()
         val total = medios.size + 1
@@ -2068,6 +2079,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
             }
         }
+        // Un solo punto de guardado: cualquier alta o baja del grupo pasa por aquí.
+        if (mediosListos) guardarMediosRecientes()
     }
 
     /** Tarjeta de un medio: miniatura, nombre y botón para quitarlo del grupo. */
@@ -2246,6 +2259,80 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         medio.thumb = bmp
         return bmp
+    }
+
+    // ------------------------------------------------- medios de la sesión anterior
+
+    /**
+     * Deja anotados los medios del grupo para que sigan ahí al volver a abrir la app.
+     * Se guarda la dirección del archivo (y su permiso, que ya se pidió al agregarlo), no el archivo.
+     */
+    private fun guardarMediosRecientes() {
+        val arr = org.json.JSONArray()
+        for (m in medios) {
+            arr.put(
+                org.json.JSONObject()
+                    .put("uri", m.uri)
+                    .put("video", m.video)
+                    .put("nombre", m.nombre)
+            )
+        }
+        runCatching {
+            // commit() y no apply(): si el equipo cierra la app de golpe, lo anotado no se pierde.
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(CLAVE_MEDIOS, arr.toString())
+                .commit()
+        }.onFailure { L.w("medios", "no se pudo guardar la lista: ${it.message}") }
+    }
+
+    /**
+     * Trae los últimos 10 medios de la sesión anterior. Los que ya no se pueden abrir (archivo
+     * borrado o permiso perdido) se descartan sin reventar; al guardar, quedan fuera de la lista.
+     */
+    private fun cargarMediosRecientes() {
+        val guardados = getSharedPreferences(PREFS, MODE_PRIVATE).getString(CLAVE_MEDIOS, null)
+        if (!guardados.isNullOrBlank()) {
+            runCatching {
+                val arr = org.json.JSONArray(guardados)
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val uri = o.optString("uri")
+                    if (uri.isEmpty()) continue
+                    if (!medioDisponible(uri)) {
+                        L.w("medios", "ya no se puede abrir, se descarta: $uri")
+                        continue
+                    }
+                    medios.add(
+                        Medio(uri, o.optBoolean("video", false), o.optString("nombre", "medio"))
+                    )
+                }
+            }.onFailure { L.w("medios", "no se pudo leer la lista guardada: ${it.message}") }
+        }
+        // A partir de aquí sí se guarda; el guardado de ahora limpia los que ya no servían.
+        mediosListos = true
+        refreshMediaTiles()
+        cargarMiniaturasDeMedios()
+    }
+
+    /** ¿Todavía se puede abrir? (el archivo sigue en el equipo y el permiso de lectura está dado). */
+    private fun medioDisponible(uri: String): Boolean = runCatching {
+        contentResolver.openFileDescriptor(Uri.parse(uri), "r")?.use { true } ?: false
+    }.getOrDefault(false)
+
+    /**
+     * Las miniaturas se sacan fuera del hilo principal para que la app abra rápido aunque haya
+     * videos guardados; al terminar se repinta la parrilla una sola vez.
+     */
+    private fun cargarMiniaturasDeMedios() {
+        val pendientes = medios.filter { it.thumb == null }
+        if (pendientes.isEmpty()) return
+        Thread {
+            for (m in pendientes) cargarMiniatura(m)
+            handler.post {
+                if (isFinishing || isDestroyed) return@post
+                refreshMediaTiles()
+            }
+        }.apply { isDaemon = true }.start()
     }
 
     private fun celdaParams(): LinearLayout.LayoutParams =
@@ -5526,6 +5613,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         private const val FB_URL_POR_DEFECTO = "rtmps://live-api-s.facebook.com:443/rtmp/"
         private const val CLAVE_TABLET_FRONTAL = "tablet_cam_frontal"
         private const val CLAVE_VERTICAL = "vertical"
+        private const val CLAVE_MEDIOS = "medios_recientes"
+
+        /** Cuántos medios se recuerdan entre sesiones (los últimos que se usaron). */
+        private const val MEDIOS_RECIENTES = 10
         private const val CLAVE_AUDIO_ID = "audio_id"
         private const val CLAVE_AUDIO_TIPO = "audio_tipo"
         private const val CLAVE_AUDIO_MON = "audio_mon"
