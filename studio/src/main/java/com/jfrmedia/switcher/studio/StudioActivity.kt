@@ -2028,25 +2028,6 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )
         )
         refreshMediaTiles()
-
-        val etiquetaBiblioteca = TextView(this).apply {
-            text = "BIBLIOTECA"
-            textSize = 10f
-            letterSpacing = 0.12f
-            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
-            setPadding(6.dp, 12.dp, 6.dp, 4.dp)
-        }
-        grid.addView(etiquetaBiblioteca)
-
-        bibliotecaContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        grid.addView(
-            bibliotecaContainer,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-        refreshBiblioteca()
     }
 
     // ------------------------------------------------------------------ medios (videos y fotos)
@@ -2386,6 +2367,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Editor: qué dice, con qué letra, de qué color, qué tamaño y cómo entra. */
     private fun dialogoTexto(paraEditar: TextoGuardado? = null) {
+        // El botón de texto es solo para fuera de grabación/transmisión: en vivo no se toca nada.
+        if (transmitiendo || recorder.isRecording || emisor.grabando) {
+            toast("No se crea texto mientras grabas o transmites")
+            return
+        }
         val caja = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             // Abajo se deja aire: los botones del cuadro se dibujan encima del contenido.
@@ -2661,57 +2647,133 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .putString(CLAVE_PALETA, arr.toString()).apply()
     }
 
-    /** Cuadro para inventar un color con tres barras (rojo, verde y azul). */
+    /** Selector de color: rueda (tono y saturación) + brillo + código hex + valores RGB. */
     private fun dialogoColorNuevo(alElegir: (Int) -> Unit) {
-        var rojo = 255
-        var verde = 255
-        var azul = 255
+        var colorElegido = 0xFFFF5A2B.toInt()
         val caja = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(20.dp, 8.dp, 20.dp, 8.dp)
+            setPadding(22.dp, 6.dp, 22.dp, 6.dp)
         }
-        val muestra = TextView(this).apply {
-            setBackgroundColor(android.graphics.Color.rgb(rojo, verde, azul))
-            setPadding(0, 26.dp, 0, 26.dp)
-        }
-        caja.addView(muestra)
 
-        fun barra(nombre: String, inicial: Int, alCambiar: (Int) -> Unit) {
-            caja.addView(TextView(this).apply {
-                text = nombre
-                textSize = 11f
+        val rueda = com.jfrmedia.switcher.studio.ui.RuedaColorView(this).apply {
+            fijarColor(colorElegido)
+        }
+        caja.addView(
+            rueda,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 300.dp)
+        )
+
+        val barra = android.widget.SeekBar(this).apply {
+            max = 100
+            progress = 100
+        }
+        caja.addView(etiquetaTexto("BRILLO"))
+        caja.addView(barra)
+
+        caja.addView(etiquetaTexto("CÓDIGO HEX (#RRGGBB)"))
+        val campoHex = EditText(this).apply {
+            setText(String.format("#%06X", 0xFFFFFF and colorElegido))
+            textSize = 13f
+            setSingleLine(true)
+        }
+        caja.addView(campoHex)
+
+        val filaRgb = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        caja.addView(filaRgb)
+        var activo = true   // evita que los campos se reescriban entre sí
+
+        fun campo(rotulo: String): EditText {
+            val caja2 = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, 6.dp, 10.dp, 0)
+            }
+            caja2.addView(TextView(this).apply {
+                text = rotulo
+                textSize = 10f
                 setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
-                setPadding(0, 10.dp, 0, 0)
             })
-            caja.addView(android.widget.SeekBar(this).apply {
-                max = 255
-                progress = inicial
-                setOnSeekBarChangeListener(object :
-                    android.widget.SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(
-                        sb: android.widget.SeekBar?,
-                        v: Int,
-                        deUsuario: Boolean
-                    ) {
-                        alCambiar(v)
-                        muestra.setBackgroundColor(android.graphics.Color.rgb(rojo, verde, azul))
-                    }
+            val campo = EditText(this).apply {
+                textSize = 13f
+                setSingleLine(true)
+                inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            }
+            caja2.addView(campo)
+            filaRgb.addView(caja2, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            return campo
+        }
 
-                    override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
-                    override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
-                })
+        val campoR = campo("ROJO")
+        val campoG = campo("VERDE")
+        val campoB = campo("AZUL")
+
+        fun pintarCampos(c: Int) {
+            activo = false
+            campoHex.setText(String.format("#%06X", 0xFFFFFF and c))
+            campoR.setText((android.graphics.Color.red(c)).toString())
+            campoG.setText((android.graphics.Color.green(c)).toString())
+            campoB.setText((android.graphics.Color.blue(c)).toString())
+            activo = true
+        }
+
+        fun fijarDesdeCampos() {
+            if (!activo) return
+            val r = campoR.text.toString().toIntOrNull()?.coerceIn(0, 255) ?: 0
+            val g = campoG.text.toString().toIntOrNull()?.coerceIn(0, 255) ?: 0
+            val b = campoB.text.toString().toIntOrNull()?.coerceIn(0, 255) ?: 0
+            colorElegido = android.graphics.Color.rgb(r, g, b)
+            val hsv = FloatArray(3)
+            android.graphics.Color.colorToHSV(colorElegido, hsv)
+            rueda.fijarColor(colorElegido)
+            activo = false
+            campoHex.setText(String.format("#%06X", 0xFFFFFF and colorElegido))
+            activo = true
+        }
+
+        rueda.alCambiarColor = { c ->
+            colorElegido = c
+            pintarCampos(c)
+        }
+        barra.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(
+                sb: android.widget.SeekBar?,
+                v: Int,
+                deUsuario: Boolean
+            ) {
+                rueda.brillo = (v / 100f).coerceAtLeast(0.05f)
+                colorElegido = rueda.colorActual()
+                pintarCampos(colorElegido)
+            }
+
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+        })
+        for (campoRgb in listOf(campoR, campoG, campoB)) {
+            campoRgb.addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(s: android.text.Editable?) = fijarDesdeCampos()
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             })
         }
-        barra("ROJO", rojo) { rojo = it }
-        barra("VERDE", verde) { verde = it }
-        barra("AZUL", azul) { azul = it }
+        campoHex.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (!activo) return
+                val texto = s?.toString().orEmpty().trim().removePrefix("#")
+                if (texto.length != 6) return
+                val valor = texto.toLongOrNull(16)?.toInt() ?: return
+                colorElegido = valor or 0xFF000000.toInt()
+                rueda.fijarColor(colorElegido)
+                pintarCampos(colorElegido)
+            }
+
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        })
+        pintarCampos(colorElegido)
 
         AlertDialog.Builder(this)
-            .setTitle("Nuevo color")
+            .setTitle("Elegir color")
             .setView(ScrollView(this).apply { addView(caja) })
-            .setPositiveButton("Agregar") { _, _ ->
-                alElegir(android.graphics.Color.rgb(rojo, verde, azul))
-            }
+            .setPositiveButton("Usar este") { _, _ -> alElegir(colorElegido) }
             .setNegativeButton("Cerrar", null)
             .show()
     }
