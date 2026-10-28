@@ -51,6 +51,7 @@ import com.jfrmedia.switcher.studio.canvas.CamItem
 import com.jfrmedia.switcher.studio.canvas.CompositorView
 import com.jfrmedia.switcher.studio.canvas.ImageItem
 import com.jfrmedia.switcher.studio.canvas.MediaItem
+import com.jfrmedia.switcher.studio.canvas.TextoItem
 import com.jfrmedia.switcher.studio.databinding.ActivityStudioBinding
 import com.jfrmedia.switcher.studio.databinding.DialogPairingBinding
 import com.jfrmedia.switcher.studio.audio.AudioEq
@@ -74,6 +75,10 @@ import java.util.Locale
 import com.jfrmedia.switcher.studio.plantillas.AjustesPlantilla
 import com.jfrmedia.switcher.studio.plantillas.TransicionPlantilla
 import com.jfrmedia.switcher.studio.plantillas.MedioPlantilla
+import com.jfrmedia.switcher.studio.texto.Entradas
+import com.jfrmedia.switcher.studio.texto.Fuentes
+import com.jfrmedia.switcher.studio.texto.TextoGuardado
+import com.jfrmedia.switcher.studio.texto.Textos
 import com.jfrmedia.switcher.studio.plantillas.CamPlantilla
 import com.jfrmedia.switcher.studio.plantillas.ImagenPlantilla
 import com.jfrmedia.switcher.studio.plantillas.Plantilla
@@ -1934,6 +1939,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private lateinit var mediosContainer: LinearLayout
 
+    /** Biblioteca: textos guardados y grabaciones de la app. */
+    private lateinit var bibliotecaContainer: LinearLayout
+
     /**
      * Construye la parrilla de fuentes: 3 tarjetas por fila.
      * Primero las 6 cámaras (2 filas) y después el grupo de overlays, que se
@@ -2020,6 +2028,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )
         )
         refreshMediaTiles()
+
+        val etiquetaBiblioteca = TextView(this).apply {
+            text = "BIBLIOTECA"
+            textSize = 10f
+            letterSpacing = 0.12f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+            setPadding(6.dp, 12.dp, 6.dp, 4.dp)
+        }
+        grid.addView(etiquetaBiblioteca)
+
+        bibliotecaContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        grid.addView(
+            bibliotecaContainer,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        refreshBiblioteca()
     }
 
     // ------------------------------------------------------------------ medios (videos y fotos)
@@ -2251,7 +2278,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         overlayContainer.removeAllViews()
         val imagenes = b.canvas.scene.images()
         val cols = columnasFuentes()
-        val total = imagenes.size + 1
+        // Primera celda: crear texto. Después los overlays puestos y al final «+ Overlay».
+        val total = 2 + imagenes.size
         val filas = (total + cols - 1) / cols
 
         for (fila in 0 until filas) {
@@ -2265,9 +2293,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )
             for (col in 0 until cols) {
                 val index = fila * cols + col
+                if (index >= total) {
+                    filaView.addView(Space(this), celdaParams())
+                    continue
+                }
                 when {
-                    index < imagenes.size -> {
-                        val item = imagenes[index]
+                    index == 0 -> filaView.addView(tarjetaCrearTexto(), celdaParams())
+                    index - 1 < imagenes.size -> {
+                        val item = imagenes[index - 1]
                         val tile = OverlayTileView(this)
                         tile.modoVertical(vertical)
                         tile.bind(
@@ -2279,12 +2312,443 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                         filaView.addView(tile, celdaParams())
                     }
 
-                    index == imagenes.size -> filaView.addView(tarjetaAgregarOverlay(), celdaParams())
-                    else -> filaView.addView(Space(this), celdaParams())
+                    else -> filaView.addView(tarjetaAgregarOverlay(), celdaParams())
                 }
             }
         }
     }
+
+    // ------------------------------------------------------------- textos del programa
+
+    private fun etiquetaTexto(chico: String): TextView = TextView(this).apply {
+        text = chico
+        textSize = 10f
+        letterSpacing = 0.1f
+        setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+        setPadding(0, 12.dp, 0, 2.dp)
+    }
+
+    private fun chipOpcion(texto: String, alTocar: () -> Unit): TextView =
+        TextView(this).apply {
+            text = texto
+            textSize = 12f
+            setPadding(12.dp, 8.dp, 12.dp, 8.dp)
+            setBackgroundResource(R.drawable.bg_chip)
+            setOnClickListener { alTocar() }
+        }
+
+    private fun pintarChip(chip: TextView, elegido: Boolean) {
+        chip.setTextColor(
+            ContextCompat.getColor(
+                this,
+                if (elegido) R.color.accent else R.color.text_secondary
+            )
+        )
+        chip.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            ContextCompat.getColor(this, if (elegido) R.color.bg_panel_alt else R.color.bg_panel)
+        )
+    }
+
+    /** Tarjeta, primera de OVERLAYS, que abre el editor de texto. */
+    private fun tarjetaCrearTexto(): View {
+        val frame = AspectFrameLayout(this).apply {
+            aspect = if (vertical) 9f / 16f else 16f / 9f
+            setBackgroundResource(R.drawable.bg_tile)
+            isClickable = true
+            isFocusable = true
+        }
+        val columna = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+        }
+        columna.addView(TextView(this).apply {
+            text = "T"
+            textSize = 22f
+            gravity = Gravity.CENTER
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
+        })
+        columna.addView(TextView(this).apply {
+            text = "Texto"
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+        })
+        frame.addView(
+            columna,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        frame.setOnClickListener { dialogoTexto() }
+        return frame
+    }
+
+    /** Editor: qué dice, con qué letra, de qué color, qué tamaño y cómo entra. */
+    private fun dialogoTexto(paraEditar: TextoGuardado? = null) {
+        val caja = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            // Abajo se deja aire: los botones del cuadro se dibujan encima del contenido.
+            setPadding(20.dp, 6.dp, 20.dp, 76.dp)
+        }
+
+        val campo = EditText(this).apply {
+            hint = "Escribe el texto…"
+            setText(paraEditar?.texto.orEmpty())
+            textSize = 14f
+            gravity = Gravity.TOP
+            minLines = 2
+        }
+        caja.addView(etiquetaTexto("TEXTO"))
+        caja.addView(campo)
+
+        // --- Tipo de letra ---
+        var fuente = paraEditar?.fuente ?: "Sans negrita"
+        caja.addView(etiquetaTexto("TIPO DE LETRA"))
+        val filaFuentes = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        caja.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(
+                filaFuentes,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        })
+        val chipsFuente = HashMap<String, TextView>()
+        for ((nombre, cara) in Fuentes.TODAS) {
+            val chip = chipOpcion(nombre) {
+                fuente = nombre
+                chipsFuente.entries.forEach { e -> pintarChip(e.value, e.key == nombre) }
+            }
+            chip.typeface = cara
+            chipsFuente[nombre] = chip
+            filaFuentes.addView(
+                chip,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = 6.dp }
+            )
+        }
+        chipsFuente.entries.forEach { e -> pintarChip(e.value, e.key == fuente) }
+
+        // --- Color ---
+        var color = paraEditar?.color ?: android.graphics.Color.WHITE
+        caja.addView(etiquetaTexto("COLOR"))
+        val filaColores = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        caja.addView(filaColores)
+        val colores = listOf(
+            android.graphics.Color.WHITE,
+            android.graphics.Color.BLACK,
+            0xFFFF5A2B.toInt(),
+            0xFFFFC13B.toInt(),
+            0xFF35C759.toInt(),
+            0xFF2F8FFF.toInt()
+        )
+        val chipsColor = HashMap<Int, TextView>()
+        for (c in colores) {
+            val chip = TextView(this).apply {
+                text = "    "
+                setBackgroundColor(c)
+                setPadding(14.dp, 10.dp, 14.dp, 10.dp)
+                setOnClickListener {
+                    color = c
+                    chipsColor.entries.forEach { e -> e.value.alpha = if (e.key == c) 1f else 0.4f }
+                }
+            }
+            chipsColor[c] = chip
+            filaColores.addView(
+                chip,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = 8.dp }
+            )
+        }
+        chipsColor.entries.forEach { e -> e.value.alpha = if (e.key == color) 1f else 0.4f }
+
+        // --- Tamaño ---
+        var tamano = paraEditar?.tamano ?: 1.0f
+        caja.addView(etiquetaTexto("TAMAÑO"))
+        val barra = android.widget.SeekBar(this).apply {
+            max = 120
+            progress = ((tamano - 0.6f) * 100f).toInt().coerceIn(0, 120)
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    sb: android.widget.SeekBar?,
+                    v: Int,
+                    deUsuario: Boolean
+                ) {
+                    tamano = 0.6f + v / 100f
+                }
+
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+            })
+        }
+        caja.addView(barra)
+
+        // --- Animación de entrada ---
+        var animacion = paraEditar?.animacion ?: "fundido"
+        caja.addView(etiquetaTexto("CÓMO ENTRA"))
+        val filaAnim = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        caja.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(
+                filaAnim,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        })
+        val chipsAnim = HashMap<String, TextView>()
+        for (e in Entradas.TODAS) {
+            val chip = chipOpcion(e.nombre) {
+                animacion = e.clave
+                chipsAnim.entries.forEach { x -> pintarChip(x.value, x.key == e.clave) }
+            }
+            chipsAnim[e.clave] = chip
+            filaAnim.addView(
+                chip,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = 6.dp }
+            )
+        }
+        chipsAnim.entries.forEach { x -> pintarChip(x.value, x.key == animacion) }
+
+        fun armar(): TextoGuardado = TextoGuardado(
+            id = paraEditar?.id ?: Textos.nuevoId(),
+            texto = campo.text.toString().trim(),
+            fuente = fuente,
+            color = color,
+            animacion = animacion,
+            tamano = tamano
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle(if (paraEditar == null) "Nuevo texto" else "Editar texto")
+            .setView(ScrollView(this).apply { addView(caja) })
+            .setPositiveButton("Al programa") { _, _ ->
+                val t = armar()
+                if (t.texto.isBlank()) {
+                    toast("Escribe algo de texto")
+                } else {
+                    if (Textos.guardar(this, t)) refreshBiblioteca()
+                    agregarTextoAlPrograma(t)
+                }
+            }
+            .setNeutralButton("Solo guardar") { _, _ ->
+                val t = armar()
+                if (t.texto.isBlank()) {
+                    toast("Escribe algo de texto")
+                } else if (Textos.guardar(this, t)) {
+                    refreshBiblioteca()
+                    toast("Guardado en la biblioteca")
+                } else {
+                    toast("No se pudo guardar")
+                }
+            }
+            .setNegativeButton("Cerrar", null)
+            .show()
+    }
+
+    /** Pone el texto en el programa con su animación de entrada. */
+    private fun agregarTextoAlPrograma(t: TextoGuardado) {
+        runCatching {
+            val mapa = Textos.rasterizar(t)
+            val item = TextoItem(
+                b.canvas.scene.nextId(), t.texto, t.fuente, t.animacion, t.id, mapa
+            )
+            val aspecto = mapa.width.toFloat() / mapa.height.toFloat()
+            val ancho = 0.58f
+            val alto = (ancho * b.canvas.scene.aspect / aspecto).coerceAtMost(0.85f)
+            val x = (1f - ancho) / 2f
+            val y = if (vertical) 0.26f else 0.30f
+            item.rect.set(x, y, x + ancho, y + alto)
+            item.animInicio = System.nanoTime()
+            b.canvas.scene.agregar(item)
+            animarEntradaDeTexto()
+            b.canvas.requestRender()
+            onSelectionChanged(item)
+            refreshOverlayTiles()
+            toast("Texto agregado · arrástralo donde quieras")
+        }.onFailure {
+            L.e("studio", "texto: ${it.message}", it)
+            toast("No se pudo crear el texto")
+        }
+    }
+
+    /** El lienzo se dibuja bajo demanda: se le piden cuadros mientras dura la animación. */
+    private fun animarEntradaDeTexto() {
+        val fin = SystemClock.uptimeMillis() + 1000
+        val paso = object : Runnable {
+            override fun run() {
+                b.canvas.requestRender()
+                if (SystemClock.uptimeMillis() < fin) handler.postDelayed(this, 33)
+            }
+        }
+        handler.post(paso)
+    }
+
+    // ---------------------------------------------------------------- biblioteca
+
+    /** Textos guardados + grabaciones de la app. Tocar una cosa la pone en el programa. */
+    private fun refreshBiblioteca() {
+        if (!::bibliotecaContainer.isInitialized) return
+        bibliotecaContainer.removeAllViews()
+
+        val textos = Textos.listar(this)
+        val grabaciones = grabacionesDeLaApp()
+        if (textos.isEmpty() && grabaciones.isEmpty()) {
+            bibliotecaContainer.addView(TextView(this).apply {
+                text = "Aquí se guardan los textos que crees y las grabaciones de la app."
+                textSize = 11f
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+                setPadding(6.dp, 4.dp, 6.dp, 6.dp)
+            })
+            return
+        }
+
+        val celdas = ArrayList<View>()
+        for (t in textos) celdas.add(tarjetaTextoBiblioteca(t))
+        for (g in grabaciones) celdas.add(tarjetaGrabacion(g.first, g.second))
+
+        val cols = columnasFuentes()
+        val filas = (celdas.size + cols - 1) / cols
+        var i = 0
+        for (fila in 0 until filas) {
+            val filaView = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            bibliotecaContainer.addView(
+                filaView,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+            for (col in 0 until cols) {
+                if (i < celdas.size) filaView.addView(celdas[i], celdaParams())
+                else filaView.addView(Space(this), celdaParams())
+                i++
+            }
+        }
+    }
+
+    private fun tarjetaTextoBiblioteca(t: TextoGuardado): View {
+        val frame = AspectFrameLayout(this).apply {
+            aspect = if (vertical) 9f / 16f else 16f / 9f
+            setBackgroundResource(R.drawable.bg_tile)
+            isClickable = true
+            isFocusable = true
+        }
+        val columna = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(8.dp, 8.dp, 8.dp, 8.dp)
+        }
+        columna.addView(TextView(this).apply {
+            text = t.texto
+            textSize = 11f
+            maxLines = 3
+            typeface = Fuentes.de(t.fuente)
+            setTextColor(t.color)
+        })
+        columna.addView(TextView(this).apply {
+            text = Entradas.nombre(t.animacion)
+            textSize = 9f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+        })
+        frame.addView(
+            columna,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        // Un toque lo pone en el programa; mantenerlo pulsado lo borra de la biblioteca.
+        frame.setOnClickListener { agregarTextoAlPrograma(t) }
+        frame.setOnLongClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("¿Borrar este texto?")
+                .setMessage(t.texto)
+                .setPositiveButton("Borrar") { _, _ ->
+                    Textos.borrar(this, t.id)
+                    refreshBiblioteca()
+                }
+                .setNegativeButton("No", null)
+                .show()
+            true
+        }
+        return frame
+    }
+
+    private fun tarjetaGrabacion(uri: String, nombre: String): View {
+        val frame = AspectFrameLayout(this).apply {
+            aspect = if (vertical) 9f / 16f else 16f / 9f
+            setBackgroundResource(R.drawable.bg_tile)
+            isClickable = true
+            isFocusable = true
+        }
+        val columna = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(8.dp, 8.dp, 8.dp, 8.dp)
+        }
+        columna.addView(TextView(this).apply {
+            text = "▶"
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
+        })
+        columna.addView(TextView(this).apply {
+            text = nombre
+            textSize = 9f
+            maxLines = 2
+            gravity = Gravity.CENTER
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+        })
+        frame.addView(
+            columna,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        frame.setOnClickListener { agregarMedio(Uri.parse(uri)) }
+        return frame
+    }
+
+    /** Grabaciones que la app guardó en la galería (Movies/JFR Switcher). */
+    private fun grabacionesDeLaApp(limite: Int = 8): List<Pair<String, String>> {
+        val salida = ArrayList<Pair<String, String>>()
+        runCatching {
+            val coleccion = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            val columnas = arrayOf(
+                MediaStore.Video.Media._ID,
+                MediaStore.Video.Media.DISPLAY_NAME
+            )
+            contentResolver.query(
+                coleccion,
+                columnas,
+                "${MediaStore.Video.Media.RELATIVE_PATH} LIKE ?",
+                arrayOf("%JFR Switcher%"),
+                "${MediaStore.Video.Media.DATE_ADDED} DESC"
+            )?.use { c ->
+                val iId = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                val iNom = c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+                while (c.moveToNext() && salida.size < limite) {
+                    val uri = android.content.ContentUris
+                        .withAppendedId(coleccion, c.getLong(iId)).toString()
+                    salida.add(uri to (c.getString(iNom) ?: "Grabación"))
+                }
+            }
+        }.onFailure { L.e("studio", "biblioteca: ${it.message}", it) }
+        return salida
+    }
+
 
     private fun tarjetaAgregarOverlay(): View {
         val frame = AspectFrameLayout(this).apply {

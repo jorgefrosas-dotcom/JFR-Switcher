@@ -86,14 +86,37 @@ class MediaItem(
     var reproduciendo: Boolean = false
 }
 
-/** Imagen (logo, banner, mensaje). */
-class ImageItem(
+/** Imagen (logo, banner, mensaje). También es la base de [TextoItem]. */
+open class ImageItem(
     id: Long,
     val bitmap: Bitmap,
     var label: String = "Imagen",
     /** URI original, para poder guardarla en una plantilla y volver a cargarla. */
     val uri: String? = null
 ) : CanvasItem(id)
+
+/**
+ * Texto encima del programa.
+ *
+ * Se dibuja igual que una imagen (el texto ya viene rasterizado en [bitmap]) y guarda de dónde
+ * salió para poder volver a usarlo desde la biblioteca. La animación de entrada se calcula en el
+ * compositor a partir de [animInicio].
+ */
+class TextoItem(
+    id: Long,
+    val texto: String,
+    val fuente: String,
+    val animacion: String,
+    /** id del texto guardado en la biblioteca, si salió de ahí. */
+    val guardadoId: String?,
+    bitmap: Bitmap
+) : ImageItem(id, bitmap, "Texto", null) {
+
+    /** Momento (System.nanoTime) en que empezó a entrar. 0 = sin animación pendiente. */
+    @Volatile var animInicio: Long = 0L
+
+    @Volatile var animDuracionMs: Int = 800
+}
 
 /**
  * Escena del programa: lista ordenada de atrás hacia adelante.

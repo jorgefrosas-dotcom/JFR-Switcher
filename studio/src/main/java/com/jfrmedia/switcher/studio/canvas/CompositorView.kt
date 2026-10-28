@@ -13,6 +13,7 @@ import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.jfrmedia.switcher.core.util.L
+import com.jfrmedia.switcher.studio.texto.Entradas
 import org.webrtc.VideoTrack
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -630,8 +631,30 @@ class CompositorView @JvmOverloads constructor(
     private fun drawImage(item: ImageItem, outW: Int, outH: Int) {
         val tex = imageTextures.getOrPut(item.id) { ImageTexture(item.bitmap) }
         if (!tex.ensure()) return
-        val r = rectPara(item)
-        val alpha = item.opacity * (if (item === animItem) animAlpha else 1f)
+        var r = rectPara(item)
+        var alpha = item.opacity * (if (item === animItem) animAlpha else 1f)
+
+        // Entrada de los textos: la animación dura unos milisegundos y luego queda quieto.
+        if (item is TextoItem && item.animInicio > 0L) {
+            val transcurrido = (System.nanoTime() - item.animInicio) / 1_000_000f
+            val p = transcurrido / item.animDuracionMs.coerceAtLeast(1)
+            if (p >= 1f) {
+                item.animInicio = 0L
+            } else {
+                val e = Entradas.calcular(item.animacion, p)
+                alpha *= e.alfa
+                val w = r.width()
+                val h = r.height()
+                val cx = r.centerX()
+                val cy = r.centerY()
+                val nw = w * e.escala
+                val nh = h * e.escala
+                val movido = RectF(cx - nw / 2f, cy - nh / 2f, cx + nw / 2f, cy + nh / 2f)
+                movido.offset(e.desplazamientoX * w, e.desplazamientoY * h)
+                r = movido
+            }
+        }
+
         if (alpha <= 0.01f) return
         Mvp.forRect(mvp, r.left, r.top, r.right, r.bottom)
         rgba?.draw(
