@@ -43,6 +43,7 @@ import com.jfrmedia.switcher.core.media.VideoPresets
 import com.jfrmedia.switcher.core.net.Net
 import com.jfrmedia.switcher.core.proto.Msg
 import com.jfrmedia.switcher.core.proto.Proto
+import com.jfrmedia.switcher.core.upd.Actualizaciones
 import com.jfrmedia.switcher.core.util.L
 import com.jfrmedia.switcher.studio.canvas.AspectFrameLayout
 import com.jfrmedia.switcher.studio.canvas.CanvasItem
@@ -493,6 +494,73 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )
         }
         L.i("studio", "listo en ${Net.primaryIp()}:${server.port}")
+        // Aviso de versión nueva: se consulta al abrir la app, en segundo plano, sin estorbar.
+        buscarActualizacion(manual = false)
+    }
+
+    // ------------------------------------------------------- versión y actualizaciones
+
+    /** Versión instalada, tal como la declara el APK (`0.2.2`). */
+    private fun versionInstalada(): String = runCatching {
+        packageManager.getPackageInfo(packageName, 0).versionName
+    }.getOrNull() ?: "?"
+
+    /**
+     * Consulta GitHub y, si hay una versión más nueva, avisa.
+     * [manual] = lo pidió el usuario desde Ajustes; entonces también confirma si no hay nada nuevo.
+     */
+    private fun buscarActualizacion(manual: Boolean) {
+        val instalada = versionInstalada()
+        if (manual) toast("Buscando actualización…")
+        Thread {
+            val ultima = Actualizaciones.ultima()
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                when {
+                    ultima == null ->
+                        if (manual) toast("No se pudo consultar: revisa la conexión a internet")
+                    !Actualizaciones.hayNueva(instalada, ultima.version) ->
+                        if (manual) toast("Estás en la última versión ($instalada)")
+                    else -> avisarActualizacion(instalada, ultima)
+                }
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /** Cuadro con las novedades de la versión nueva y el botón para descargarla. */
+    private fun avisarActualizacion(instalada: String, ultima: Actualizaciones.Publicada) {
+        val notas = limpiarNotas(ultima.notas).ifEmpty { "Sin notas de esta versión." }
+        val cuerpo = "Tienes la $instalada y ya salió la ${ultima.version}.\n\nQué cambia:\n\n$notas"
+        val vista = TextView(this).apply {
+            text = cuerpo
+            setTextSize(13.5f)
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+            val pad = (18 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, pad / 2)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Versión ${ultima.version} disponible")
+            .setView(ScrollView(this).apply { addView(vista) })
+            .setPositiveButton("Descargar") { _, _ -> abrirEnNavegador(ultima.apkSwitcher) }
+            .setNeutralButton("Ver la página") { _, _ -> abrirEnNavegador(Actualizaciones.PAGINA) }
+            .setNegativeButton("Ahora no", null)
+            .show()
+    }
+
+    /** Quita el formato Markdown de las notas para que se lean bien en el cuadro. */
+    private fun limpiarNotas(texto: String): String = texto
+        .replace(Regex("(?m)^#{1,6}\\s*"), "")
+        .replace("**", "")
+        .replace("`", "")
+        .trim()
+
+    /** Abre una dirección en el navegador (Chrome si está; si no, el que haya). */
+    private fun abrirEnNavegador(url: String) {
+        val directo = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { startActivity(Intent(directo).setPackage("com.android.chrome")) }
+            .recoverCatching { startActivity(directo) }
+            .onFailure { toast("No hay navegador para abrir la descarga") }
     }
 
     /** Resultado del login de Facebook (SDK). */
@@ -4735,6 +4803,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         refrescarBitrates()
         db.swAudio.isChecked = recAudio
         db.txtFolder.text = "Los videos van a Movies/JFR Switcher · fotos a Pictures/JFR Switcher"
+        // Versión instalada y búsqueda manual de actualización.
+        db.txtVersion.text = "Versión ${versionInstalada()} · toca para buscar actualización"
+        db.txtVersion.setOnClickListener { buscarActualizacion(manual = true) }
 
         val dialog = AlertDialog.Builder(this).setView(db.root).create()
         db.btnClose.setOnClickListener {
