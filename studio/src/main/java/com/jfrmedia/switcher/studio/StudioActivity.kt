@@ -2561,6 +2561,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         AlertDialog.Builder(this)
             .setTitle(if (paraEditar == null) "Nuevo texto" else "Editar texto")
+            .setOnDismissListener {
+                handler.removeCallbacks(vigilante)
+                quitarPreviewTexto()
+                refreshOverlayTiles()
+            }
             .setView(ScrollView(this).apply { addView(caja) })
             .setPositiveButton("Al programa") { _, _ ->
                 val t = armar()
