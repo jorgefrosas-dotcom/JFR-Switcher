@@ -2570,6 +2570,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .setNegativeButton("Cerrar", null)
             .show()
             .also { cuadroALaIzquierda(it) }
+            .also { cuadroALaIzquierda(it) }
     }
 
     /** Pone el texto en el programa con su animación de entrada. */
@@ -2791,6 +2792,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .setPositiveButton("Usar este") { _, _ -> alElegir(colorElegido) }
             .setNegativeButton("Cerrar", null)
             .show()
+            .also { cuadroALaIzquierda(it) }
             .also { cuadroALaIzquierda(it) }
     }
 
@@ -3822,6 +3824,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             .setNegativeButton("Cerrar", null)
             .show()
+            .also { cuadroALaIzquierda(it) }
     }
     private fun dialogoAudio() {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
