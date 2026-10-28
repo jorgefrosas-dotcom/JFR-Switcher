@@ -1,5 +1,19 @@
 # PENDIENTES — JFR Switcher Multicam
 
+## Cambio grande: el proyecto ya vive en GitHub (27/10 noche, PC personal)
+
+- Repo: **`github.com/jorgefrosas-dotcom/JFR-Switcher`**. La rutina para trabajar en las dos PC,
+  la llave y cómo publicar versiones están en **`TRABAJO-EN-DOS-PC.md`**.
+- **Una sola llave de firma compartida** en las dos computadoras (`keystore/jfr-upload.jks`,
+  que no está en GitHub). Ya **no existe la variante `.dev`**: hay un solo paquete por app y
+  cualquier compilación, de cualquier PC, se instala encima sin desinstalar nada.
+- La versión se cambia en un solo lugar: `jfr.versionName` / `jfr.versionCode` en `gradle.properties`.
+  Versión actual: **0.2.0** (código 2).
+- Descargas (tablet y celulares): **https://jorgefrosas-dotcom.github.io/JFR-Switcher/**
+- **Pendiente, una sola vez por equipo:** desinstalar la app vieja (está firmada por la PC de
+  trabajo) e instalar la 0.2.0. Antes hay que **respaldar los ajustes de la tablet** (URL y clave
+  de Facebook) porque se pierden al desinstalar; después se restauran.
+
 > Última actualización: **2026-10-27 15:25** (PC CyberPower1).
 > Bitácora completa y detalle del día: `%USERPROFILE%\.dsh\memoria\CAMBIOS.md` (entradas del 27/10).
 > Proyecto: `C:\Users\user\Documents\DeepSeek\JFR-Switcher`
