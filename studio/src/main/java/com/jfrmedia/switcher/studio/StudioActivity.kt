@@ -2402,72 +2402,90 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         caja.addView(etiquetaTexto("TEXTO"))
         caja.addView(campo)
 
-        // --- Tipo de letra ---
+        // --- Tipo de letra (lista desplegable, cada nombre con su propia letra) ---
         var fuente = paraEditar?.fuente ?: "Sans negrita"
         caja.addView(etiquetaTexto("TIPO DE LETRA"))
-        val filaFuentes = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val espFuente = android.widget.Spinner(this).apply {
+            adapter = com.jfrmedia.switcher.studio.ui.AdaptadorFuentes(this@StudioActivity)
+            setSelection(Fuentes.TODAS.indexOfFirst { it.first == fuente }.coerceAtLeast(0))
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: android.widget.AdapterView<*>?,
+                    view: View?,
+                    pos: Int,
+                    id: Long
+                ) {
+                    fuente = Fuentes.TODAS[pos].first
+                }
+
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+            }
+        }
+        caja.addView(espFuente)
+
+        // --- Color: paleta propia (se pueden agregar colores) ---
+        var color = paraEditar?.color ?: android.graphics.Color.WHITE
+        caja.addView(etiquetaTexto("COLOR"))
+        val filaColores = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         caja.addView(HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             addView(
-                filaFuentes,
+                filaColores,
                 ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 )
             )
         })
-        val chipsFuente = HashMap<String, TextView>()
-        for ((nombre, cara) in Fuentes.TODAS) {
-            val chip = chipOpcion(nombre) {
-                fuente = nombre
-                chipsFuente.entries.forEach { e -> pintarChip(e.value, e.key == nombre) }
-            }
-            chip.typeface = cara
-            chipsFuente[nombre] = chip
-            filaFuentes.addView(
-                chip,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { marginEnd = 6.dp }
-            )
-        }
-        chipsFuente.entries.forEach { e -> pintarChip(e.value, e.key == fuente) }
 
-        // --- Color ---
-        var color = paraEditar?.color ?: android.graphics.Color.WHITE
-        caja.addView(etiquetaTexto("COLOR"))
-        val filaColores = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        caja.addView(filaColores)
-        val colores = listOf(
-            android.graphics.Color.WHITE,
-            android.graphics.Color.BLACK,
-            0xFFFF5A2B.toInt(),
-            0xFFFFC13B.toInt(),
-            0xFF35C759.toInt(),
-            0xFF2F8FFF.toInt()
-        )
-        val chipsColor = HashMap<Int, TextView>()
-        for (c in colores) {
-            val chip = TextView(this).apply {
-                text = "    "
-                setBackgroundColor(c)
-                setPadding(14.dp, 10.dp, 14.dp, 10.dp)
-                setOnClickListener {
-                    color = c
-                    chipsColor.entries.forEach { e -> e.value.alpha = if (e.key == c) 1f else 0.4f }
+        fun pintarPaleta() {
+            filaColores.removeAllViews()
+            for (c in paletaColores()) {
+                val chip = TextView(this).apply {
+                    text = "    "
+                    setBackgroundColor(c)
+                    setPadding(14.dp, 10.dp, 14.dp, 10.dp)
+                    alpha = if (c == color) 1f else 0.4f
+                    setOnClickListener {
+                        color = c
+                        pintarPaleta()
+                    }
                 }
+                filaColores.addView(
+                    chip,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply { marginEnd = 8.dp }
+                )
             }
-            chipsColor[c] = chip
             filaColores.addView(
-                chip,
+                TextView(this).apply {
+                    text = "＋"
+                    textSize = 15f
+                    gravity = Gravity.CENTER
+                    setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
+                    setBackgroundResource(R.drawable.bg_chip)
+                    setPadding(14.dp, 8.dp, 14.dp, 8.dp)
+                    setOnClickListener {
+                        dialogoColorNuevo { nuevo ->
+                            val lista = paletaColores()
+                            if (!lista.contains(nuevo)) {
+                                lista.add(nuevo)
+                                guardarPaleta(lista)
+                            }
+                            color = nuevo
+                            pintarPaleta()
+                        }
+                    }
+                },
                 LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { marginEnd = 8.dp }
+                )
             )
         }
-        chipsColor.entries.forEach { e -> e.value.alpha = if (e.key == color) 1f else 0.4f }
+        pintarPaleta()
 
         // --- Tamaño ---
         var tamano = paraEditar?.tamano ?: 1.0f
@@ -2490,36 +2508,32 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         caja.addView(barra)
 
-        // --- Animación de entrada ---
+        // --- Animación: la entrada y la salida van con el mismo estilo ---
         var animacion = paraEditar?.animacion ?: "fundido"
-        caja.addView(etiquetaTexto("CÓMO ENTRA"))
-        val filaAnim = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        caja.addView(HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(
-                filaAnim,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
+        caja.addView(etiquetaTexto("ANIMACIÓN (ENTRA Y SALE)"))
+        val espAnim = android.widget.Spinner(this).apply {
+            adapter = android.widget.ArrayAdapter(
+                this@StudioActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                Entradas.TODAS.map { it.nombre }
             )
-        })
-        val chipsAnim = HashMap<String, TextView>()
-        for (e in Entradas.TODAS) {
-            val chip = chipOpcion(e.nombre) {
-                animacion = e.clave
-                chipsAnim.entries.forEach { x -> pintarChip(x.value, x.key == e.clave) }
+            setSelection(
+                Entradas.TODAS.indexOfFirst { it.clave == animacion }.coerceAtLeast(0)
+            )
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: android.widget.AdapterView<*>?,
+                    view: View?,
+                    pos: Int,
+                    id: Long
+                ) {
+                    animacion = Entradas.TODAS[pos].clave
+                }
+
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
             }
-            chipsAnim[e.clave] = chip
-            filaAnim.addView(
-                chip,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { marginEnd = 6.dp }
-            )
         }
-        chipsAnim.entries.forEach { x -> pintarChip(x.value, x.key == animacion) }
+        caja.addView(espAnim)
 
         fun armar(): TextoGuardado = TextoGuardado(
             id = paraEditar?.id ?: Textos.nuevoId(),
@@ -2593,6 +2607,113 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
         }
         handler.post(paso)
+    }
+
+    /** Anima la salida (que hace juego con la entrada) y al terminar hace [alTerminar]. */
+    private fun animarSalidaDeTexto(item: TextoItem, alTerminar: () -> Unit) {
+        item.animSalida = System.nanoTime()
+        item.animInicio = 0L
+        val fin = SystemClock.uptimeMillis() + item.animDuracionMs.toLong()
+        val paso = object : Runnable {
+            override fun run() {
+                b.canvas.requestRender()
+                if (SystemClock.uptimeMillis() < fin) {
+                    handler.postDelayed(this, 33)
+                } else {
+                    item.animSalida = 0L
+                    alTerminar()
+                    b.canvas.requestRender()
+                }
+            }
+        }
+        handler.post(paso)
+    }
+
+    // ---------------------------------------------------------- paleta de colores
+
+    /** Colores disponibles: los de siempre más los que agregue Jorge (se guardan en preferencias). */
+    private fun paletaColores(): MutableList<Int> {
+        val base = mutableListOf(
+            android.graphics.Color.WHITE,
+            android.graphics.Color.BLACK,
+            0xFFFF5A2B.toInt(),
+            0xFFFFC13B.toInt(),
+            0xFF35C759.toInt(),
+            0xFF2F8FFF.toInt()
+        )
+        val guardados = getSharedPreferences(PREFS, MODE_PRIVATE).getString(CLAVE_PALETA, null)
+        if (guardados != null) {
+            runCatching {
+                val arr = org.json.JSONArray(guardados)
+                for (i in 0 until arr.length()) {
+                    val c = arr.optInt(i)
+                    if (!base.contains(c)) base.add(c)
+                }
+            }
+        }
+        return base
+    }
+
+    private fun guardarPaleta(colores: List<Int>) {
+        val arr = org.json.JSONArray()
+        for (c in colores) arr.put(c)
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putString(CLAVE_PALETA, arr.toString()).apply()
+    }
+
+    /** Cuadro para inventar un color con tres barras (rojo, verde y azul). */
+    private fun dialogoColorNuevo(alElegir: (Int) -> Unit) {
+        var rojo = 255
+        var verde = 255
+        var azul = 255
+        val caja = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20.dp, 8.dp, 20.dp, 8.dp)
+        }
+        val muestra = TextView(this).apply {
+            setBackgroundColor(android.graphics.Color.rgb(rojo, verde, azul))
+            setPadding(0, 26.dp, 0, 26.dp)
+        }
+        caja.addView(muestra)
+
+        fun barra(nombre: String, inicial: Int, alCambiar: (Int) -> Unit) {
+            caja.addView(TextView(this).apply {
+                text = nombre
+                textSize = 11f
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+                setPadding(0, 10.dp, 0, 0)
+            })
+            caja.addView(android.widget.SeekBar(this).apply {
+                max = 255
+                progress = inicial
+                setOnSeekBarChangeListener(object :
+                    android.widget.SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(
+                        sb: android.widget.SeekBar?,
+                        v: Int,
+                        deUsuario: Boolean
+                    ) {
+                        alCambiar(v)
+                        muestra.setBackgroundColor(android.graphics.Color.rgb(rojo, verde, azul))
+                    }
+
+                    override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+                    override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+                })
+            })
+        }
+        barra("ROJO", rojo) { rojo = it }
+        barra("VERDE", verde) { verde = it }
+        barra("AZUL", azul) { azul = it }
+
+        AlertDialog.Builder(this)
+            .setTitle("Nuevo color")
+            .setView(ScrollView(this).apply { addView(caja) })
+            .setPositiveButton("Agregar") { _, _ ->
+                alElegir(android.graphics.Color.rgb(rojo, verde, azul))
+            }
+            .setNegativeButton("Cerrar", null)
+            .show()
     }
 
     // ---------------------------------------------------------------- biblioteca
@@ -2776,11 +2897,28 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Tocar un overlay lo muestra u oculta en el lienzo (switch rápido). */
     private fun toggleOverlay(item: ImageItem) {
-        item.visible = !item.visible
         if (item.visible) {
+            // Ocultar: si es texto, primero sale con su animación y después se apaga.
+            if (item is TextoItem) {
+                animarSalidaDeTexto(item) {
+                    item.visible = false
+                    if (b.canvas.scene.selectedId == item.id) b.canvas.scene.selectedId = null
+                    b.canvas.scene.touch()
+                    refreshOverlayTiles()
+                    onSelectionChanged(b.canvas.scene.selected())
+                }
+                return
+            }
+            item.visible = false
+            if (b.canvas.scene.selectedId == item.id) b.canvas.scene.selectedId = null
+        } else {
+            item.visible = true
+            if (item is TextoItem) {
+                item.animSalida = 0L
+                item.animInicio = System.nanoTime()
+                animarEntradaDeTexto()
+            }
             b.canvas.scene.selectedId = item.id
-        } else if (b.canvas.scene.selectedId == item.id) {
-            b.canvas.scene.selectedId = null
         }
         b.canvas.scene.touch()
         b.canvas.requestRender()
@@ -2788,6 +2926,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     private fun borrarOverlay(item: ImageItem) {
+        // El texto se despide con la animación que le toca antes de desaparecer.
+        if (item is TextoItem && item.visible) {
+            animarSalidaDeTexto(item) {
+                b.canvas.scene.remove(item)
+                refreshOverlayTiles()
+                onSelectionChanged(b.canvas.selection)
+            }
+            return
+        }
         b.canvas.scene.remove(item)
         b.canvas.requestRender()
         onSelectionChanged(b.canvas.selection)
@@ -5242,6 +5389,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         private const val CLAVE_FB_CLAVE = "fb_clave"
         private const val CLAVE_FB_GRABAR = "fb_grabar"
         private const val CLAVE_FB_PAGE_ID = "fb_page_id"
+        private const val CLAVE_PALETA = "paleta_colores"
         private const val FB_URL_POR_DEFECTO = "rtmps://live-api-s.facebook.com:443/rtmp/"
         private const val CLAVE_TABLET_FRONTAL = "tablet_cam_frontal"
         private const val CLAVE_VERTICAL = "vertical"

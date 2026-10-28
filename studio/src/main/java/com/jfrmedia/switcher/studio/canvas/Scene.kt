@@ -115,6 +115,9 @@ class TextoItem(
     /** Momento (System.nanoTime) en que empezó a entrar. 0 = sin animación pendiente. */
     @Volatile var animInicio: Long = 0L
 
+    /** Momento (System.nanoTime) en que empezó a salir. 0 = no está saliendo. */
+    @Volatile var animSalida: Long = 0L
+
     @Volatile var animDuracionMs: Int = 800
 }
 

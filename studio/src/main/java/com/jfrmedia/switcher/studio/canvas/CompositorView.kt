@@ -634,14 +634,20 @@ class CompositorView @JvmOverloads constructor(
         var r = rectPara(item)
         var alpha = item.opacity * (if (item === animItem) animAlpha else 1f)
 
-        // Entrada de los textos: la animación dura unos milisegundos y luego queda quieto.
-        if (item is TextoItem && item.animInicio > 0L) {
-            val transcurrido = (System.nanoTime() - item.animInicio) / 1_000_000f
+        // Entrada y salida de los textos. Si está saliendo, manda la salida.
+        if (item is TextoItem && (item.animSalida > 0L || item.animInicio > 0L)) {
+            val saliendo = item.animSalida > 0L
+            val desde = if (saliendo) item.animSalida else item.animInicio
+            val transcurrido = (System.nanoTime() - desde) / 1_000_000f
             val p = transcurrido / item.animDuracionMs.coerceAtLeast(1)
-            if (p >= 1f) {
+            if (p >= 1f && !saliendo) {
                 item.animInicio = 0L
             } else {
-                val e = Entradas.calcular(item.animacion, p)
+                val e = if (saliendo) {
+                    Entradas.calcularSalida(item.animacion, p)
+                } else {
+                    Entradas.calcular(item.animacion, p)
+                }
                 alpha *= e.alfa
                 val w = r.width()
                 val h = r.height()

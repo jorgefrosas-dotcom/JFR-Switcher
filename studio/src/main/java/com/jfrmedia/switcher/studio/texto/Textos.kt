@@ -51,13 +51,21 @@ data class TextoGuardado(
 object Fuentes {
     val TODAS: List<Pair<String, Typeface>> = listOf(
         "Sans" to Typeface.SANS_SERIF,
+        "Sans ligera" to Typeface.create("sans-serif-light", Typeface.NORMAL),
+        "Sans fina" to Typeface.create("sans-serif-thin", Typeface.NORMAL),
+        "Sans media" to Typeface.create("sans-serif-medium", Typeface.NORMAL),
+        "Sans negra" to Typeface.create("sans-serif-black", Typeface.NORMAL),
+        "Sans compacta" to Typeface.create("sans-serif-condensed", Typeface.BOLD),
+        "Sans versalitas" to Typeface.create("sans-serif-smallcaps", Typeface.NORMAL),
         "Sans negrita" to Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD),
         "Serif" to Typeface.SERIF,
         "Serif negrita" to Typeface.create(Typeface.SERIF, Typeface.BOLD),
-        "Monoespaciada" to Typeface.MONOSPACE,
+        "Serif cursiva" to Typeface.create(Typeface.SERIF, Typeface.ITALIC),
         "Cursiva" to Typeface.create("cursive", Typeface.NORMAL),
-        "Compacta" to Typeface.create("sans-serif-condensed", Typeface.BOLD),
-        "Elegante" to Typeface.create("serif", Typeface.ITALIC)
+        "Cursiva fina" to Typeface.create("cursive", Typeface.BOLD),
+        "Invitación" to Typeface.create("casual", Typeface.NORMAL),
+        "Monoespaciada" to Typeface.MONOSPACE,
+        "Serif mono" to Typeface.create("serif-monospace", Typeface.NORMAL)
     )
 
     fun de(nombre: String): Typeface =
@@ -116,6 +124,31 @@ object Entradas {
                 Estado(desplazamientoY = -(caida - rebote), alfa = t)
             }
             else -> Estado(alfa = t) // fundido
+        }
+    }
+
+    /**
+     * Salida que hace juego con la entrada: [p] va de 0 (empieza a irse) a 1 (ya no se ve).
+     * Cada animación se va por donde mismo entró.
+     */
+    fun calcularSalida(clave: String, p: Float): Estado {
+        val t = p.coerceIn(0f, 1f)
+        val acelerado = t * t
+        val alfa = 1f - t
+        return when (clave) {
+            "subir" -> Estado(desplazamientoY = -acelerado * 0.35f, alfa = alfa)
+            "bajar" -> Estado(desplazamientoY = acelerado * 0.35f, alfa = alfa)
+            "izquierda" -> Estado(desplazamientoX = -acelerado * 0.6f, alfa = alfa)
+            "derecha" -> Estado(desplazamientoX = acelerado * 0.6f, alfa = alfa)
+            "zoom" -> Estado(alfa = alfa, escala = 1f + 0.45f * acelerado)
+            "pop" -> Estado(alfa = alfa, escala = 1f - 0.28f * acelerado)
+            "rebote" -> Estado(
+                desplazamientoY = -abs(sin(t * Math.PI.toFloat() * 2f)) * (1f - t) * 0.18f,
+                alfa = alfa
+            )
+            "deslizar" -> Estado(desplazamientoX = acelerado * 0.5f, alfa = alfa * alfa)
+            "caida" -> Estado(desplazamientoY = acelerado * 0.75f, alfa = alfa)
+            else -> Estado(alfa = alfa) // fundido
         }
     }
 }

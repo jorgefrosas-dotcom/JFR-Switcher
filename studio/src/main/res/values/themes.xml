@@ -1,5 +1,19 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Todos los cuadros (Ajustes, Facebook, Transiciones, Audio, textos…) usan este tema:
+         fondo negro, borde gris, esquinas redondeadas y el naranja como acento. -->
+    <style name="TemaDialogo" parent="Theme.Material3.Dark.Dialog">
+        <item name="android:windowBackground">@drawable/bg_dialog</item>
+        <item name="android:backgroundDimAmount">0.55</item>
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorSecondary">@color/accent</item>
+        <item name="colorSurface">#FF000000</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+    </style>
+
     <style name="Theme.JfrSwitcher" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/accent</item>
         <item name="colorOnPrimary">#FF111318</item>
@@ -13,6 +27,9 @@
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:textColorPrimary">@color/text_primary</item>
         <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="alertDialogTheme">@style/TemaDialogo</item>
+        <item name="android:alertDialogTheme">@style/TemaDialogo</item>
+        <item name="materialAlertDialogTheme">@style/TemaDialogo</item>
     </style>
 
 </resources>
