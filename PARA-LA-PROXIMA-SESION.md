@@ -1,6 +1,6 @@
 # Para la próxima sesión — JFR Switcher
 
-> Actualizado el **27/10/2026, 21:56** al cerrar la sesión. **Lee esto primero: tiene todo lo necesario
+> Actualizado el **27/10/2026, 22:45** al cerrar la sesión. **Lee esto primero: tiene todo lo necesario
 > para seguir sin que Jorge vuelva a explicar nada.**
 > Canal de memoria de la otra PC: `%USERPROFILE%\.dsh\memoria\CAMBIOS.md` (entradas del 27/10 noche).
 > Repo: `github.com/jorgefrosas-dotcom/JFR-Switcher` · Proyecto local:
@@ -8,18 +8,58 @@
 
 ## 1. Dónde estamos
 
-- **Última versión publicada: 0.2.5** (GitHub Release + página de descargas).
-- **Los equipos tienen instalado el código MÁS NUEVO que 0.2.5**, con cambios sin publicar
-  (ver `CAMBIOS-SIN-PUBLICAR.md`). Tablet y POCO siguen en 0.2.5 por número de versión: es a propósito.
+- **Última versión publicada: 0.2.6** (27/10/2026) — «Plantillas de escena y audio en vivo». Las notas
+  de esa versión están en `docs/NOTAS-0.2.6.md`, y el Release tiene los dos APK con los nombres
+  `JFR-Switcher.apk` y `JFR-Camera.apk`.
+- **Tablet y POCO están actualizados a la 0.2.6** (`PROBAR.cmd` / instalación por adb).
 - **Regla de Jorge:** un cambio pequeño **no** lleva versión nueva. Se prueba en los equipos y se
-  acumula. **Él avisa cuándo se publica**; ahí se sube el número, se crea el Release con las notas de
-  `CAMBIOS-SIN-PUBLICAR.md` y se vacía ese archivo.
-- Probado por Jorge antes de anoche: overlays de texto con cámara frontal de la tablet, animación de
-  entrada y salida, selector de color con rueda, preview en vivo, cuadros a la izquierda.
-- **Anoche (27/10, 21:30–22:00) quedó hecho y verificado en la tablet: los medios se recuerdan entre
-  sesiones** (ver abajo, punto 2). Esa era la única tarea pendiente del traspaso anterior.
+  acumula en `CAMBIOS-SIN-PUBLICAR.md`. **Él avisa cuándo se publica**; ahí se sube el número en
+  `gradle.properties` (`jfr.versionName` y `jfr.versionCode`, un solo lugar para las dos apps), se crea
+  el Release con las notas de `CAMBIOS-SIN-PUBLICAR.md` y se vacía ese archivo.
+- **Nada pendiente de programar** al cerrar: `CAMBIOS-SIN-PUBLICAR.md` quedó vacío.
 
-## 2. Lo último hecho: el grupo MEDIOS recuerda los últimos 10
+## 2. Lo último hecho: plantillas de escena (27/10, 22:00–22:45)
+
+**Lo que pedía Jorge:** que guardar una plantilla no cerrara la app, y que la plantilla guarde
+orientación, resolución de grabación y emisión, overlays con su posición y tamaño, la transición, y que
+al abrir los overlays ocultos queden listos pero recordando su lugar.
+
+**Causa del cierre (arreglada):** el campo de la Activity se llamaba `handler`, y dentro de un
+`apply {}` de una vista ese nombre se resuelve al **`getHandler()` de la vista**, que es nulo mientras
+la vista no está pegada a la ventana → `NullPointerException` en
+`uiHandler.postDelayed` al tocar «Guardar la escena actual». **Se renombró a `uiHandler` en todo el
+archivo**: no volver a llamarlo `handler`.
+
+**Lo demás que se arregló de paso:**
+
+- El gestor de plantillas se abría **encima** del cuadro de guardar (quedaba tapado). Ahora se cierra
+  el gestor, se abre el cuadro, y al guardar se vuelve al gestor. «Abrir» cierra el gestor para que se
+  vea el programa con la plantilla puesta.
+- `cargarPlantilla()` no refrescaba la sección OVERLAYS: los overlays ocultos de la plantilla no
+  aparecían para activarlos. Ahora llama a `refreshOverlayTiles()`.
+- **Los textos se perdían**: ahora `Plantilla` lleva `textos: List<TextoPlantilla>` con contenido,
+  fuente, color, animación, tamaño, posición, tamaño en pantalla y si estaba oculto. `TextoItem` gana
+  `color` y `tamano` para poder rehacerlos. Al abrir se rasteriza otra vez con `Textos.rasterizar`.
+- La tarjeta de la plantilla resume también la emisión, los textos y cuántos overlays van en oculto.
+
+**Cómo se probó (en la tablet, con capturas comparadas por píxeles):** se armó una escena con 2
+overlays de imagen (uno oculto) y 1 texto, transición «Deslizar desde arriba», modo «Grabar +
+transmitir», 720p; se guardó, se **borraron todos los overlays**, se cambió a «Solo grabar» + 480p +
+«Corte directo», y al abrir la plantilla volvió todo: overlays en su sitio (diferencia de 0.76 sobre
+255 con la escena de referencia), el oculto con su marca «Oculto», el texto en su lugar, la transición,
+el modo y las dos resoluciones. Al terminar se borró la plantilla y los overlays de prueba y se dejó la
+transición en «Desvanecer», que es el valor por defecto.
+
+## 3. Para seguir
+
+- **Lo más probable:** que Jorge pruebe las plantillas con sus escenas reales y pida ajustes (por
+  ejemplo, que la plantilla guarde también la calidad de las cámaras, el PiP o las 6 cámaras
+  conectadas). Todo eso hoy **no** viaja en la plantilla.
+- **Cómo se prueba sin gastar datos:** `adb shell uiautomator dump` para las coordenadas reales,
+  `input tap/swipe` y capturas comparadas con Pillow; ojo con el teclado en pantalla, que tapa los
+  botones del cuadro (cerrarlo con `input keyevent 4` antes de tocar «Guardar»).
+
+## 4. Lo anterior: el grupo MEDIOS recuerda los últimos 10
 
 **Qué hace ahora:** al cerrar la app y volverla a abrir, en `MEDIOS · VIDEOS Y FOTOS` siguen los
 últimos 10 videos y fotos que se usaron, **ya con su miniatura**, sin ir a la galería del equipo.

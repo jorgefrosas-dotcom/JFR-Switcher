@@ -109,7 +109,10 @@ class TextoItem(
     val animacion: String,
     /** id del texto guardado en la biblioteca, si salió de ahí. */
     val guardadoId: String?,
-    bitmap: Bitmap
+    bitmap: Bitmap,
+    /** Color y tamaño con que se dibujó: se guardan en la plantilla para poder rehacerlo. */
+    val color: Int = android.graphics.Color.WHITE,
+    val tamano: Float = 1f
 ) : ImageItem(id, bitmap, "Texto", null) {
 
     /** Momento (System.nanoTime) en que empezó a entrar. 0 = sin animación pendiente. */

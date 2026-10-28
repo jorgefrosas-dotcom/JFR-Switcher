@@ -84,6 +84,7 @@ import com.jfrmedia.switcher.studio.plantillas.CamPlantilla
 import com.jfrmedia.switcher.studio.plantillas.ImagenPlantilla
 import com.jfrmedia.switcher.studio.plantillas.Plantilla
 import com.jfrmedia.switcher.studio.plantillas.Plantillas
+import com.jfrmedia.switcher.studio.plantillas.TextoPlantilla
 
 /**
  * Pantalla del director: 6 fuentes, lienzo de programa con 2 capas + imágenes,
@@ -97,7 +98,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private val hub = CameraHub()
     private val server = StudioServer(hub)
-    private val handler = Handler(Looper.getMainLooper())
+    /**
+     * Handler de la interfaz.
+     *
+     * OJO con el nombre: **no** puede llamarse `handler`. Dentro de un `apply {}` de una vista,
+     * `handler` se resuelve al `getHandler()` de la vista, que es nulo mientras no está pegada a
+     * la ventana, y la app se caía con «Attempt to invoke virtual method postDelayed on a null
+     * object reference» (pasaba al guardar una plantilla).
+     */
+    private val uiHandler = Handler(Looper.getMainLooper())
 
     private val localCam = LocalCam()
 
@@ -253,7 +262,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             if (!recorder.isRecording && !transmitiendo) return
             val s = (SystemClock.elapsedRealtime() - recStartMs) / 1000
             b.txtTimer.text = String.format(Locale.US, "%02d:%02d", s / 60, s % 60)
-            handler.postDelayed(this, 500)
+            uiHandler.postDelayed(this, 500)
         }
     }
 
@@ -321,7 +330,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 ultimoRegistroNs = ahoraNs
                 anotar(String.format(Locale.US, "cpu %d%% · ram %d%% · %.1f Mbps · %s", cpu, ramPct, mbps, tempTexto))
             }
-            handler.postDelayed(this, 2000)
+            uiHandler.postDelayed(this, 2000)
         }
     }
 
@@ -472,7 +481,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         refreshUi()
         updatePairingLabels()
-        handler.post(medidorUso)
+        uiHandler.post(medidorUso)
         escucharEmisor()
         // Si la pantalla se recreó con un envío en curso, se reengancha el compositor a la
         // superficie del emisor en vez de mostrar «Transmitir» con el directo en el aire.
@@ -585,7 +594,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
+        uiHandler.removeCallbacksAndMessages(null)
         runCatching { unregisterReceiver(receptorSesion) }
         runCatching { audioVivo.detener() }
         runCatching { localCam.detener() }
@@ -1794,13 +1803,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         b.btnRecord.text = "Detener"
         b.btnRecord.setBackgroundResource(R.drawable.bg_pill_ghost)
         b.btnRecord.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
-        handler.post(ticker)
+        uiHandler.post(ticker)
     }
 
     private fun stopRecording() {
         b.canvas.endRecordingOutput()
         recorder.stop()
-        handler.removeCallbacks(ticker)
+        uiHandler.removeCallbacks(ticker)
         actualizarCandadoOrientacion()
         b.liveDot.setBackgroundResource(R.drawable.bg_dot_gray)
         if (!emisor.transmitiendo) cerrarRegistro()
@@ -1845,7 +1854,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val seleccion = b.canvas.scene.selectedId
         b.canvas.scene.selectedId = null
         b.canvas.requestRender()
-        handler.postDelayed({
+        uiHandler.postDelayed({
             try {
                 android.view.PixelCopy.request(
                     vista, bitmap,
@@ -1858,7 +1867,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                             toast("No se pudo capturar el cuadro (código $resultado)")
                         }
                     },
-                    handler
+                    uiHandler
                 )
             } catch (t: Throwable) {
                 b.canvas.scene.selectedId = seleccion
@@ -2349,7 +2358,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (pendientes.isEmpty()) return
         Thread {
             for (m in pendientes) cargarMiniatura(m)
-            handler.post {
+            uiHandler.post {
                 if (isFinishing || isDestroyed) return@post
                 refreshMediaTiles()
             }
@@ -2662,15 +2671,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     ultimoVisto[0] = clave
                     if (t.texto.isBlank()) quitarPreviewTexto() else mostrarPreviewTexto(t)
                 }
-                handler.postDelayed(this, 300)
+                uiHandler.postDelayed(this, 300)
             }
         }
-        handler.post(vigilante)
+        uiHandler.post(vigilante)
 
         AlertDialog.Builder(this)
             .setTitle(if (paraEditar == null) "Nuevo texto" else "Editar texto")
             .setOnDismissListener {
-                handler.removeCallbacks(vigilante)
+                uiHandler.removeCallbacks(vigilante)
                 quitarPreviewTexto()
                 refreshOverlayTiles()
             }
@@ -2708,7 +2717,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         quitarPreviewTexto()
         val mapa = Textos.rasterizar(t)
         val item = TextoItem(
-            b.canvas.scene.nextId(), t.texto, t.fuente, t.animacion, null, mapa
+            b.canvas.scene.nextId(), t.texto, t.fuente, t.animacion, null, mapa,
+            t.color, t.tamano
         )
         val aspecto = mapa.width.toFloat() / mapa.height.toFloat()
         val ancho = 0.58f
@@ -2735,7 +2745,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         runCatching {
             val mapa = Textos.rasterizar(t)
             val item = TextoItem(
-                b.canvas.scene.nextId(), t.texto, t.fuente, t.animacion, t.id, mapa
+                b.canvas.scene.nextId(), t.texto, t.fuente, t.animacion, t.id, mapa,
+                t.color, t.tamano
             )
             val aspecto = mapa.width.toFloat() / mapa.height.toFloat()
             val ancho = 0.58f
@@ -2762,10 +2773,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val paso = object : Runnable {
             override fun run() {
                 b.canvas.requestRender()
-                if (SystemClock.uptimeMillis() < fin) handler.postDelayed(this, 33)
+                if (SystemClock.uptimeMillis() < fin) uiHandler.postDelayed(this, 33)
             }
         }
-        handler.post(paso)
+        uiHandler.post(paso)
     }
 
     /** Anima la salida (que hace juego con la entrada) y al terminar hace [alTerminar]. */
@@ -2777,7 +2788,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             override fun run() {
                 b.canvas.requestRender()
                 if (SystemClock.uptimeMillis() < fin) {
-                    handler.postDelayed(this, 33)
+                    uiHandler.postDelayed(this, 33)
                 } else {
                     item.animSalida = 0L
                     alTerminar()
@@ -2785,7 +2796,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
             }
         }
-        handler.post(paso)
+        uiHandler.post(paso)
     }
 
     // ---------------------------------------------------------- paleta de colores
@@ -3450,7 +3461,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val quiere = enPrimerPlano && !sesionEnCurso()
         if (quiere) {
             if (!audioVivo.activo && !audioVivo.arrancar() && intento < 5) {
-                handler.postDelayed({ ajustarAudioVivo(intento + 1) }, 400)
+                uiHandler.postDelayed({ ajustarAudioVivo(intento + 1) }, 400)
             }
         } else if (audioVivo.activo) {
             audioVivo.detener()
@@ -3668,8 +3679,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                         b.txtLive.text = "ENVIANDO"
                         b.liveDot.setBackgroundResource(R.drawable.bg_dot_red)
                         recStartMs = SystemClock.elapsedRealtime()
-                        handler.removeCallbacks(ticker)
-                        handler.post(ticker)
+                        uiHandler.removeCallbacks(ticker)
+                        uiHandler.post(ticker)
                         abrirRegistro("transmisión")
                         anotar("conectado a Facebook")
                     }
@@ -3677,7 +3688,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     com.jfrmedia.switcher.studio.stream.Emisor.Estado.ERROR -> {
                         b.txtLive.text = "Sin conexión"
                         b.txtTimer.text = "00:00"
-                        handler.removeCallbacks(ticker)
+                        uiHandler.removeCallbacks(ticker)
                         b.liveDot.setBackgroundResource(R.drawable.bg_dot_gray)
                         anotar("error: $mensaje")
                     }
@@ -3685,7 +3696,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     com.jfrmedia.switcher.studio.stream.Emisor.Estado.DETENIDO -> {
                         b.txtLive.text = "Sin transmisión"
                         b.txtTimer.text = "00:00"
-                        handler.removeCallbacks(ticker)
+                        uiHandler.removeCallbacks(ticker)
                         b.liveDot.setBackgroundResource(R.drawable.bg_dot_gray)
                         if (!recorder.isRecording) cerrarRegistro()
                     }
@@ -3748,7 +3759,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         if (!archivo.exists() || archivo.length() < 1024) {
             if (intento < 8) {
-                handler.postDelayed({ publicarGrabacionDelDirecto(archivo, intento + 1) }, 400)
+                uiHandler.postDelayed({ publicarGrabacionDelDirecto(archivo, intento + 1) }, 400)
             } else {
                 terminar()
             }
@@ -3756,7 +3767,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         if (!mp4TieneIndice(archivo)) {
             if (intento < 10) {
-                handler.postDelayed({ publicarGrabacionDelDirecto(archivo, intento + 1) }, 500)
+                uiHandler.postDelayed({ publicarGrabacionDelDirecto(archivo, intento + 1) }, 500)
             } else {
                 terminar()
                 toast("La grabación del directo no se pudo cerrar; quedó en la carpeta Emision")
@@ -3885,8 +3896,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // Cronómetro del directo: si no hay grabación local, cuenta el tiempo en el aire.
         if (!recorder.isRecording) {
             if (!emisor.grabando) recStartMs = SystemClock.elapsedRealtime()
-            handler.removeCallbacks(ticker)
-            handler.post(ticker)
+            uiHandler.removeCallbacks(ticker)
+            uiHandler.post(ticker)
         }
     }
 
@@ -3897,7 +3908,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (emisor.grabando) emisor.detenerGrabacion()        // Si la librería no avisa del cierre del MP4, se publica igual un instante después.
         val pendiente = archivoEmision
         if (publicarEmision && pendiente != null) {
-            handler.postDelayed({
+            uiHandler.postDelayed({
                 if (publicarEmision && archivoEmision != null) {
                     publicarGrabacionDelDirecto(pendiente)
                 }
@@ -3909,14 +3920,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         actualizarBotonSesion()
         actualizarCandadoOrientacion()
         if (!recorder.isRecording) {
-            handler.removeCallbacks(ticker)
+            uiHandler.removeCallbacks(ticker)
             b.txtTimer.text = "00:00"
             b.liveDot.setBackgroundResource(R.drawable.bg_dot_gray)
             cerrarRegistro()
             detenerProteccionSesion()
         }
         // Se apaga el aviso de red floja: ya no hay envío que vigilar.
-        handler.removeCallbacks(parpadeoRed)
+        uiHandler.removeCallbacks(parpadeoRed)
         ventanasRedFloja = 0
         if (redFloja) {
             redFloja = false
@@ -4291,7 +4302,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * el ancho exacto al panel. En horizontal vuelve a repartirse con las fuentes por peso.
      */
     private fun ajustarLienzo() {
-        handler.postDelayed({ aplicarAjusteLienzo(0) }, 120)
+        uiHandler.postDelayed({ aplicarAjusteLienzo(0) }, 120)
     }
 
     /**
@@ -4536,7 +4547,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             parpadeoEncendido = !parpadeoEncendido
             valoresEstado["red"]?.alpha = if (parpadeoEncendido) 0.35f else 1f
-            handler.postDelayed(this, 450)
+            uiHandler.postDelayed(this, 450)
         }
     }
 
@@ -4622,10 +4633,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             if (floja) {
                 vista?.setTextColor(ContextCompat.getColor(this, R.color.warn_yellow))
                 parpadeoEncendido = true
-                handler.removeCallbacks(parpadeoRed)
-                handler.post(parpadeoRed)
+                uiHandler.removeCallbacks(parpadeoRed)
+                uiHandler.post(parpadeoRed)
             } else {
-                handler.removeCallbacks(parpadeoRed)
+                uiHandler.removeCallbacks(parpadeoRed)
                 vista?.alpha = 1f
                 vista?.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
             }
@@ -4639,7 +4650,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private val refrescoEntrada = object : Runnable {
         override fun run() {
             actualizarEntradaAudio()
-            if (vistaControles == "audio") handler.postDelayed(this, 1000)
+            if (vistaControles == "audio") uiHandler.postDelayed(this, 1000)
         }
     }
 
@@ -4816,10 +4827,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             panelAudio?.visibility = View.VISIBLE
         }
         btnVistaControles?.text = if (audio) "Imagen" else "♪ Audio"
-        handler.removeCallbacks(refrescoEntrada)
+        uiHandler.removeCallbacks(refrescoEntrada)
         if (audio || vertical) {
             actualizarEntradaAudio()
-            handler.post(refrescoEntrada)
+            uiHandler.post(refrescoEntrada)
         }
     }
 
@@ -5014,6 +5025,26 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 )
             }
         }
+        // Los textos no tienen archivo: se guardan completos (contenido, letra, color, animación,
+        // tamaño) y su lugar en el lienzo, para poder rehacerlos tal cual.
+        val textosGuardados = ArrayList<TextoPlantilla>()
+        b.canvas.scene.items.filterIsInstance<TextoItem>().forEach { item ->
+            textosGuardados.add(
+                TextoPlantilla(
+                    texto = item.texto,
+                    fuente = item.fuente,
+                    color = item.color,
+                    animacion = item.animacion,
+                    tamano = item.tamano,
+                    x = item.rect.left,
+                    y = item.rect.top,
+                    ancho = item.rect.width(),
+                    alto = item.rect.height(),
+                    visible = item.visible,
+                    opacidad = item.opacity
+                )
+            )
+        }
         val mediosGuardados = medios.map { MedioPlantilla(it.uri, it.video, it.nombre) }
         val ajustes = AjustesPlantilla(
             modo = modoSesion,
@@ -5026,7 +5057,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             audioDb = getSharedPreferences(PREFS, MODE_PRIVATE).getFloat(CLAVE_AUDIO_DB, 0f)
         )
         val transicion = TransicionPlantilla(b.canvas.transicion.id, b.canvas.transicionMs)
-        return Plantilla(nombre, vertical, camaras, imagenes, ajustes, transicion, mediosGuardados)
+        return Plantilla(
+            nombre, vertical, camaras, imagenes, ajustes, transicion, mediosGuardados,
+            textosGuardados
+        )
     }
 
     /** Aplica orientación de sesión, transición y audio guardados en la plantilla. */
@@ -5058,7 +5092,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun tarjetaPlantilla(
         nombre: String,
         plantilla: Plantilla,
-        alCambiar: () -> Unit
+        alCambiar: () -> Unit,
+        alCerrar: () -> Unit = {}
     ): View {
         val tarjeta = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -5077,6 +5112,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             else -> "Grabar + transmitir"
         }
         val trans = CompositorView.Transicion.values().firstOrNull { it.id == plantilla.transicion.id }
+        val overlays = plantilla.imagenes.size
+        val textos = plantilla.textos.size
+        val ocultos = plantilla.imagenes.count { !it.visible } + plantilla.textos.count { !it.visible }
         val resumen = buildString {
             append(if (plantilla.vertical) "9:16 vertical" else "16:9 horizontal")
             append(" · ")
@@ -5084,14 +5122,29 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             append(" · grabación ")
             append(plantilla.ajustes.recAlto)
             append("p")
+            if (plantilla.ajustes.modo != "grabar") {
+                append(" · emisión ")
+                append(plantilla.ajustes.streamAlto)
+                append("p")
+            }
             append(" · transición ")
             append(trans?.label ?: plantilla.transicion.id)
             append(" (")
             append(plantilla.transicion.ms)
             append(" ms)")
             append(" · ")
-            append(plantilla.imagenes.size)
-            append(if (plantilla.imagenes.size == 1) " overlay" else " overlays")
+            append(overlays)
+            append(if (overlays == 1) " overlay" else " overlays")
+            if (textos > 0) {
+                append(" + ")
+                append(textos)
+                append(if (textos == 1) " texto" else " textos")
+            }
+            if (ocultos > 0) {
+                append(" (")
+                append(ocultos)
+                append(" en oculto)")
+            }
             append(" · ")
             append(plantilla.medios.size)
             append(if (plantilla.medios.size == 1) " medio" else " medios")
@@ -5144,8 +5197,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
 
         filaAcciones.addView(accion("Abrir") {
-            cargarPlantilla(nombre)
-            alCambiar()
+            // Se cierra el gestor para que se vea el programa con la plantilla ya puesta.
+            alCerrar()
+            uiHandler.postDelayed({ cargarPlantilla(nombre) }, 200)
         })
         filaAcciones.addView(accion("Duplicar") {
             val copia = Plantillas.duplicar(this, nombre)
@@ -5233,7 +5287,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             nombres.forEach { nombre ->
                 val plantilla = Plantillas.cargar(this, nombre) ?: return@forEach
-                val tarjeta = tarjetaPlantilla(nombre, plantilla) { refrescar() }
+                val tarjeta = tarjetaPlantilla(
+                    nombre,
+                    plantilla,
+                    alCambiar = { refrescar() },
+                    alCerrar = { dialog.dismiss() }
+                )
                 contenedor.addView(
                     tarjeta,
                     LinearLayout.LayoutParams(
@@ -5250,9 +5309,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 setBackgroundResource(R.drawable.bg_pill_accent)
                 setPadding(16.dp, 12.dp, 16.dp, 12.dp)
                 setOnClickListener {
-                    dialogoGuardarPlantilla()
+                    // Se cierra el gestor ANTES de abrir el cuadro de guardar: si se abre el
+                    // cuadro y enseguida el gestor, el gestor queda encima y lo tapa.
                     dialog.dismiss()
-                    handler.postDelayed({ dialogoPlantillas() }, 600)
+                    uiHandler.postDelayed({ dialogoGuardarPlantilla() }, 250)
                 }
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -5273,8 +5333,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val dialog = AlertDialog.Builder(this)
             .setTitle("Guardar plantilla de escena")
             .setMessage(
-                "Se guarda la orientación del lienzo, qué cámara va en A y B, " +
-                    "y la posición de cada overlay."
+                "Se guarda todo lo de la escena actual: orientación del lienzo, resolución de " +
+                    "grabación y de emisión, la transición elegida, qué cámara va en A y B, la " +
+                    "posición y el tamaño de cada overlay (también los que están en oculto) y los " +
+                    "textos con su letra, color y animación."
             )
             .setView(entrada)
             .setPositiveButton("Guardar", null)
@@ -5290,6 +5352,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 if (Plantillas.guardar(this, plantillaActual(nombre))) {
                     toast("Plantilla «$nombre» guardada")
                     dialog.dismiss()
+                    // Se vuelve al gestor para ver la plantilla recién guardada.
+                    uiHandler.postDelayed({ dialogoPlantillas() }, 350)
                 } else {
                     toast("No se pudo guardar la plantilla")
                 }
@@ -5381,6 +5445,37 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
         }
 
+        // Textos: se rehacen con su letra, color y animación, en el lugar donde estaban.
+        // Los que se guardaron ocultos vuelven ocultos, pero conservan su lugar para cuando
+        // se activen desde su tarjeta.
+        var textosFallidos = 0
+        plantilla.textos.forEach { t ->
+            try {
+                val mapa = Textos.rasterizar(
+                    TextoGuardado(
+                        id = "",
+                        texto = t.texto,
+                        fuente = t.fuente,
+                        color = t.color,
+                        animacion = t.animacion,
+                        tamano = t.tamano
+                    )
+                )
+                val item = TextoItem(
+                    b.canvas.scene.nextId(), t.texto, t.fuente, t.animacion, null, mapa,
+                    t.color, t.tamano
+                )
+                item.rect.set(t.x, t.y, t.x + t.ancho, t.y + t.alto)
+                item.visible = t.visible
+                item.opacity = t.opacidad
+                // Sin animación de entrada al abrir la plantilla: el texto ya está puesto.
+                b.canvas.scene.agregar(item)
+            } catch (th: Throwable) {
+                textosFallidos++
+                L.e("plantillas", "texto de la plantilla: ${th.message}", th)
+            }
+        }
+
         // Ajustes, transición y medios que viajan con la plantilla
         aplicarAjustesDePlantilla(plantilla)
         medios.clear()
@@ -5390,15 +5485,24 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             medios.add(medio)
         }
         refreshMediaTiles()
+        // Las tarjetas de los overlays se rehacen aquí: si no, la sección OVERLAYS se quedaba
+        // como estaba y los overlays ocultos de la plantilla no aparecían para activarlos.
+        refreshOverlayTiles()
 
         b.canvas.scene.selectedId = null
         b.canvas.requestRender()
         refreshUi()
         onSelectionChanged(null)
-        toast(
-            if (imagenesFallidas == 0) "Plantilla «$nombre» cargada"
-            else "Plantilla «$nombre» cargada ($imagenesFallidas overlays no se pudieron leer)"
-        )
+        val ocultos = plantilla.imagenes.count { !it.visible } + plantilla.textos.count { !it.visible }
+        when {
+            imagenesFallidas > 0 || textosFallidos > 0 -> {
+                val fallas = imagenesFallidas + textosFallidos
+                toast("Plantilla «$nombre» cargada ($fallas no se pudieron leer)")
+            }
+
+            ocultos > 0 -> toast("Plantilla «$nombre» cargada · $ocultos en oculto, listo para activar")
+            else -> toast("Plantilla «$nombre» cargada")
+        }
     }
     private fun showPairing() {
         val db = DialogPairingBinding.inflate(layoutInflater)

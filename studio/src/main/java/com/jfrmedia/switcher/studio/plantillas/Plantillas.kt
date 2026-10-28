@@ -51,6 +51,26 @@ data class ImagenPlantilla(
 )
 
 /**
+ * Un texto encima del programa dentro de una plantilla.
+ *
+ * Guarda el texto y cómo se ve (letra, color, animación y tamaño) en vez de apuntar a la
+ * biblioteca: así la plantilla sigue funcionando aunque el texto se borre de ahí.
+ */
+data class TextoPlantilla(
+    val texto: String,
+    val fuente: String = "Sans negrita",
+    val color: Int = 0xFFFFFFFF.toInt(),
+    val animacion: String = "fundido",
+    val tamano: Float = 1f,
+    val x: Float = 0.21f,
+    val y: Float = 0.30f,
+    val ancho: Float = 0.58f,
+    val alto: Float = 0.20f,
+    val visible: Boolean = true,
+    val opacidad: Float = 1f
+)
+
+/**
  * Plantilla de escena: orientación del lienzo, qué cámara va en cada capa y
  * dónde quedó cada overlay. Se guarda como JSON en el almacenamiento interno.
  */
@@ -61,7 +81,8 @@ data class Plantilla(
     val imagenes: List<ImagenPlantilla>,
     val ajustes: AjustesPlantilla = AjustesPlantilla(),
     val transicion: TransicionPlantilla = TransicionPlantilla(),
-    val medios: List<MedioPlantilla> = emptyList()
+    val medios: List<MedioPlantilla> = emptyList(),
+    val textos: List<TextoPlantilla> = emptyList()
 ) {
     fun aJson(): String {
         val raiz = JSONObject()
@@ -102,6 +123,25 @@ data class Plantilla(
             )
         }
         raiz.put("imagenes", imgs)
+
+        val txts = JSONArray()
+        textos.forEach { t ->
+            txts.put(
+                JSONObject()
+                    .put("texto", t.texto)
+                    .put("fuente", t.fuente)
+                    .put("color", t.color)
+                    .put("animacion", t.animacion)
+                    .put("tamano", t.tamano.toDouble())
+                    .put("x", t.x.toDouble())
+                    .put("y", t.y.toDouble())
+                    .put("w", t.ancho.toDouble())
+                    .put("h", t.alto.toDouble())
+                    .put("visible", t.visible)
+                    .put("opacidad", t.opacidad.toDouble())
+            )
+        }
+        raiz.put("textos", txts)
 
         raiz.put(
             "ajustes",
@@ -174,6 +214,29 @@ data class Plantilla(
                         )
                     }
                 }
+                val textos = ArrayList<TextoPlantilla>()
+                raiz.optJSONArray("textos")?.let { arr ->
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        val contenido = o.optString("texto", "")
+                        if (contenido.isBlank()) continue
+                        textos.add(
+                            TextoPlantilla(
+                                texto = contenido,
+                                fuente = o.optString("fuente", "Sans negrita"),
+                                color = o.optInt("color", 0xFFFFFFFF.toInt()),
+                                animacion = o.optString("animacion", "fundido"),
+                                tamano = o.optDouble("tamano", 1.0).toFloat(),
+                                x = o.optDouble("x", 0.21).toFloat(),
+                                y = o.optDouble("y", 0.30).toFloat(),
+                                ancho = o.optDouble("w", 0.58).toFloat(),
+                                alto = o.optDouble("h", 0.20).toFloat(),
+                                visible = o.optBoolean("visible", true),
+                                opacidad = o.optDouble("opacidad", 1.0).toFloat()
+                            )
+                        )
+                    }
+                }
                 val medios = ArrayList<MedioPlantilla>()
                 raiz.optJSONArray("medios")?.let { arr ->
                     for (i in 0 until arr.length()) {
@@ -210,7 +273,8 @@ data class Plantilla(
                     imagenes = imgs,
                     ajustes = ajustes,
                     transicion = transicion,
-                    medios = medios
+                    medios = medios,
+                    textos = textos
                 )
             } catch (t: Throwable) {
                 L.e("plantillas", "plantilla ilegible: ${t.message}", t)
