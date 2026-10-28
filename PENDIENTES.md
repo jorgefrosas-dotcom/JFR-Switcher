@@ -1,5 +1,19 @@
 # PENDIENTES — JFR Switcher Multicam
 
+## Arreglado en 0.2.1 (27/10 noche) — el QR traía bien el puerto, el campo lo cortaba
+
+- **Síntoma:** al escanear el QR, el campo de la app de cámara quedaba como `192.168.100.7:8` en vez
+  de `192.168.100.7:8787`; Jorge tenía que borrar el `:8` a mano para conectar (y si la tablet usaba
+  el 8788, habría conectado al 8787 y fallado).
+- **Causa:** el `EditText campoIp` de `camera/res/layout/activity_camera.xml` tenía **`maxLength="15"`**
+  y `digits="0123456789."`. `192.168.100.7:8787` mide **18** caracteres, así que entraban solo los 15
+  primeros. **El QR siempre estuvo bien**: la tablet imprime en su log `QR: jfr://192.168.100.7:8787`.
+- **Arreglo:** `digits="0123456789.:"` y `maxLength="64"`. Así admite IP sola, `IP:PUERTO` y el enlace
+  completo pegado, y el teclado ya permite escribir `:`.
+- **Regla para no repetirlo:** cuando un campo se llena **por código** (QR, preferencias, portapapeles),
+  revisar `maxLength` y `digits`: los filtros del `EditText` también recortan lo que se escribe por código,
+  no solo lo que teclea el usuario.
+
 ## Cambio grande: el proyecto ya vive en GitHub (27/10 noche, PC personal)
 
 - Repo: **`github.com/jorgefrosas-dotcom/JFR-Switcher`**. La rutina para trabajar en las dos PC,
