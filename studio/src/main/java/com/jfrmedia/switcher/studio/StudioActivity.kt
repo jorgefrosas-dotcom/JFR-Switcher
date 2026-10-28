@@ -781,10 +781,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Pinta el botón con el estado actual de la cámara de la tablet. */
     private fun actualizarBotonTablet() {
+        // Etiqueta corta a propósito: con «Tablet: frontal» el botón empujaba el medidor de audio
+        // fuera del borde derecho. El icono de cámara ya dice de qué cámara se trata.
         b.btnTabletLens.text = when {
-            !localCam.encendida -> "Tablet: apagada"
-            localCam.frontal -> "Tablet: frontal"
-            else -> "Tablet: trasera"
+            !localCam.encendida -> "Apagada"
+            localCam.frontal -> "Frontal"
+            else -> "Trasera"
         }
         b.btnTabletLens.alpha = if (localCam.encendida) 1f else 0.6f
     }
@@ -1323,13 +1325,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 ).apply { marginStart = 6.dp }
                 setOnClickListener { dialogoAjustesImagen() }
             }
-            // El medidor se va a la barra superior para que la fila de controles quepa.
-            (b.audioMeter.parent as? ViewGroup)?.removeView(b.audioMeter)
-            b.audioMeter.layoutParams = LinearLayout.LayoutParams(44.dp, 15.dp)
-            // A la barra superior, antes del separador de la derecha.
-            val barraSup = b.btnAudio.parent as? LinearLayout
-            if (barraSup != null) barraSup.addView(b.audioMeter, barraSup.indexOfChild(b.btnAudio) + 1)
-            b.btnTabletLens.text = "Lente"
+            // El medidor de audio ya vive en la barra superior (junto a Facebook): en el celular
+            // solo se hace más chico, sin moverlo de sitio.
+            b.audioMeter.layoutParams = LinearLayout.LayoutParams(56.dp, 16.dp)
+            // El botón de la cámara de la tablet ya lleva su estado (Apagada / Frontal / Trasera):
+            // no se renombra aquí para no perder esa información.
             b.btnSplit.text = "2cam"
             b.controlesCapa.addView(botonImagen, 0)
             b.controlesCapa.requestLayout()
@@ -4888,10 +4888,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 v.gravity = Gravity.CENTER
                 fila.addView(v)
             }
-            fila.addView(
-                b.audioMeter,
-                LinearLayout.LayoutParams(70.dp, 22.dp).apply { setMargins(8.dp, 0, 0, 0) }
-            )
+            // El botón de la cámara de la tablet va al final de la fila.
+            // OJO: la fila se vacía con removeAllViews() y sólo se reponen los controles de
+            // arriba, así que si no se agrega aquí, quedaba fuera del árbol y "desaparecía".
+            b.btnTabletLens.textSize = if (esPantallaCelular()) 9f else 12f
+            b.btnTabletLens.gravity = Gravity.CENTER
+            b.btnTabletLens.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = 6.dp }
+            fila.addView(b.btnTabletLens)
+            // El medidor de audio ya no va aquí: vive en la barra superior, junto a Facebook.
             b.scrollControles.addView(
                 fila,
                 FrameLayout.LayoutParams(

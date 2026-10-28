@@ -100,6 +100,14 @@
             android:text="Facebook"
             android:textSize="12sp" />
 
+        <!-- Nivel de audio, junto al chip de Facebook: arriba sobra espacio y en la fila de
+             controles quedaba muy apretado. -->
+        <com.jfrmedia.switcher.studio.ui.AudioMeterView
+            android:id="@+id/audioMeter"
+            android:layout_width="84dp"
+            android:layout_height="20dp"
+            android:layout_marginStart="10dp" />
+
         <Space
             android:layout_width="0dp"
             android:layout_height="1dp"
@@ -419,14 +427,12 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="6dp"
-                        android:text="Tablet: apagada"
+                        android:drawableStart="@drawable/ic_camera"
+                        android:drawableTint="@color/text_secondary"
+                        android:drawablePadding="5dp"
+                        android:text="Apagada"
                         android:textSize="12sp" />
 
-                    <com.jfrmedia.switcher.studio.ui.AudioMeterView
-                        android:id="@+id/audioMeter"
-                        android:layout_width="70dp"
-                        android:layout_height="22dp"
-                        android:layout_marginStart="8dp" />
                 </LinearLayout>
                 </HorizontalScrollView>
                 <LinearLayout

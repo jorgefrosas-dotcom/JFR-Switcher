@@ -49,6 +49,23 @@ se puede abrir (archivo borrado o permiso perdido) **se descarta solo, sin reven
 video, y volver a hacer force-stop + abrir → la tarjeta sigue ahí con su miniatura (captura revisada).
 Quitar con la ✕ y repetir el force-stop → ya no está y no vuelve.
 
+## 2b. Arreglos de la misma noche: barras de audio y cámara de la tablet
+
+- **Las barras de audio subieron a la barra de arriba**, justo después del chip de Facebook (ahí sobra
+  espacio). En `activity_studio.xml` el `AudioMeterView` ya vive en la barra superior; se quitó del
+  final de la fila de controles.
+- **El botón de la cámara de la tablet había desaparecido** (icono de cámara + **Apagada / Frontal /
+  Trasera**). **Causa raíz: `moverControles()` vacía la fila con `fila.removeAllViews()` y sólo vuelve
+  a agregar los controles de su lista**; el botón de la lente no estaba en esa lista, así que quedaba
+  fuera del árbol de vistas en cada arranque (por eso «desaparecía», y no lo rompió el cambio de los
+  medios: ese cambio sólo agregó líneas, no borró ninguna). Ya se vuelve a agregar al final de la fila.
+  **LECCIÓN: cualquier control que se agregue a `controlesCapa` en el XML tiene que agregarse también
+  en `moverControles()`, o se pierde.**
+- La etiqueta del botón quedó corta (`Frontal` / `Trasera` / `Apagada`, con icono de cámara) porque con
+  «Tablet: frontal» empujaba el medidor de audio fuera del borde derecho. Ahora que el medidor vive
+  arriba, la etiqueta corta se queda por gusto: se ve ordenada.
+
+
 ## 3. La tarea pendiente (la única que queda)
 
 **Que las capturas entren también al grupo MEDIOS.** Hoy el botón de foto del visor (`tomarFoto()`,

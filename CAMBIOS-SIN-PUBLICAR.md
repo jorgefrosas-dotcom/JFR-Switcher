@@ -12,6 +12,14 @@
 
 ## Pendiente de publicar
 
+### Barras de audio y cámara de la tablet
+
+- **Las barras de audio suben a la barra de arriba, junto al chip de Facebook**, donde sobraba
+  espacio. En la fila de controles quedaban apretadas contra el borde.
+- **Vuelve el botón de la cámara de la tablet** (icono de cámara + **Apagada / Frontal / Trasera**),
+  que se había perdido al reacomodar los controles: cada toque pasa de una lente a la otra y luego
+  apaga la cámara. Funciona también volviendo de vertical a horizontal.
+
 ### Los medios se recuerdan entre sesiones
 
 - **El grupo MEDIOS recuerda los últimos 10** videos y fotos: al abrir la app otra vez ya están ahí,
