@@ -12,6 +12,16 @@
 
 ## Pendiente de publicar
 
+### El nivel de audio se ve desde que abres la app
+
+- **Las barras de audio se mueven desde que abres la app**, sin grabar ni transmitir: así ves cómo
+  está entrando el sonido (si el micrófono está mudo, si hay ruido de fondo, si te estás acercando al
+  recorte) **antes** de arrancar. También se mueve el monitor de onda del botón «♪ Audio» y el nivel
+  del cuadro de Audio, con el texto «en vivo».
+- Mide **igual que se va a grabar**: con la misma entrada elegida, el mismo mudo, la misma ganancia y
+  el mismo ecualizador. Al empezar la grabación el medidor se pasa solo al del grabador, y al
+  terminar vuelve a la entrada en vivo. Con la app en segundo plano el micrófono se cierra.
+
 ### Barras de audio y cámara de la tablet
 
 - **Las barras de audio suben a la barra de arriba, junto al chip de Facebook**, donde sobraba
@@ -57,7 +67,8 @@
 
 ## Pendiente de programar (no está hecho todavía)
 
-- **Capturas (screenshots) durante la grabación**: guardarlas también en la biblioteca.
+- Nada anotado por ahora.
 
-> Lo de «traer a la biblioteca los medios importados» ya no aplica: la biblioteca se quitó de la
-> pantalla (27/10) y los medios ahora se recuerdan en el propio grupo MEDIOS, que es más directo.
+> **Cerrado el 27/10:** lo de «traer a la biblioteca los medios importados» ya no aplica (la
+> biblioteca se quitó de la pantalla y los medios se recuerdan en el propio grupo MEDIOS) y las
+> **capturas no se meten a MEDIOS**: Jorge decidió que no las necesita ahí.

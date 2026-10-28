@@ -8,8 +8,9 @@ import android.util.AttributeSet
 import android.view.View
 
 /**
- * Vúmetro de audio. Toma el nivel del grabador (RMS del micrófono) y dibuja barras
- * con caída suave; si no se está grabando, baja a cero.
+ * Vúmetro de audio. Toma el nivel de quien se lo diga (`levelProvider`) y dibuja barras con caída
+ * suave: en sesión es el RMS del grabador; fuera de sesión, el del micrófono que se abre para ver
+ * cómo está entrando el audio antes de grabar.
  */
 class AudioMeterView @JvmOverloads constructor(
     context: Context,

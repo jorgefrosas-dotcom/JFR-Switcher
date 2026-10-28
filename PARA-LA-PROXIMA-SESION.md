@@ -65,20 +65,32 @@ Quitar con la ✕ y repetir el force-stop → ya no está y no vuelve.
   «Tablet: frontal» empujaba el medidor de audio fuera del borde derecho. Ahora que el medidor vive
   arriba, la etiqueta corta se queda por gusto: se ve ordenada.
 
+## 2c. El nivel de audio se ve desde que abres la app
 
-## 3. La tarea pendiente (la única que queda)
+**Qué hace:** el vúmetro de arriba (y el monitor de onda del botón «♪ Audio», y el nivel del cuadro de
+Audio) se mueven **sin grabar ni transmitir**, para ver cómo entra el sonido antes de arrancar. Mide
+igual que se va a grabar: misma entrada, mismo mudo, misma ganancia, mismo ecualizador.
 
-**Que las capturas entren también al grupo MEDIOS.** Hoy el botón de foto del visor (`tomarFoto()`,
-que captura el programa con `PixelCopy`, y `guardarFoto()`) deja el JPEG en
-`Pictures/JFR Switcher`, pero **no lo pone en MEDIOS**: la foto no se puede volver a usar sin ir al
-archivo. Lo natural es que al guardarla se agregue al grupo, y como el grupo ahora se recuerda, la
-captura sigue ahí en la próxima sesión.
+**Cómo quedó (clase nueva `audio/AudioVivo.kt`):**
 
-- En Android 10+ `guardarFoto()` ya tiene en la mano la `uri` que devuelve el `insert` de MediaStore
-  (hoy solo la usa para escribir el JPEG): basta pasársela a `agregarMedio(uri)` antes del `return`.
-- En el camino viejo (Android 9 o menos, archivo en `Fotos/`) hay que armar un `FileProvider` para
-  tener una `uri` que `agregarMedio()` pueda abrir. **Antes de hacerlo, confirmar con Jorge** que
-  quiere ese comportamiento y en qué equipos (la tablet es Android 13; el POCO también es reciente).
+- Abre su propio `AudioRecord` (44,1 kHz mono) y calcula RMS y pico con la **misma calibración** que
+  `Recorder.computeLevel` (RMS × 4,5). Antes de medir aplica mudo, ecualizador de entrada y ganancia,
+  leyéndolos del propio `Recorder`, así no hay dos copias de los ajustes que se puedan desincronizar.
+- `StudioActivity.ajustarAudioVivo()` decide: micrófono abierto solo si la app está **a la vista**
+  (`enPrimerPlano`, de `onResume`/`onPause`) y **no hay sesión** (`sesionEnCurso()`).
+- **El orden importa:** `startRecording()` e `iniciarTransmision()` cierran el micrófono del vúmetro
+  **antes** de que el grabador lo abra (`AudioVivo.detener()` espera al hilo: hace `join` y libera).
+  Si no, el grabador se queda sin audio y **graba solo video sin avisar**. Para volver a abrirlo está
+  `actualizarBotonSesion()`, que se llama en cada cambio de estado; si el aparato todavía está ocupado
+  reintenta 5 veces cada 400 ms.
+- Al cambiar la entrada en el cuadro de Audio, el vúmetro se reabre con la entrada nueva.
+- Verificado en la tablet: el micrófono abre al arrancar, las barras se mueven, y una grabación de
+  prueba de 7 s salió con **pista de audio AAC y video H.264** (el MP4 se revisó por dentro).
+
+## 3. La tarea pendiente
+
+**Nada pendiente de programar.** Jorge decidió que **las capturas NO se meten al grupo MEDIOS**, así
+que ese pendiente se cerró el 27/10.
 
 ## 4. Cómo se trabaja (no repetir errores)
 

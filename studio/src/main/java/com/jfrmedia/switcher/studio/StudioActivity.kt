@@ -57,6 +57,7 @@ import com.jfrmedia.switcher.studio.databinding.DialogPairingBinding
 import com.jfrmedia.switcher.studio.audio.AudioEq
 import com.jfrmedia.switcher.studio.audio.AudioMonitor
 import com.jfrmedia.switcher.studio.audio.AudioRuta
+import com.jfrmedia.switcher.studio.audio.AudioVivo
 import com.jfrmedia.switcher.studio.databinding.DialogAudioBinding
 import com.jfrmedia.switcher.studio.databinding.DialogSettingsBinding
 import com.jfrmedia.switcher.studio.databinding.DialogTransicionesBinding
@@ -451,7 +452,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // Los últimos medios de la sesión anterior: ya con la parrilla y la orientación listas.
         cargarMediosRecientes()
 
-        b.audioMeter.levelProvider = { if (recorder.isRecording) recorder.lastLevel else 0f }
+        // El vúmetro de arriba muestra la entrada desde que se abre la app (el micrófono lo abre
+        // ajustarAudioVivo() con onResume); al grabar o transmitir toma el nivel del grabador.
+        b.audioMeter.levelProvider = { nivelEntrada() }
 
         applyWindowInsets()
         wireHub()
@@ -567,9 +570,24 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .onFailure { toast("No hay navegador para abrir la descarga") }
     }
 
+    override fun onResume() {
+        super.onResume()
+        enPrimerPlano = true
+        // El vúmetro empieza a moverse en cuanto la app está a la vista.
+        ajustarAudioVivo()
+    }
+
+    override fun onPause() {
+        // Con la app fuera de la vista no se deja el micrófono abierto: no hace falta y gasta pila.
+        enPrimerPlano = false
+        ajustarAudioVivo()
+        super.onPause()
+    }
+
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         runCatching { unregisterReceiver(receptorSesion) }
+        runCatching { audioVivo.detener() }
         runCatching { localCam.detener() }
         runCatching { if (recorder.isRecording) { b.canvas.endRecordingOutput(); recorder.stop() } }
         runCatching { server.stop() }
@@ -1721,6 +1739,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     private fun startRecording(withAudio: Boolean) {
+        // El vúmetro suelta el micrófono antes de que el grabador lo abra: si siguiera tomado,
+        // la grabación saldría sin audio y sin avisar.
+        runCatching { audioVivo.detener() }
         // Durante la transmisión se graba con el mismo codificador del emisor.
         if (transmitiendo) {
             if (grabarConEmisor()) {
@@ -3402,6 +3423,40 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private val rutaAudio by lazy { AudioRuta(this) }
 
+    /**
+     * Micrófono abierto mientras no hay sesión, para que el vúmetro se mueva **desde que se abre
+     * la app** y se vea cómo está entrando el audio antes de grabar o transmitir.
+     */
+    private val audioVivo by lazy { AudioVivo(this, recorder) }
+
+    /** La app está a la vista: solo entonces vale la pena tener el micrófono abierto. */
+    private var enPrimerPlano = false
+
+    /** Nivel que muestra el vúmetro: en sesión lo manda el grabador; si no, la entrada en vivo. */
+    private fun nivelEntrada(): Float = when {
+        recorder.isRecording -> recorder.lastLevel
+        transmitiendo -> emisor.nivel
+        else -> audioVivo.nivel
+    }
+
+    /**
+     * Abre o cierra el micrófono del vúmetro según haga falta.
+     *
+     * Se cierra en cuanto hay sesión: dos capturas a la vez se pelean por el micrófono y el
+     * grabador se quedaría sin audio. Si el aparato todavía está ocupado (el grabador lo suelta un
+     * instante después de detenerse), se reintenta enseguida en vez de quedarse sin vúmetro.
+     */
+    private fun ajustarAudioVivo(intento: Int = 0) {
+        val quiere = enPrimerPlano && !sesionEnCurso()
+        if (quiere) {
+            if (!audioVivo.activo && !audioVivo.arrancar() && intento < 5) {
+                handler.postDelayed({ ajustarAudioVivo(intento + 1) }, 400)
+            }
+        } else if (audioVivo.activo) {
+            audioVivo.detener()
+        }
+    }
+
     private fun dbAProgreso(progreso: Int): Float = (progreso / 100f) * 24f - 12f
 
     /**
@@ -3773,6 +3828,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Arranca el envío a Facebook con la clave guardada. */
     private fun iniciarTransmision() {
+        // El vúmetro suelta el micrófono antes de que el emisor lo abra para el directo.
+        runCatching { audioVivo.detener() }
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val clave = prefs.getString(CLAVE_FB_CLAVE, "").orEmpty().trim()
         if (clave.isEmpty()) {
@@ -4016,6 +4073,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     .putInt(CLAVE_AUDIO_TIPO, elegida.tipo)
                     .apply()
                 eqEntrada.reiniciar()
+                // El vúmetro vuelve a abrir el micrófono con la entrada nueva.
+                audioVivo.detener()
+                ajustarAudioVivo()
             }
         }
         secEnt.addView(rgEnt)
@@ -4078,14 +4138,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         secEnt.addView(bloqueEq(eqEntrada) { guardarTodo() })
 
         secEnt.addView(TextView(this).apply {
-            text = "Nivel de entrada (se mueve al grabar)"
+            text = "Nivel de entrada (en vivo: se mueve aunque no estés grabando)"
             textSize = 11f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
             setPadding(0, 10.dp, 0, 4.dp)
         })
         secEnt.addView(
             com.jfrmedia.switcher.studio.ui.AudioMeterView(this).apply {
-                levelProvider = { recorder.lastLevel }
+                // El mismo nivel que el vúmetro de arriba: en vivo fuera de sesión.
+                levelProvider = { nivelEntrada() }
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, 24.dp
                 )
@@ -4799,11 +4860,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
     }
 
-    /** Pico de entrada actual (0..1): del grabador o del emisor, según la sesión. */
+    /**
+     * Pico de entrada actual (0..1): del grabador en sesión; fuera de sesión, del micrófono que
+     * abre el vúmetro. Así el monitor de onda también se mueve antes de grabar.
+     */
     private fun picoActual(): Float = when {
         recorder.isRecording -> recorder.lastPeak
         transmitiendo -> emisor.nivel
-        else -> 0f
+        else -> audioVivo.pico
     }
 
     private fun moverControles() {
@@ -5548,6 +5612,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** El botón principal cambia según lo que se haya elegido hacer. */
     private fun actualizarBotonSesion() {
+        // Al empezar o terminar una sesión el micrófono del vúmetro se suelta o se retoma solo.
+        ajustarAudioVivo()
         // Con el directo en el aire el botón debe poder cortarlo, aunque el texto del modo
         // sea «Transmitir» (antes se quedaba igual y parecía que no había nada corriendo).
         if (recorder.isRecording || transmitiendo) {
