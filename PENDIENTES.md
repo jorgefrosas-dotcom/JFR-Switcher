@@ -30,6 +30,9 @@
   release** de GitHub. Por eso hay que escribir ahí, en español y corto, qué cambió: es la descripción
   que ve Jorge en la app.
 - Probado de verdad: la tablet en 0.2.2 mostró «Versión 0.2.3 disponible» con las novedades al abrirse.
+- **0.2.4:** la app de cámara revisa **en cada conexión** (no solo al abrir), porque el celular se queda
+  abierto horas durante un evento. Mínimo 5 minutos entre consultas para no gastar datos ni molestar.
+  Probado: con el celular en 0.2.3 apareció el aviso de la 0.2.4 al abrir, y al conectar se vuelve a mirar.
 
 ## Cómo instalar en el POCO (MIUI/HyperOS) — truco que sí funciona
 
