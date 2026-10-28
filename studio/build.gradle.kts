@@ -100,6 +100,5 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     // Motor de transmisión RTMP/RTMPS (Facebook, YouTube, etc.)
     implementation("com.github.pedroSG94.RootEncoder:library:2.8.1")
-    // Login oficial de Facebook (no permite WebView)
-    implementation("com.facebook.android:facebook-login:17.0.0")
+    // El login de Facebook se quitó: el directo se hace con el Live Producer + la clave pegada a mano.
 }

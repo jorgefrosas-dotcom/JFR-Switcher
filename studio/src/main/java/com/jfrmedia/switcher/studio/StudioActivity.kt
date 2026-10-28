@@ -115,9 +115,6 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** Si está activa, la calidad sube a 720p con pocas cámaras y baja con muchas. */
     private var calidadAuto = true
 
-    /** Directo creado por la app, para cerrarlo al detener. */
-    private var directoActivoId: String? = null
-
     /** false = plantilla horizontal (16:9), true = vertical (9:16). */
     private var vertical = false
 
@@ -561,13 +558,6 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         runCatching { startActivity(Intent(directo).setPackage("com.android.chrome")) }
             .recoverCatching { startActivity(directo) }
             .onFailure { toast("No hay navegador para abrir la descarga") }
-    }
-
-    /** Resultado del login de Facebook (SDK). */
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
-        if (fbCallback.onActivityResult(requestCode, resultCode, data)) return
-        @Suppress("DEPRECATION")
-        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onDestroy() {
@@ -2926,134 +2916,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             false
         }
     }.getOrDefault(false)
-    // --------------------------------------------------- Facebook: página y directo automático
 
-    /** WebView donde se hace el login de Facebook (OAuth implícito). */
-    /** Callback del SDK de Facebook. */
-    private val fbCallback = com.facebook.CallbackManager.Factory.create()
-
-    /**
-     * Login con el **SDK oficial**: Meta bloquea el acceso desde navegadores incrustados,
-     * así que se usa la app de Facebook o Chrome (Custom Tabs).
-     */
-    private fun loginFacebook() {
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val appId = prefs.getString(CLAVE_FB_APPID, "").orEmpty().trim()
-        if (appId.isEmpty()) {
-            toast("Falta el App ID de Facebook")
-            return
-        }
-        com.facebook.FacebookSdk.setApplicationId(appId)
-        com.facebook.FacebookSdk.setAutoLogAppEventsEnabled(false)
-        com.facebook.FacebookSdk.setAdvertiserIDCollectionEnabled(false)
-        com.facebook.FacebookSdk.sdkInitialize(this)
-
-        val gestor = com.facebook.login.LoginManager.getInstance()
-        gestor.registerCallback(fbCallback, object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-            override fun onSuccess(resultado: com.facebook.login.LoginResult) {
-                pedirPermisoPublicar(resultado.accessToken.token)
-            }
-
-            override fun onCancel() {
-                toast("Inicio de sesión cancelado")
-            }
-
-            override fun onError(error: com.facebook.FacebookException) {
-                toast("No se pudo entrar: ${error.message}")
-            }
-        })
-        gestor.logInWithReadPermissions(
-            this,
-            listOf("pages_show_list", "pages_read_engagement", "pages_manage_posts")
-        )
-    }
-
-    /** «publish_video» es permiso de publicación: Meta exige pedirlo en una segunda pasada. */
-    private fun pedirPermisoPublicar(tokenActual: String?) {
-        val token = com.facebook.AccessToken.getCurrentAccessToken()
-        if (token != null && token.permissions.contains("publish_video")) {
-            guardarSesionFacebook(token.token ?: return)
-            return
-        }
-        com.facebook.login.LoginManager.getInstance().registerCallback(
-            fbCallback,
-            object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-                override fun onSuccess(resultado: com.facebook.login.LoginResult) {
-                    guardarSesionFacebook(resultado.accessToken.token)
-                }
-
-                override fun onCancel() {
-                    // Sin permiso de publicación se guarda la sesión igual: la app avisará.
-                    tokenActual?.let { guardarSesionFacebook(it) }
-                }
-
-                override fun onError(error: com.facebook.FacebookException) {
-                    tokenActual?.let { guardarSesionFacebook(it) }
-                }
-            }
-        )
-        com.facebook.login.LoginManager.getInstance()
-            .logInWithPublishPermissions(this, listOf("publish_video"))
-    }
-
-    /** Con el token de usuario se listan las páginas y se guarda la elegida. */
-    private fun guardarSesionFacebook(tokenUsuario: String) {
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        prefs.edit().putString(CLAVE_FB_USER, tokenUsuario).apply()
-        toast("Sesión iniciada, buscando páginas…")
-        Thread {
-            val paginas = com.jfrmedia.switcher.studio.stream.Facebook.paginas(tokenUsuario)
-            runOnUiThread {
-                if (paginas.isEmpty()) {
-                    toast("No se encontraron páginas que administres")
-                    return@runOnUiThread
-                }
-                val nombres = paginas.map { it.nombre }.toTypedArray()
-                AlertDialog.Builder(this)
-                    .setTitle("¿En qué página transmitir?")
-                    .setItems(nombres) { _, cual ->
-                        val p = paginas[cual]
-                        prefs.edit()
-                            .putString(CLAVE_FB_PAGE_ID, p.id)
-                            .putString(CLAVE_FB_PAGE_NAME, p.nombre)
-                            .putString(CLAVE_FB_PAGE_TOKEN, p.token)
-                            .apply()
-                        toast("Página elegida: ${p.nombre}")
-                    }
-                    .show()
-            }
-        }.start()
-    }
-
-    /** Crea el directo en la página elegida y devuelve la URL RTMPS. */
-    private fun abrirDirectoFacebook(): String? {
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val pageId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty()
-        val pageToken = prefs.getString(CLAVE_FB_PAGE_TOKEN, "").orEmpty()
-        if (pageId.isEmpty() || pageToken.isEmpty()) return null
-        val titulo = "JFR Media Lab · " +
-            java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.US).format(java.util.Date())
-        val directo = com.jfrmedia.switcher.studio.stream.Facebook
-            .crearDirecto(pageId, pageToken, titulo)
-        if (directo == null) {
-            toast("Facebook no permitió crear el directo")
-            return null
-        }
-        directoActivoId = directo.id
-        return directo.urlRtmp
-    }
-
-    /** Cierra el directo abierto por la app. */
-    private fun cerrarDirectoFacebook() {
-        val id = directoActivoId ?: return
-        directoActivoId = null
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val pageToken = prefs.getString(CLAVE_FB_PAGE_TOKEN, "").orEmpty()
-        if (pageToken.isEmpty()) return
-        Thread {
-            com.jfrmedia.switcher.studio.stream.Facebook.terminarDirecto(id, pageToken)
-        }.start()
-    }
     /**
      * Abre el Live Producer de Facebook en Chrome, a pantalla completa.
      *
@@ -3090,10 +2953,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             toast("Falta la clave de transmisión en «Facebook»")
             return
         }
-        // Si hay una página conectada, la app crea el directo y entra en vivo sola.
-        val urlDirecto = abrirDirectoFacebook()
-        val url = urlDirecto
-            ?: (prefs.getString(CLAVE_FB_URL, FB_URL_POR_DEFECTO).orEmpty().trim() + clave)
+        // La clave se copia del Live Producer: servidor RTMPS guardado + clave.
+        val url = prefs.getString(CLAVE_FB_URL, FB_URL_POR_DEFECTO).orEmpty().trim() + clave
         // El envío usa el mismo criterio que la grabación: el número es el lado corto, así que
         // en vertical 720p sale 720×1280 (antes se forzaba 16:9 y el lienzo vertical se iba
         // con barras negras a los lados).
@@ -3184,6 +3045,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         toast("Transmisión detenida")
     }
     /** Clave y URL de la transmisión (Facebook por ahora, luego más destinos). */
+    /**
+     * Diálogo de Facebook. El camino es **Live Producer + clave**: aquí se guardan el ID de la
+     * página (para abrir su Producer), el servidor RTMPS y la clave que copias del Producer.
+     */
     private fun dialogoFacebook() {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val caja = LinearLayout(this).apply {
@@ -3191,68 +3056,31 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             setPadding(22.dp, 10.dp, 22.dp, 10.dp)
         }
 
-        // --- Cuenta y página ---
-        val paginaActual = prefs.getString(CLAVE_FB_PAGE_NAME, "").orEmpty()
         caja.addView(TextView(this).apply {
-            text = if (paginaActual.isEmpty()) {
-                "Sin página conectada"
-            } else {
-                "Página: $paginaActual"
-            }
-            textSize = 13f
-            setTextColor(
-                ContextCompat.getColor(
-                    this@StudioActivity,
-                    if (paginaActual.isEmpty()) R.color.text_secondary else R.color.accent
-                )
-            )
-            setPadding(0, 0, 0, 8.dp)
+            text = "Se transmite con la clave del Live Producer: elige el destino en el navegador, " +
+                "copia la clave y pégala aquí."
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            setPadding(0, 0, 0, 10.dp)
         })
 
+        // --- Página ---
         caja.addView(TextView(this).apply {
-            text = "App ID de Meta"
+            text = "ID de tu página de Facebook"
             textSize = 11f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
         })
-        val campoApp = EditText(this).apply {
-            setText(prefs.getString(CLAVE_FB_APPID, ""))
+        val campoPagina = EditText(this).apply {
+            setText(prefs.getString(CLAVE_FB_PAGE_ID, ""))
             textSize = 12f
             setSingleLine(true)
-            hint = "Número de tu app en developers.facebook.com"
+            hint = "Solo para abrir el Live Producer de esa página"
         }
-        caja.addView(campoApp)
+        caja.addView(campoPagina)
 
-        val botonLogin = TextView(this).apply {
-            text = "Entrar con Facebook y elegir página"
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.bg_root))
-            setBackgroundResource(R.drawable.bg_pill_accent)
-            setPadding(16.dp, 12.dp, 16.dp, 12.dp)
-            setOnClickListener {
-                prefs.edit().putString(CLAVE_FB_APPID, campoApp.text.toString().trim()).apply()
-                loginFacebook()
-            }
-        }
-        caja.addView(
-            botonLogin,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 12.dp }
-        )
-
+        // --- Servidor y clave ---
         caja.addView(TextView(this).apply {
-            text = "Al conectar, la app crea el directo y entra en vivo sola en la página que " +
-                "elijas. Ya no necesitas el Live Producer."
-            textSize = 10f
-            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
-            setPadding(0, 8.dp, 0, 4.dp)
-        })
-
-        // --- Respaldo manual (URL + clave) ---
-        caja.addView(TextView(this).apply {
-            text = "Respaldo manual · RTMPS"
+            text = "Servidor RTMPS y clave"
             textSize = 11f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
             setPadding(0, 14.dp, 0, 0)
@@ -3267,7 +3095,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             setText(prefs.getString(CLAVE_FB_CLAVE, ""))
             textSize = 12f
             setSingleLine(true)
-            hint = "Clave del Live Producer (opcional)"
+            hint = "Clave del Live Producer"
         }
         caja.addView(campoClave)
 
@@ -3285,7 +3113,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
             setBackgroundResource(R.drawable.bg_pill_ghost)
             setPadding(16.dp, 12.dp, 16.dp, 12.dp)
-            setOnClickListener { abrirLiveProducer() }
+            setOnClickListener {
+                // El ID que se acaba de escribir es el que se usa para abrir el Producer.
+                prefs.edit().putString(CLAVE_FB_PAGE_ID, campoPagina.text.toString().trim()).apply()
+                abrirLiveProducer()
+            }
         })
 
         AlertDialog.Builder(this)
@@ -3293,7 +3125,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .setView(ScrollView(this).apply { addView(caja) })
             .setPositiveButton(if (transmitiendo) "Detener" else "Transmitir") { _, _ ->
                 prefs.edit()
-                    .putString(CLAVE_FB_APPID, campoApp.text.toString().trim())
+                    .putString(CLAVE_FB_PAGE_ID, campoPagina.text.toString().trim())
                     .putString(CLAVE_FB_URL, campoUrl.text.toString().trim())
                     .putString(CLAVE_FB_CLAVE, campoClave.text.toString().trim())
                     .apply()
@@ -4945,11 +4777,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         private const val CLAVE_FB_URL = "fb_url"
         private const val CLAVE_FB_CLAVE = "fb_clave"
         private const val CLAVE_FB_GRABAR = "fb_grabar"
-        private const val CLAVE_FB_APPID = "fb_appid"
-        private const val CLAVE_FB_USER = "fb_user"
         private const val CLAVE_FB_PAGE_ID = "fb_page_id"
-        private const val CLAVE_FB_PAGE_NAME = "fb_page_name"
-        private const val CLAVE_FB_PAGE_TOKEN = "fb_page_token"
         private const val FB_URL_POR_DEFECTO = "rtmps://live-api-s.facebook.com:443/rtmp/"
         private const val CLAVE_TABLET_FRONTAL = "tablet_cam_frontal"
         private const val CLAVE_VERTICAL = "vertical"
