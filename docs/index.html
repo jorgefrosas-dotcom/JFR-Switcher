@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JFR Media · Descargas</title>
+<meta name="description" content="Descarga las apps de JFR Media: JFR Switcher (tablet) y JFR Camera (celulares).">
+<meta name="theme-color" content="#0E1116">
+<style>
+  :root{
+    --bg:#0E1116; --panel:#16191F; --tile:#20242B; --stroke:#2A2F38;
+    --text:#F2F4F7; --text2:#9BA5B4; --dim:#6C7686;
+    --accent:#FF5A2B; --accent-dark:#E04A1E; --green:#35C759; --warn:#FFC13B;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%, #1B2028 0%, var(--bg) 60%);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    padding:28px 18px 48px;
+  }
+  .wrap{max-width:680px;margin:0 auto}
+  header{text-align:center;margin-bottom:26px}
+  .marca{display:inline-flex;align-items:center;gap:10px}
+  .logo{
+    width:38px;height:38px;border-radius:10px;
+    background:linear-gradient(145deg,var(--accent),var(--accent-dark));
+    display:grid;place-items:center;font-weight:800;font-size:15px;letter-spacing:.5px;
+    box-shadow:0 6px 20px rgba(255,90,43,.30)
+  }
+  .marca h1{font-size:19px;margin:0;letter-spacing:.4px;font-weight:700}
+  .marca span{display:block;font-size:10px;letter-spacing:2.4px;color:var(--dim);font-weight:600}
+  .lead{color:var(--text2);font-size:14px;margin:14px 4px 0;line-height:1.55}
+
+  .card{
+    background:var(--panel);border:1px solid var(--stroke);border-radius:16px;
+    padding:18px;margin-bottom:14px;display:flex;gap:14px;align-items:flex-start;
+  }
+  .icono{
+    flex:0 0 46px;width:46px;height:46px;border-radius:12px;background:var(--tile);
+    display:grid;place-items:center;font-size:22px;border:1px solid var(--stroke)
+  }
+  .card .cuerpo{flex:1 1 auto;min-width:0}
+  .card h2{font-size:16px;margin:0 0 3px;font-weight:700}
+  .card p{font-size:13px;color:var(--text2);margin:0 0 12px;line-height:1.5}
+  .meta{font-size:11px;color:var(--dim);margin:0 0 12px;font-variant-numeric:tabular-nums}
+
+  .btn{
+    display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+    background:linear-gradient(180deg,var(--accent),var(--accent-dark));
+    color:#fff;text-decoration:none;font-weight:700;font-size:14.5px;
+    padding:13px 16px;border-radius:11px;border:0;
+    box-shadow:0 6px 18px rgba(255,90,43,.28);
+    transition:transform .12s ease, box-shadow .12s ease, filter .12s ease;
+  }
+  .btn:active{transform:translateY(1px);filter:brightness(.96)}
+  .btn.sec{
+    background:var(--tile);color:var(--text);border:1px solid var(--stroke);
+    box-shadow:none;font-weight:600
+  }
+  .btn small{font-weight:500;opacity:.85}
+
+  .nota{
+    background:rgba(255,193,59,.07);border:1px solid rgba(255,193,59,.28);
+    border-radius:12px;padding:13px 15px;margin:18px 0;font-size:12.5px;color:#F0DDB0;
+    line-height:1.55
+  }
+  .nota b{color:var(--warn)}
+  ol.pasos{margin:0;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.65}
+  ol.pasos li{margin-bottom:5px}
+  ol.pasos code{
+    background:#0A0C10;border:1px solid var(--stroke);border-radius:5px;
+    padding:1px 5px;font-size:12px;color:var(--text)
+  }
+  h3{font-size:13px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim);margin:26px 0 10px}
+  footer{text-align:center;color:var(--dim);font-size:11.5px;margin-top:30px;line-height:1.7}
+  footer a{color:var(--text2);text-decoration:none;border-bottom:1px solid var(--stroke)}
+  .punto{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:6px}
+  @media (min-width:560px){
+    .btn{width:auto;display:inline-flex;min-width:210px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="marca">
+      <div class="logo">JFR</div>
+      <div>
+        <h1>JFR Media</h1>
+        <span>SWITCHER MULTICAM</span>
+      </div>
+    </div>
+    <p class="lead">Las dos apps del switcher. Instala <b>JFR Switcher</b> en la tablet y <b>JFR Camera</b> en cada celular. Los dos equipos deben estar en la misma red WiFi.</p>
+  </header>
+
+  <section class="card">
+    <div class="icono">🎛️</div>
+    <div class="cuerpo">
+      <h2>JFR Switcher</h2>
+      <p>La app de la <b>tablet</b>: recibe hasta 6 cámaras, compone la escena, graba y transmite.</p>
+      <div class="meta" id="meta-switcher">Tablet · Android 8 o superior</div>
+      <a class="btn" id="btn-switcher"
+         href="https://github.com/jorgefrosas-dotcom/JFR-Switcher/releases/latest/download/JFR-Switcher.apk">
+        ⬇ Descargar Switcher
+      </a>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="icono">📷</div>
+    <div class="cuerpo">
+      <h2>JFR Camera</h2>
+      <p>La app de los <b>celulares</b>: manda la imagen a la tablet por WiFi. Se conecta escaneando el QR que muestra la tablet.</p>
+      <div class="meta" id="meta-camera">Celular · Android 8 o superior</div>
+      <a class="btn" id="btn-camera"
+         href="https://github.com/jorgefrosas-dotcom/JFR-Switcher/releases/latest/download/JFR-Camera.apk">
+        ⬇ Descargar Cámara
+      </a>
+    </div>
+  </section>
+
+  <div class="nota">
+    <b>Primera vez en cada equipo:</b> si ya tenías una versión instalada desde la otra computadora, Android la va a rechazar («firma distinta»). Desinstala la anterior una sola vez y vuelve a instalar; después las actualizaciones entran encima sin borrar nada.
+  </div>
+
+  <h3>Cómo instalar en el celular</h3>
+  <ol class="pasos">
+    <li>Descarga el APK tocando el botón.</li>
+    <li>Si sale el aviso, permite <b>«Instalar apps desconocidas»</b> para el navegador o el explorador de archivos.</li>
+    <li>Abre la app. Si ya estaba instalada, no hace falta desinstalar.</li>
+    <li>En la tablet: <code>Conectar cámaras</code> y escanea el QR desde el celular.</li>
+  </ol>
+
+  <footer>
+    <span class="punto"></span>Producciones D'Angel · JFR Media<br>
+    Código y versiones: <a href="https://github.com/jorgefrosas-dotcom/JFR-Switcher">github.com/jorgefrosas-dotcom/JFR-Switcher</a>
+  </footer>
+</div>
+
+<script>
+  // Muestra la versión y la fecha publicadas en el último Release de GitHub.
+  // Si falla (sin internet, sin releases), la página queda igual y los botones siguen funcionando.
+  (async () => {
+    try {
+      const r = await fetch('https://api.github.com/repos/jorgefrosas-dotcom/JFR-Switcher/releases/latest', {
+        headers: { 'Accept': 'application/vnd.github+json' }
+      });
+      if (!r.ok) return;
+      const rel = await r.json();
+      const fecha = rel.published_at
+        ? new Date(rel.published_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
+        : '';
+      const tam = (nombre) => {
+        const a = (rel.assets || []).find(x => x.name === nombre);
+        return a ? ' · ' + (a.size / 1048576).toFixed(1).replace('.', ',') + ' MB' : '';
+      };
+      const comun = (rel.tag_name ? rel.tag_name + ' · ' : '') + fecha;
+      document.getElementById('meta-switcher').textContent =
+        'Tablet · Android 8+' + tam('JFR-Switcher.apk') + (comun ? ' · ' + comun : '');
+      document.getElementById('meta-camera').textContent =
+        'Celular · Android 8+' + tam('JFR-Camera.apk') + (comun ? ' · ' + comun : '');
+    } catch (e) { /* silencio: la página funciona igual */ }
+  })();
+</script>
+</body>
+</html>

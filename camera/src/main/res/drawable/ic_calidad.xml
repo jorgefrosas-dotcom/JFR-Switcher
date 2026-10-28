@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Calidad: barras de señal crecientes. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,14H6.5V21H3Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M8.5,11H12V21H8.5Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14,8H17.5V21H14Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M19.5,4H23V21H19.5Z" />
+</vector>

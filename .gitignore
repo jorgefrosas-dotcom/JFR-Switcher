@@ -1,0 +1,22 @@
+# Android Studio / Gradle
+*.iml
+.gradle/
+.kotlin/
+/local.properties
+/.idea/
+/build/
+**/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+
+# APK y AAB generados (se publican en GitHub Releases, no en el código)
+*.apk
+*.aab
+
+# Llave de firma compartida entre las dos PC: NUNCA se sube a GitHub
+keystore/
+keystore.properties
+
+# Respaldos y capturas de trabajo
+_material/

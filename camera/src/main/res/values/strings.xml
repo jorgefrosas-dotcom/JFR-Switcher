@@ -1,0 +1,34 @@
+<resources>
+    <string name="app_name">JFR Camera</string>
+
+    <!-- Barra superior -->
+    <string name="hint_ip">IP de la tablet (o IP:puerto)</string>
+    <string name="conectar">Conectar</string>
+    <string name="desconectar">Desconectar</string>
+    <string name="falta_ip">Escribe la IP de la tablet</string>
+    <string name="qr">QR</string>
+    <string name="qr_prompt">Apunta al QR de la tablet</string>
+    <string name="qr_ajeno">Ese código no es de JFR Switcher</string>
+    <string name="qr_puerto">El QR trae el puerto %1$d: se usará ese</string>
+    <string name="estado_sin_conectar">Sin conectar</string>
+    <string name="estado_conectando">Conectando…</string>
+    <string name="estado_error">Error</string>
+    <string name="estado_camara">Cámara %1$d</string>
+
+    <!-- Barra inferior -->
+    <string name="voltear">Voltear</string>
+    <string name="voltear_desc">Voltear cámara</string>
+    <string name="linterna">Linterna</string>
+    <string name="calidad">Calidad</string>
+    <string name="calidad_con_preset">Calidad %1$s</string>
+    <string name="calidad_titulo">Calidad de video</string>
+    <string name="cancelar">Cancelar</string>
+    <string name="en_vivo">En vivo</string>
+    <string name="sin_senal">Sin señal</string>
+
+    <!-- Instrucciones y permisos -->
+    <string name="instrucciones">1. En la tablet abre JFR Switcher Multicam.\n2. Toca QR y apunta al código (o escribe la IP).\n3. Toca Conectar.</string>
+    <string name="nota_audio">Esta app solo envía video; el audio lo graba la tablet.</string>
+    <string name="sin_permiso_camara">Sin permiso de cámara</string>
+    <string name="permiso_camara_explicacion">JFR Camera necesita la cámara para transmitir video. Actívala en los ajustes del sistema.</string>
+</resources>

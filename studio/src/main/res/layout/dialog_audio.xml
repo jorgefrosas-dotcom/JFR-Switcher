@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="22dp">
+
+    <TextView
+        style="@style/Txt.Title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Audio"
+        android:textSize="18sp" />
+
+    <TextView
+        style="@style/Txt.Micro"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="FUENTE DE ENTRADA" />
+
+    <RadioGroup
+        android:id="@+id/rgEntradas"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:orientation="vertical" />
+
+    <TextView
+        style="@style/Txt.Micro"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="NIVEL DE ENTRADA (se mueve mientras grabas)" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <com.jfrmedia.switcher.studio.ui.AudioMeterView
+            android:id="@+id/meterAudio"
+            android:layout_width="0dp"
+            android:layout_height="26dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/txtGanancia"
+            style="@style/Txt.Micro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="0 dB"
+            android:textColor="@color/accent" />
+    </LinearLayout>
+
+    <SeekBar
+        android:id="@+id/sbGanancia"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:max="100"
+        android:progress="50" />
+
+    <TextView
+        style="@style/Txt.Micro"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="Izquierda: bajo · Centro: sin cambios · Derecha: +12 dB"
+        android:textColor="@color/text_dim" />
+
+    <CheckBox
+        android:id="@+id/chkSilencio"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:buttonTint="@color/accent"
+        android:text="Silenciar el audio"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp" />
+
+    <TextView
+        style="@style/Txt.Micro"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="Los micrófonos USB y Bluetooth aparecen arriba cuando están conectados. Para Bluetooth, vincula primero el micrófono en los ajustes de Android."
+        android:textColor="@color/text_dim" />
+
+</LinearLayout>

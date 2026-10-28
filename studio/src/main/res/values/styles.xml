@@ -1,0 +1,70 @@
+<resources>
+
+    <style name="Txt" />
+
+    <style name="Txt.Label">
+        <item name="android:textSize">@dimen/text_label</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.06</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="Txt.Micro" parent="Txt.Label">
+        <item name="android:textSize">@dimen/text_micro</item>
+        <item name="android:textColor">@color/text_dim</item>
+        <item name="android:letterSpacing">0.14</item>
+    </style>
+
+    <style name="Txt.Title">
+        <item name="android:textSize">@dimen/text_title</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="PillButton">
+        <item name="android:background">@drawable/bg_pill</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">@dimen/text_body</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:paddingTop">9dp</item>
+        <item name="android:paddingBottom">9dp</item>
+        <item name="android:drawablePadding">6dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="PillButton.Accent" parent="PillButton">
+        <item name="android:background">@drawable/bg_pill_accent</item>
+        <item name="android:textColor">#FF111318</item>
+    </style>
+
+    <style name="PillButton.Ghost" parent="PillButton">
+        <item name="android:background">@drawable/bg_pill_ghost</item>
+        <item name="android:textColor">@color/text_secondary</item>
+    </style>
+
+    <style name="Chip">
+        <item name="android:background">@drawable/bg_chip</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">@dimen/text_micro</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingBottom">4dp</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="DialogText">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">@dimen/text_body</item>
+        <item name="android:lineSpacingExtra">4dp</item>
+    </style>
+
+</resources>

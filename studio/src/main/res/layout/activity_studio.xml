@@ -1,0 +1,595 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_root">
+
+    <LinearLayout
+        android:id="@+id/contenido"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+    <!-- BARRA SUPERIOR -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/top_bar_height"
+        android:background="@color/bg_bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="6dp"
+        android:paddingEnd="10dp">
+
+        <ImageView
+            android:id="@+id/imgLogo"
+            android:layout_width="46dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="8dp"
+            android:contentDescription="JFR Media Lab"
+            android:scaleType="fitCenter"
+            android:src="@drawable/brand_logo" />
+
+        <TextView
+            android:id="@+id/btnSettings"
+            style="@style/PillButton.Ghost"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:text="Ajustes"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/btnPlantillas"
+            style="@style/PillButton.Ghost"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:text="Plantillas"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/btnTransiciones"
+            style="@style/PillButton.Ghost"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:text="Transiciones"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/btnOrientacion"
+            style="@style/PillButton.Ghost"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:text="16:9"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/btnAudio"
+            style="@style/PillButton.Ghost"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:paddingStart="10dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="6dp"
+            android:text="Audio"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/btnFacebook"
+            style="@style/PillButton.Ghost"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:paddingStart="9dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="9dp"
+            android:paddingBottom="6dp"
+            android:text="Facebook"
+            android:textSize="12sp" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp"
+            android:background="@color/stroke" />
+
+        <View
+            android:id="@+id/liveDot"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/bg_dot_gray" />
+
+        <TextView
+            android:id="@+id/txtLive"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="Sin grabación"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/txtTimer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:fontFamily="monospace"
+            android:text="00:00"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/btnRecord"
+            style="@style/PillButton.Accent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:drawableStart="@drawable/ic_record"
+            android:drawableTint="#FF111318"
+            android:text="Rec + Broadcast" />
+
+    </LinearLayout>
+
+    <!-- CUERPO -->
+    <LinearLayout
+        android:id="@+id/cuerpo"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <!-- Columna de controles: aquí se mueven los botones en modo vertical -->
+        <LinearLayout
+            android:id="@+id/slotIzquierdo"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:paddingStart="6dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="2dp"
+            android:paddingBottom="8dp"
+            android:visibility="gone" />
+
+        <!-- Fuentes -->
+        <LinearLayout
+            android:id="@+id/panelFuentes"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.45"
+            android:orientation="vertical"
+            android:paddingStart="8dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="4dp"
+            android:paddingBottom="4dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:paddingBottom="6dp">
+
+                <TextView
+                    style="@style/Txt.Micro"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="CÁMARAS" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/txtCamCount"
+                    style="@style/Txt.Micro"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 / 6" />
+            </LinearLayout>
+
+            <!-- Parrilla de fuentes: 3 por fila (6 en vertical). Primero las cámaras y luego los overlays. -->
+            <ScrollView
+                android:id="@+id/scrollFuentes"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:fillViewport="false"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/llGrid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </ScrollView>
+        </LinearLayout>
+
+        <!-- Programa -->
+        <LinearLayout
+            android:id="@+id/panelPrograma"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.55"
+            android:orientation="vertical"
+            android:paddingStart="4dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="4dp">
+
+            <LinearLayout
+                android:id="@+id/cabeceraPrograma"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:paddingBottom="6dp">
+
+                <TextView
+                    android:id="@+id/txtEtiquetaPrograma"
+                    style="@style/Txt.Micro"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="PROGRAMA" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/txtCanvasInfo"
+                    style="@style/Txt.Micro"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="16:9 · 1080p" />
+            </LinearLayout>
+
+            <com.jfrmedia.switcher.studio.canvas.AspectFrameLayout
+                android:id="@+id/canvasHost"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_canvas">
+
+                <com.jfrmedia.switcher.studio.canvas.CompositorView
+                    android:id="@+id/canvas"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_canvas_border" />
+
+                <!-- Botón flotante de foto dentro del visor -->
+                <ImageButton
+                    android:id="@+id/btnPhoto"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp"
+                    android:layout_gravity="bottom|end"
+                    android:layout_margin="12dp"
+                    android:background="@drawable/bg_pill"
+                    android:contentDescription="Tomar foto"
+                    android:padding="12dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_camera"
+                    android:tint="@color/text_primary" />
+
+                <LinearLayout
+                    android:id="@+id/canvasHint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_banner"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingStart="22dp"
+                    android:paddingTop="16dp"
+                    android:paddingEnd="22dp"
+                    android:paddingBottom="16dp"
+                    android:visibility="visible">
+
+                    <ImageView
+                        android:layout_width="wrap_content"
+                        android:layout_height="30dp"
+                        android:layout_marginBottom="10dp"
+                        android:adjustViewBounds="true"
+                        android:contentDescription="JFR Media Lab"
+                        android:src="@drawable/brand_logo" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="Sin cámaras todavía\nToca «Conectar cámaras» y usa la IP de esta tablet en la app JFR Camera"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </com.jfrmedia.switcher.studio.canvas.AspectFrameLayout>
+
+            <!-- Controles de capa (se pasan a la izquierda en modo vertical) -->
+            <LinearLayout
+                android:id="@+id/slotControles"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <HorizontalScrollView
+                    android:id="@+id/scrollControles"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/controlesCapa"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btnLayerA"
+                        style="@style/PillButton.Accent"
+                        android:layout_width="40dp"
+                        android:layout_height="wrap_content"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp"
+                        android:text="A" />
+
+                    <TextView
+                        android:id="@+id/btnLayerB"
+                        style="@style/PillButton"
+                        android:layout_width="40dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp"
+                        android:text="B" />
+
+                    <TextView
+                        android:id="@+id/btnPip"
+                        style="@style/PillButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:drawableStart="@drawable/ic_pip"
+                        android:drawableTint="@color/text_secondary"
+                        android:text="PiP" />
+
+                    <TextView
+                        android:id="@+id/btnSplit"
+                        style="@style/PillButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:text="2 cam" />
+
+                    <TextView
+                        android:id="@+id/btnZoomOut"
+                        style="@style/PillButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:gravity="center"
+                        android:minWidth="54dp"
+                        android:text="−"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/btnZoomIn"
+                        style="@style/PillButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:gravity="center"
+                        android:minWidth="54dp"
+                        android:text="+"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/btnTabletLens"
+                        style="@style/PillButton.Ghost"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:text="Tablet: apagada"
+                        android:textSize="12sp" />
+
+                    <com.jfrmedia.switcher.studio.ui.AudioMeterView
+                        android:id="@+id/audioMeter"
+                        android:layout_width="70dp"
+                        android:layout_height="22dp"
+                        android:layout_marginStart="8dp" />
+                </LinearLayout>
+                </HorizontalScrollView>
+                <LinearLayout
+                    android:id="@+id/cajaVideo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:id="@+id/filaVideo"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/btnLuz"
+                            style="@style/PillButton.Ghost"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:paddingTop="5dp"
+                            android:paddingStart="4dp"
+                            android:paddingEnd="4dp"
+                            android:singleLine="true"
+                            android:paddingBottom="6dp"
+                            android:text="Luz"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/btnContraste"
+                            style="@style/PillButton.Ghost"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="5dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:paddingTop="5dp"
+                            android:paddingStart="4dp"
+                            android:paddingEnd="4dp"
+                            android:singleLine="true"
+                            android:paddingBottom="6dp"
+                            android:text="Contraste"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/btnWb"
+                            style="@style/PillButton.Ghost"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="5dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:paddingTop="5dp"
+                            android:paddingStart="4dp"
+                            android:paddingEnd="4dp"
+                            android:singleLine="true"
+                            android:paddingBottom="6dp"
+                            android:text="WB"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/btnColor"
+                            style="@style/PillButton.Ghost"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="5dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:paddingTop="5dp"
+                            android:paddingStart="4dp"
+                            android:paddingEnd="4dp"
+                            android:singleLine="true"
+                            android:paddingBottom="6dp"
+                            android:text="Color"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/btnVineta"
+                            style="@style/PillButton.Ghost"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="5dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:paddingTop="5dp"
+                            android:paddingStart="4dp"
+                            android:paddingEnd="4dp"
+                            android:singleLine="true"
+                            android:paddingBottom="6dp"
+                            android:text="Viñeta"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/btnPoster"
+                            style="@style/PillButton.Ghost"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="5dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:paddingTop="5dp"
+                            android:paddingStart="4dp"
+                            android:paddingEnd="4dp"
+                            android:singleLine="true"
+                            android:paddingBottom="6dp"
+                            android:text="Poster."
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/panelAjuste"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/txtAjusteNombre"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="88dp"
+                            android:text="Luz"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+
+                        <SeekBar
+                            android:id="@+id/sbAjuste"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1" />
+
+                        <TextView
+                            android:id="@+id/txtAjusteValor"
+                            android:layout_width="52dp"
+                            android:layout_height="wrap_content"
+                            android:gravity="end"
+                            android:text="0"
+                            android:textColor="@color/accent"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/btnAjusteReset"
+                            style="@style/PillButton.Ghost"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:paddingStart="10dp"
+                            android:paddingTop="4dp"
+                            android:paddingEnd="10dp"
+                            android:paddingBottom="4dp"
+                            android:text="⟲"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+
+    </LinearLayout>
+</FrameLayout>

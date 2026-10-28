@@ -1,0 +1,4912 @@
+package com.jfrmedia.switcher.studio
+
+import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.provider.MediaStore
+import android.graphics.RectF
+import android.widget.EditText
+import android.widget.HorizontalScrollView
+import android.widget.PopupMenu
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
+import android.view.Gravity
+import android.view.Surface
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.Space
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.jfrmedia.switcher.core.media.VideoPreset
+import com.jfrmedia.switcher.core.media.VideoPresets
+import com.jfrmedia.switcher.core.net.Net
+import com.jfrmedia.switcher.core.proto.Msg
+import com.jfrmedia.switcher.core.proto.Proto
+import com.jfrmedia.switcher.core.util.L
+import com.jfrmedia.switcher.studio.canvas.AspectFrameLayout
+import com.jfrmedia.switcher.studio.canvas.CanvasItem
+import com.jfrmedia.switcher.studio.canvas.CamItem
+import com.jfrmedia.switcher.studio.canvas.CompositorView
+import com.jfrmedia.switcher.studio.canvas.ImageItem
+import com.jfrmedia.switcher.studio.canvas.MediaItem
+import com.jfrmedia.switcher.studio.databinding.ActivityStudioBinding
+import com.jfrmedia.switcher.studio.databinding.DialogPairingBinding
+import com.jfrmedia.switcher.studio.audio.AudioEq
+import com.jfrmedia.switcher.studio.audio.AudioMonitor
+import com.jfrmedia.switcher.studio.audio.AudioRuta
+import com.jfrmedia.switcher.studio.databinding.DialogAudioBinding
+import com.jfrmedia.switcher.studio.databinding.DialogSettingsBinding
+import com.jfrmedia.switcher.studio.databinding.DialogTransicionesBinding
+import com.jfrmedia.switcher.studio.rec.Recorder
+import com.jfrmedia.switcher.studio.rtc.CamState
+import com.jfrmedia.switcher.studio.rtc.CameraHub
+import com.jfrmedia.switcher.studio.rtc.CameraSession
+import com.jfrmedia.switcher.studio.rtc.LocalCam
+import com.jfrmedia.switcher.studio.rtc.RtcCore
+import com.jfrmedia.switcher.studio.rtc.StudioServer
+import com.jfrmedia.switcher.studio.ui.OverlayTileView
+import com.jfrmedia.switcher.studio.ui.SourceTileView
+import org.webrtc.VideoTrack
+import java.io.File
+import java.util.Locale
+import com.jfrmedia.switcher.studio.plantillas.AjustesPlantilla
+import com.jfrmedia.switcher.studio.plantillas.TransicionPlantilla
+import com.jfrmedia.switcher.studio.plantillas.MedioPlantilla
+import com.jfrmedia.switcher.studio.plantillas.CamPlantilla
+import com.jfrmedia.switcher.studio.plantillas.ImagenPlantilla
+import com.jfrmedia.switcher.studio.plantillas.Plantilla
+import com.jfrmedia.switcher.studio.plantillas.Plantillas
+
+/**
+ * Pantalla del director: 6 fuentes, lienzo de programa con 2 capas + imágenes,
+ * grabación local en MP4 y emparejamiento de celulares por WiFi.
+ */
+class StudioActivity : AppCompatActivity(), CompositorView.Listener {
+
+    private lateinit var b: ActivityStudioBinding
+    private val tiles = ArrayList<SourceTileView>(6)
+    private lateinit var recorder: Recorder
+
+    private val hub = CameraHub()
+    private val server = StudioServer(hub)
+    private val handler = Handler(Looper.getMainLooper())
+
+    private val localCam = LocalCam()
+
+    private var camA: Int? = null
+    private var camB: Int? = null
+    private var activeLayer = 'A'
+
+    /** El estado real lo manda el emisor: el botón no puede decir «apagado» si está enviando. */
+    private val transmitiendo: Boolean
+        get() = emisor.transmitiendo
+
+    /** Modo PiP: con dos capas. Apagado, el visor muestra una sola cámara. */
+    private var pipActivo = false
+
+    /** Modo multicámara: pantalla partida 50/50 (izq/der o arriba/abajo según el lienzo). */
+    private var splitActivo = false
+    private var pipCorner = 3
+
+    private var preset: VideoPreset = VideoPresets.default
+
+    /** Si está activa, la calidad sube a 720p con pocas cámaras y baja con muchas. */
+    private var calidadAuto = true
+
+    /** Directo creado por la app, para cerrarlo al detener. */
+    private var directoActivoId: String? = null
+
+    /** false = plantilla horizontal (16:9), true = vertical (9:16). */
+    private var vertical = false
+
+    /** true = grabar en 1080p/1080x1920, false = 720p/720x1280. */
+    private var grabarAlta = false
+    private var recAudio = true
+
+    /** Modo de la sesión: "grabar", "transmitir" o "ambos". */
+    private var modoSesion = "ambos"
+
+    /** Lado corto de grabación elegido: 360, 480, 720, 1080, 1440 (2K) o 2160 (4K). */
+    private var recAltoElegido = 720
+
+    /** Bitrate de grabación en kbps. */
+    private var recBitrateKbps = 12000
+
+    /** Resolución objetivo de la transmisión (alto en px). */
+    private var streamAlto = 720
+    private var streamBitrateKbps = 4000
+    private var bitrateAuto = true
+
+    /**
+     * Tamaño real de grabación según la calidad elegida y la orientación.
+     *
+     * El número elegido es el **lado corto**, igual en las dos orientaciones:
+     * `720` → 1280×720 (horizontal) / 720×1280 (vertical); `1080` → 1920×1080 / 1080×1920.
+     * Antes en vertical se tomaba como *alto del lienzo* y salía 404×720: un tercio del tamaño.
+     * El compositor dibuja la escena entera en ese tamaño, así que la conversión
+     * (incluido el reescalado si la fuente es menor) es automática.
+     */
+    private fun tamanoGrabacion(ladoCorto: Int): Pair<Int, Int> {
+        val corto = ladoCorto.coerceIn(360, 2160)
+        val largo = corto * 16 / 9
+        return if (vertical) {
+            (corto / 2 * 2) to (largo / 2 * 2)
+        } else {
+            (largo / 2 * 2) to (corto / 2 * 2)
+        }
+    }
+
+    private val recAncho: Int get() = tamanoGrabacion(recAltoElegido).first
+    private val recAlto: Int get() = tamanoGrabacion(recAltoElegido).second
+
+    private val recBitrate: Int
+        get() = if (bitrateAuto) bitrateGrabacionAuto(recAltoElegido) else recBitrateKbps
+
+    /**
+     * Bitrate de grabación recomendado (kbps) para H.264 según el lado corto del cuadro.
+     * Es más generoso que un vídeo casual porque aquí hay movimiento de cámara y texto nítido.
+     */
+    private fun bitrateGrabacionAuto(ladoCorto: Int): Int = when {
+        ladoCorto >= 2160 -> 45000
+        ladoCorto >= 1440 -> 22000
+        ladoCorto >= 1080 -> 12000
+        ladoCorto >= 720 -> 7000
+        ladoCorto >= 480 -> 4000
+        else -> 2500
+    }
+
+    /**
+     * Bitrate de emisión recomendado (kbps): más bajo que el de grabación porque tiene que
+     * caber en la subida del WiFi y en lo que acepta Facebook.
+     */
+    private fun bitrateEmisionAuto(ladoCorto: Int): Int = when {
+        ladoCorto >= 1080 -> 8000
+        ladoCorto >= 720 -> 4500
+        else -> 2500
+    }
+
+    /** Resoluciones que el equipo puede codificar, de mayor a menor para el respaldo. */
+    private fun resolucionesGrabacion(): List<Int> =
+        listOf(2160, 1440, 1080, 720, 480, 360).filter { it <= recAltoElegido }
+
+    private var recStartMs = 0L
+    /** Tamaño real de la grabación en curso (si el equipo bajó la resolución pedida). */
+    private var anchoGrabando = 0
+    private var altoGrabando = 0
+    private var lastVideoUri: Uri? = null
+    private var lastVideoFile: File? = null
+
+    private val audioPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        // El permiso se pide desde los dos caminos: grabación local y sesión con directo.
+        if (modoSesion == "transmitir" || modoSesion == "ambos") {
+            if (granted) {
+                iniciarTransmision()
+            } else {
+                toast("Sin micrófono no se puede abrir el directo")
+            }
+        } else {
+            startRecording(granted)
+        }
+    }
+
+    /** Aviso de la notificación: si no se concede, la sesión sigue, solo no se ve el aviso. */
+    private val permisoNotificaciones = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
+    /** La notificación del servicio pide cerrar la sesión: se hace como si el botón. */
+    private val receptorSesion = object : android.content.BroadcastReceiver() {
+        override fun onReceive(contexte: android.content.Context?, intent: android.content.Intent?) {
+            val accion = com.jfrmedia.switcher.studio.stream.EmisionService.ACCION_SESION_DETENIDA
+            if (intent?.action != accion) return
+            runOnUiThread {
+                if (recorder.isRecording) stopRecording()
+                if (transmitiendo) cortarTransmision()
+            }
+        }
+    }
+
+    private val pickImage = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) addOverlay(uri)
+    }
+
+    /** Selector de medios del grupo MEDIOS (fotos y videos). */
+    private val pickMedia = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) agregarMedio(uri)
+    }
+
+    private val ticker = object : Runnable {
+        override fun run() {
+            // Cuenta tanto la grabación local como el directo: en «Solo transmitir» el
+            // cronómetro se quedaba en 00:00 aunque el envío estuviera en el aire.
+            if (!recorder.isRecording && !transmitiendo) return
+            val s = (SystemClock.elapsedRealtime() - recStartMs) / 1000
+            b.txtTimer.text = String.format(Locale.US, "%02d:%02d", s / 60, s % 60)
+            handler.postDelayed(this, 500)
+        }
+    }
+
+    // ------------------------------------------------------------------ uso del equipo
+
+    private var cpuAnteriorMs = -1L
+    private var cpuAnteriorNs = 0L
+    private var redAnteriorBytes = -1L
+    private var redAnteriorNs = 0L
+
+    /**
+     * Consumo en la etiqueta del visor:
+     * `PROGRAMA · CPU 34% · RAM 62% · 11.8 Mbps · 44°`
+     *
+     * CPU es la de **esta app** sumando sus hilos (puede pasar de 100 %: varios núcleos). RAM es la
+     * del sistema. La red es lo que **sube esta app**, o sea lo que cuesta el directo. La temperatura
+     * se lee del sensor térmico; si Android no lo expone, se usa la de la batería.
+     */
+    private val medidorUso = object : Runnable {
+        override fun run() {
+            val ahoraNs = SystemClock.elapsedRealtimeNanos()
+            val cpuMs = android.os.Process.getElapsedCpuTime()
+            var cpu = 0L
+            if (cpuAnteriorMs >= 0 && ahoraNs > cpuAnteriorNs) {
+                cpu = (cpuMs - cpuAnteriorMs) * 100_000_000L / (ahoraNs - cpuAnteriorNs)
+            }
+            cpuAnteriorMs = cpuMs
+            cpuAnteriorNs = ahoraNs
+
+            val ramPct = runCatching {
+                val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                val info = android.app.ActivityManager.MemoryInfo()
+                am.getMemoryInfo(info)
+                if (info.totalMem > 0) (info.totalMem - info.availMem) * 100 / info.totalMem else 0L
+            }.getOrDefault(0L)
+
+            val bytes = android.net.TrafficStats.getUidTxBytes(android.os.Process.myUid())
+            var mbps = 0.0
+            if (redAnteriorBytes >= 0 && ahoraNs > redAnteriorNs && bytes >= redAnteriorBytes) {
+                val segundos = (ahoraNs - redAnteriorNs) / 1_000_000_000.0
+                if (segundos > 0) mbps = (bytes - redAnteriorBytes) * 8.0 / segundos / 1_000_000.0
+            }
+            redAnteriorBytes = bytes
+            redAnteriorNs = ahoraNs
+
+            val temp = temperatura()
+            val tempTexto = if (temp != null) "$temp°" else "—°"
+            cpuActual = cpu
+            ramActual = ramPct
+            mbpsActual = mbps
+            tempActual = temp
+            actualizarEstadoEquipo()
+            b.txtEtiquetaPrograma.text = if (vertical) {
+                // En vertical la cabecera es estrecha: solo el nombre del visor (la
+                // resolución va al otro extremo) para que quepa en una línea.
+                if (redFloja) "⚠ PROGRAMA" else "PROGRAMA"
+            } else {
+                val aviso = if (redFloja) "⚠ " else ""
+                aviso + String.format(
+                    Locale.US, "PROGRAMA · CPU %d%% · RAM %d%% · %.1f Mbps · %s",
+                    cpu, ramPct, mbps, tempTexto
+                )
+            }
+            if (registro != null && ahoraNs - ultimoRegistroNs > 10_000_000_000L) {
+                ultimoRegistroNs = ahoraNs
+                anotar(String.format(Locale.US, "cpu %d%% · ram %d%% · %.1f Mbps · %s", cpu, ramPct, mbps, tempTexto))
+            }
+            handler.postDelayed(this, 2000)
+        }
+    }
+
+    /**
+     * Temperatura del procesador en grados enteros.
+     *
+     * Android no tiene API: se lee de `/sys/class/thermal`, buscando la zona del SoC. Si el sistema
+     * lo bloquea, se devuelve la de la batería, que sube junto con la del equipo.
+     */
+    private fun temperatura(): Int? {
+        val zonas = java.io.File("/sys/class/thermal")
+            .listFiles { f -> f.name.startsWith("thermal_zone") }
+            .orEmpty()
+        for (zona in zonas) {
+            val tipo = runCatching { java.io.File(zona, "type").readText().trim().lowercase() }
+                .getOrDefault("")
+            if (tipo.contains("cpu") || tipo.contains("soc") || tipo.contains("ap") ||
+                tipo.contains("tscpu")
+            ) {
+                val valor = runCatching { java.io.File(zona, "temp").readText().trim().toFloat() }
+                    .getOrNull() ?: continue
+                val grados = if (valor > 1000f) valor / 1000f else valor
+                if (grados in 1f..120f) return grados.toInt()
+            }
+        }
+        val bateria = runCatching {
+            val i = registerReceiver(
+                null,
+                android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
+            )
+            i?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, -1) ?: -1
+        }.getOrDefault(-1)
+        return if (bateria > 0) bateria / 10 else null
+    }
+
+    // ------------------------------------------------------------------ registro de sesión
+
+    private var registro: java.io.Writer? = null
+    private var ultimoRegistroNs = 0L
+
+    /** Abre un archivo de registro para esta sesión (transmisión o grabación). */
+    private fun abrirRegistro(modo: String) {
+        if (registro != null) return
+        runCatching {
+            val dir = java.io.File(getExternalFilesDir(null) ?: filesDir, "Registros")
+            if (!dir.exists()) dir.mkdirs()
+            val nombre = "JFR_" +
+                java.text.SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(java.util.Date()) + ".txt"
+            registro = java.io.File(dir, nombre).bufferedWriter()
+            anotar("=== inicio de $modo ===")
+            anotar("equipo ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE}")
+            anotar(
+                "grabación ${recAncho}x$recAlto @ $recBitrate kbps · envío ${streamAlto}p @ " +
+                    "${if (bitrateAuto) bitrateEmisionAuto(streamAlto) else streamBitrateKbps} kbps" +
+                    if (bitrateAuto) " (automático)" else ""
+            )
+        }.onFailure { L.w("registro", "no se pudo abrir: ${it.message}") }
+    }
+
+    private fun anotar(texto: String) {
+        runCatching {
+            val hora = java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(java.util.Date())
+            registro?.write("$hora $texto\n")
+            registro?.flush()
+        }
+    }
+
+    private fun cerrarRegistro() {
+        runCatching {
+            anotar("=== fin de la sesión ===")
+            registro?.close()
+        }
+        registro = null
+    }
+
+    // ------------------------------------------------------------------ ciclo de vida
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        RtcCore.init(this)
+        b = ActivityStudioBinding.inflate(layoutInflater)
+        setContentView(b.root)
+
+        recorder = Recorder(this)
+        recorder.onError = { msg -> toast(msg) }
+        b.canvas.listener = this
+
+        buildSourcesGrid()
+
+        vertical = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_VERTICAL, false)
+        // Ajustes guardados de sesión (modo, resoluciones, bitrates).
+        runCatching {
+            val p = getSharedPreferences(PREFS, MODE_PRIVATE)
+            modoSesion = p.getString(CLAVE_MODO, modoSesion) ?: modoSesion
+            recAltoElegido = p.getInt(CLAVE_REC_ALTO, recAltoElegido)
+            recBitrateKbps = p.getInt(CLAVE_REC_KBPS, recBitrateKbps)
+            streamAlto = p.getInt(CLAVE_STREAM_ALTO, streamAlto)
+            streamBitrateKbps = p.getInt(CLAVE_STREAM_KBPS, streamBitrateKbps)
+            bitrateAuto = p.getBoolean(CLAVE_AUTO_KBPS, bitrateAuto)
+            recAudio = p.getBoolean(CLAVE_REC_AUDIO, recAudio)
+            grabarAlta = recAltoElegido >= 1080
+            val transicionGuardada = p.getString(CLAVE_TRANSICION, null)
+            if (transicionGuardada != null) {
+                CompositorView.Transicion.values()
+                    .firstOrNull { it.id == transicionGuardada }
+                    ?.let { b.canvas.transicion = it }
+            }
+            when (p.getString(CLAVE_PRESET, VideoPresets.MEDIA.label)) {
+                VideoPresets.BAJA.label -> preset = VideoPresets.BAJA
+                VideoPresets.ALTA.label -> preset = VideoPresets.ALTA
+                // "auto" deja que la app decida según cuántas cámaras haya
+                else -> preset = VideoPresets.MEDIA
+            }
+        }
+        // Ajustes de audio guardados: ganancia, silencio y entrada elegida.
+        runCatching {
+            val p = getSharedPreferences(PREFS, MODE_PRIVATE)
+            val dbGuardado = p.getFloat(CLAVE_AUDIO_DB, 0f)
+            recorder.ganancia = Math.pow(10.0, (dbGuardado / 20.0)).toFloat()
+            recorder.silencio = p.getBoolean(CLAVE_AUDIO_MUDO, false)
+            // Ecualizador y monitoreo: el EQ de entrada entra al grabador.
+        recorder.eqEntrada = eqEntrada
+        recorder.monitor = monitorAudio
+        cargarAudioAvanzado()
+        aplicarAudioGuardado()
+        }
+        aplicarOrientacion()
+
+        b.audioMeter.levelProvider = { if (recorder.isRecording) recorder.lastLevel else 0f }
+
+        applyWindowInsets()
+        wireHub()
+        wireClicks()
+        montarControlesAudio()
+        if (esPantallaCelular()) aplicarModoCelular()
+        huecoVideo = b.cajaVideo.parent as? ViewGroup
+        indiceVideo = huecoVideo?.indexOfChild(b.cajaVideo) ?: 0
+
+        if (!server.start()) {
+            toast("No se pudo abrir el puerto de emparejamiento")
+        } else if (server.port != Proto.DEFAULT_PORT) {
+            // El QR lleva el puerto real, así que las cámaras que lo escaneen no fallan.
+            toast("El 8787 estaba ocupado: esta tablet usa el puerto ${server.port} (va en el QR)")
+        }
+        refreshUi()
+        updatePairingLabels()
+        handler.post(medidorUso)
+        escucharEmisor()
+        // Si la pantalla se recreó con un envío en curso, se reengancha el compositor a la
+        // superficie del emisor en vez de mostrar «Transmitir» con el directo en el aire.
+        if (emisor.transmitiendo) {
+            emisor.superficieParaCompositor()?.let { superficie ->
+                b.canvas.beginRecordingOutput(
+                    superficie,
+                    emisor.anchoVideo,
+                    emisor.altoVideo,
+                    System.nanoTime()
+                )
+                L.i("stream", "compositor reenganchado a la transmisión en curso")
+            }
+            actualizarBotonSesion()
+            actualizarCandadoOrientacion()
+        }
+        // La notificación del servicio puede cerrar la sesión sin abrir la app.
+        runCatching {
+            ContextCompat.registerReceiver(
+                this,
+                receptorSesion,
+                android.content.IntentFilter(
+                    com.jfrmedia.switcher.studio.stream.EmisionService.ACCION_SESION_DETENIDA
+                ),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        }
+        L.i("studio", "listo en ${Net.primaryIp()}:${server.port}")
+    }
+
+    /** Resultado del login de Facebook (SDK). */
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        if (fbCallback.onActivityResult(requestCode, resultCode, data)) return
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        runCatching { unregisterReceiver(receptorSesion) }
+        runCatching { localCam.detener() }
+        runCatching { if (recorder.isRecording) { b.canvas.endRecordingOutput(); recorder.stop() } }
+        runCatching { server.stop() }
+        runCatching { hub.shutdown() }
+        tiles.forEach { runCatching { it.release() } }
+        super.onDestroy()
+    }
+
+    /**
+     * Android 15+ dibuja de borde a borde: sin esto la app queda debajo de la barra de
+     * estado y de los botones de navegación (se veían encima de la barra superior).
+     */
+    private fun applyWindowInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(b.root) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(b.root)
+    }
+
+    @Deprecated("Compatibilidad con versiones anteriores")
+    override fun onBackPressed() {
+        if (recorder.isRecording) {
+            toast("Detén la grabación antes de salir")
+            return
+        }
+        // Con el directo en el aire, cerrar la pantalla se llevaría las cámaras: para salir
+        // está Inicio (la sesión sigue gracias al servicio en primer plano).
+        if (transmitiendo) {
+            toast("Detén la transmisión antes de salir (o usa Inicio para seguir en el aire)")
+            return
+        }
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
+    }
+
+    // ------------------------------------------------------------------ conexión de cámaras
+
+    private fun wireHub() {
+        hub.onTrackReady = { session, track ->
+            runOnUiThread { onTrackReady(session, track) }
+        }
+        hub.onTrackGone = { session ->
+            runOnUiThread { onTrackGone(session) }
+        }
+        hub.onRotacion = { session, grados ->
+            runOnUiThread {
+                // El decodificador ya entrega los píxeles orientados: solo se avisa a la
+                // tarjeta para que no vuelva a girar el cuadro.
+                tiles.getOrNull(session.slot)?.fijarRotacion(grados)
+            }
+        }
+        hub.onCountChanged = {
+            runOnUiThread {
+                refreshUi()
+                if (calidadAuto) applyQualityToCameras()
+            }
+        }
+        hub.addListener { runOnUiThread { refreshUi() } }
+    }
+
+    private fun onTrackReady(session: CameraSession, track: VideoTrack) {
+        val tile = tiles.getOrNull(session.slot) ?: return
+        tile.bind(session, track)
+        if (camA == null && camB == null) {
+            assignCamera(session.slot, 'A')
+        } else if (camA == session.slot || camB == session.slot) {
+            b.canvas.attachTrack(session.slot, track)
+        }
+        refreshUi()
+    }
+
+    private fun onTrackGone(session: CameraSession) {
+        tiles.getOrNull(session.slot)?.clearSession()
+        if (camA == session.slot) camA = null
+        if (camB == session.slot) camB = null
+        b.canvas.scene.items.filterIsInstance<CamItem>()
+            .filter { it.slot == session.slot }
+            .forEach { b.canvas.scene.remove(it) }
+        b.canvas.requestRender()
+        refreshUi()
+    }
+
+    private fun refreshUi() {
+        tiles.forEachIndexed { index, tile ->
+            val session = hub.session(index)
+            if (index == LocalCam.SLOT) {
+                tile.setEstadoLocal(localCam.encendida, nombreCamaraTablet())
+            } else if (session == null) {
+                tile.clearSession()
+            } else {
+                tile.refreshInfo(session)
+            }
+            tile.setLayerMark(
+                when (index) {
+                    camA -> 'A'
+                    camB -> 'B'
+                    else -> null
+                }
+            )
+        }
+        actualizarProgramaCamaras()
+        b.txtCamCount.text = "${hub.count()} / 6"
+        b.canvasHint.visibility =
+            if (hub.count() == 0 && b.canvas.scene.items.isEmpty() && !localCam.encendida) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+        updatePairingLabels()
+    }
+
+    /**
+     * Avisa a cada celular si su cámara está en el visor. La app del celular muestra
+     * «AL AIRE» o «FUERA DE AIRE», para que el operador sepa si está en pantalla.
+     */
+    private fun actualizarProgramaCamaras() {
+        val scene = b.canvas.scene
+        // Si hay un video o foto de MEDIOS a pantalla completa, el programa no muestra cámaras.
+        val tapado = scene.items.any { it is MediaItem && it.visible }
+        hub.all().forEach { session ->
+            val item = scene.camAt(session.slot)
+            session.enviarPrograma(!tapado && item != null && item.visible)
+        }
+    }
+
+    // ------------------------------------------------------------------ asignación de capas
+
+    private fun onTileTap(slot: Int) {
+        if (slot == LocalCam.SLOT) {
+            if (vertical) {
+                toast("La cámara de la tablet solo está disponible en modo horizontal")
+                return
+            }
+            if (!localCam.encendida) {
+                encenderCamaraTablet()
+                return
+            }
+            if (!pipActivo && !splitActivo) mostrarEnPrograma(slot) else assignCamera(slot, activeLayer)
+            return
+        }
+        if (hub.session(slot) == null) {
+            showPairing()
+            return
+        }
+        if (!pipActivo && !splitActivo) mostrarEnPrograma(slot) else assignCamera(slot, activeLayer)
+    }
+
+    // ------------------------------------------------------------------ cámara de la tablet
+
+    private val permisoCamara = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { concedido ->
+        if (concedido) encenderCamaraTablet()
+        else toast("Sin permiso de cámara no se puede usar la cámara de la tablet")
+    }
+
+    /** Enciende o apaga la cámara de la tablet (menú). Recuerda la preferencia. */
+    private fun alternarCamaraTablet() {
+        if (localCam.encendida) {
+            apagarCamaraTablet()
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(CLAVE_TABLET_CAM, false).apply()
+            toast("Cámara de la tablet apagada")
+        } else {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(CLAVE_TABLET_CAM, true).apply()
+            encenderCamaraTablet()
+        }
+    }
+
+    /**
+     * Botón de la tablet: apagada → frontal → trasera → apagada.
+     * Sustituye a las opciones del menú.
+     */
+    private fun ciclarLenteTablet() {
+        if (vertical) {
+            toast("La cámara de la tablet solo está disponible en modo horizontal")
+            return
+        }
+        when {
+            !localCam.encendida -> {
+                prefsTabCam(true, true)
+                encenderCamaraTablet()
+            }
+
+            localCam.frontal -> {
+                prefsTabCam(true, false)
+                if (localCam.cambiarCamara(false)) {
+                    localCam.track?.let { tiles.getOrNull(LocalCam.SLOT)?.bindLocal(it, nombreCamaraTablet()) }
+                }
+            }
+
+            else -> {
+                apagarCamaraTablet()
+                prefsTabCam(false, false)
+            }
+        }
+        actualizarBotonTablet()
+    }
+
+    private fun prefsTabCam(encendida: Boolean, frontal: Boolean) {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putBoolean(CLAVE_TABLET_CAM, encendida)
+            .putBoolean(CLAVE_TABLET_FRONTAL, frontal)
+            .apply()
+    }
+
+    /** Pinta el botón con el estado actual de la cámara de la tablet. */
+    private fun actualizarBotonTablet() {
+        b.btnTabletLens.text = when {
+            !localCam.encendida -> "Tablet: apagada"
+            localCam.frontal -> "Tablet: frontal"
+            else -> "Tablet: trasera"
+        }
+        b.btnTabletLens.alpha = if (localCam.encendida) 1f else 0.6f
+    }
+
+    /** Cambia entre la cámara frontal y la trasera de la tablet (menú). */
+    private fun cambiarLenteTablet() {
+        val usarFrontal = !localCam.frontal
+        if (localCam.cambiarCamara(usarFrontal)) {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(CLAVE_TABLET_FRONTAL, usarFrontal).apply()
+            localCam.track?.let { tiles.getOrNull(LocalCam.SLOT)?.bindLocal(it, nombreCamaraTablet()) }
+            refreshUi()
+            toast(if (usarFrontal) "Usando la cámara frontal" else "Usando la cámara trasera")
+        } else {
+            toast("Esta tablet no tiene esa cámara")
+        }
+    }
+
+    private fun nombreCamaraTablet(): String =
+        "Tablet · " + (if (localCam.frontal) "frontal" else "trasera")
+
+    /** Enciende la cámara local (solo horizontal) y la deja lista para A o B. */
+    private fun encenderCamaraTablet() {
+        if (vertical) return
+        val permiso = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+        if (permiso != PackageManager.PERMISSION_GRANTED) {
+            permisoCamara.launch(Manifest.permission.CAMERA)
+            return
+        }
+        if (localCam.encendida) return
+        val frontal = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_TABLET_FRONTAL, true)
+        val pista = localCam.arrancar(this, frontal)
+        if (pista == null) {
+            toast("Este dispositivo no tiene cámara disponible")
+            return
+        }
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(CLAVE_TABLET_CAM, true).apply()
+        b.canvas.attachTrack(LocalCam.SLOT, pista)
+        tiles.getOrNull(LocalCam.SLOT)?.bindLocal(pista, nombreCamaraTablet())
+        refreshUi()
+    }
+
+    /** Apaga la cámara local y la saca del lienzo. */
+    private fun apagarCamaraTablet() {
+        val pista = localCam.track
+        if (pista != null) b.canvas.detachTrack(LocalCam.SLOT, pista)
+        localCam.detener()
+        val scene = b.canvas.scene
+        scene.camAt(LocalCam.SLOT)?.let { scene.remove(it) }
+        if (camA == LocalCam.SLOT) camA = null
+        if (camB == LocalCam.SLOT) camB = null
+        tiles.getOrNull(LocalCam.SLOT)?.setEstadoLocal(false)
+        // Si la pantalla partida usaba la cámara de la tablet (no existe en vertical),
+        // se avisa que falta la segunda fuente.
+        if (splitActivo) {
+            aplicarLayoutSplit()
+            if (camA == null || camB == null) {
+                toast("Multicámara: conecta otra cámara para la segunda mitad")
+            }
+        }
+        b.canvas.requestRender()
+        refreshUi()
+    }
+
+    private fun assignCamera(slot: Int, layer: Char) {
+        val scene = b.canvas.scene
+        L.i(
+            "studio",
+            "asignar slot=$slot capa=$layer camA=$camA camB=$camB items=${scene.cams().size} pip=$pipActivo split=$splitActivo"
+        )
+        if (splitActivo) {
+            // En pantalla partida cada capa ocupa su mitad.
+            if (layer == 'A') camA = slot else camB = slot
+            aplicarLayoutSplit()
+            styleLayerButtons()
+            updateTip()
+            refreshUi()
+            onSelectionChanged(b.canvas.scene.selected())
+            return
+        }
+        val other = if (layer == 'A') camB else camA
+        if (other == slot) {
+            // Ya estaba en la otra capa: solo cambia de rol
+            if (layer == 'A') camB = null else camA = null
+        }
+
+        val existing = scene.camAt(slot)
+        if (existing == null) {
+            if (scene.cams().size >= scene.maxCams) {
+                // Si el lienzo está lleno, la capa pedida reemplaza a la que ocupa ese rol.
+                val viejo = if (layer == 'A') camA else camB
+                if (viejo != null) {
+                    scene.camAt(viejo)?.let { item ->
+                        scene.remove(item)
+                        if (item.slot == LocalCam.SLOT) {
+                            b.canvas.detachTrack(item.slot, localCam.track)
+                        } else {
+                            b.canvas.detachTrack(item.slot, hub.session(item.slot)?.videoTrack)
+                        }
+                    }
+                    if (layer == 'A') camA = null else camB = null
+                } else {
+                    toast("El lienzo admite 2 cámaras a la vez")
+                    return
+                }
+            }
+            val item = scene.addCam(slot) ?: return
+            item.label = when {
+                slot == LocalCam.SLOT -> "Tablet"
+                else -> hub.session(slot)?.name ?: "Cámara ${slot + 1}"
+            }
+            if (layer == 'A') {
+                item.rect.set(0f, 0f, 1f, 1f)
+                scene.sendToBack(item)
+            } else {
+                scene.placePip(item, pipCorner)
+                scene.bringToFront(item)
+            }
+            if (slot == LocalCam.SLOT) {
+                localCam.track?.let { b.canvas.attachTrack(slot, it) }
+            } else {
+                hub.session(slot)?.videoTrack?.let { b.canvas.attachTrack(slot, it) }
+            }
+        } else {
+            if (layer == 'A') {
+                existing.rect.set(0f, 0f, 1f, 1f)
+                scene.sendToBack(existing)
+            } else {
+                scene.placePip(existing, pipCorner)
+                scene.bringToFront(existing)
+            }
+            scene.selectedId = existing.id
+        }
+
+        if (layer == 'A') camA = slot else camB = slot
+        b.canvas.requestRender()
+        refreshUi()
+        onSelectionChanged(scene.selected())
+    }
+
+    private fun switchActiveLayer(layer: Char) {
+        if (!pipActivo) {
+            toast("Activa PiP para usar dos cámaras a la vez")
+            return
+        }
+        activeLayer = layer
+        styleLayerButtons()
+        toast(if (layer == 'A') "Toca una cámara para el fondo (A)" else "Toca una cámara para la ventana (B)")
+    }
+
+
+    /**
+     * Ajustes por orientación: en vertical no tiene sentido el botón de la cámara de la
+     * tablet (no está disponible) y la barra es más angosta, así que se acortan etiquetas.
+     */
+    private fun ajustarBarraPorOrientacion() {
+        b.btnTabletLens.visibility = if (vertical) View.GONE else View.VISIBLE
+        b.btnPlantillas.text = if (vertical) "Plant." else "Plantillas"
+        b.btnTransiciones.text = if (vertical) "Trans." else "Transiciones"
+    }
+
+    private fun styleLayerButtons() {
+        // A y B solo tienen sentido con dos cámaras en pantalla (PiP o pantalla partida).
+        val dosCapas = pipActivo || splitActivo
+        val a = if (!dosCapas) 0.35f else if (activeLayer == 'A') 1f else 0.75f
+        val bb = if (!dosCapas) 0.35f else if (activeLayer == 'B') 1f else 0.75f
+        b.btnLayerA.alpha = a
+        b.btnLayerB.alpha = bb
+        b.btnLayerA.isEnabled = dosCapas
+        b.btnLayerB.isEnabled = dosCapas
+        b.btnLayerA.setBackgroundResource(
+            if (dosCapas && activeLayer == 'A') R.drawable.bg_pill_accent else R.drawable.bg_pill
+        )
+        b.btnLayerA.setTextColor(
+            ContextCompat.getColor(
+                this,
+                if (dosCapas && activeLayer == 'A') R.color.bg_root else R.color.text_primary
+            )
+        )
+        b.btnLayerB.setBackgroundResource(
+            if (dosCapas && activeLayer == 'B') R.drawable.bg_pill_accent else R.drawable.bg_pill
+        )
+        b.btnLayerB.setTextColor(
+            ContextCompat.getColor(
+                this,
+                if (dosCapas && activeLayer == 'B') R.color.bg_root else R.color.text_primary
+            )
+        )
+        // Marcar los botones de modo cuando están activos.
+        b.btnPip.setBackgroundResource(if (pipActivo) R.drawable.bg_pill_accent else R.drawable.bg_pill)
+        b.btnPip.setTextColor(
+            ContextCompat.getColor(this, if (pipActivo) R.color.bg_root else R.color.text_primary)
+        )
+        b.btnSplit.setBackgroundResource(if (splitActivo) R.drawable.bg_pill_accent else R.drawable.bg_pill)
+        b.btnSplit.setTextColor(
+            ContextCompat.getColor(this, if (splitActivo) R.color.bg_root else R.color.text_primary)
+        )
+    }
+
+    /**
+     * Enciende o apaga el modo PiP. Apagado: una sola cámara al aire (tocar cambia).
+     * Encendido: se elige fondo (A) y ventana (B).
+     */
+    private fun alternarPip() {
+        pipActivo = !pipActivo
+        if (pipActivo) {
+            splitActivo = false // PiP y pantalla partida son excluyentes
+            // Sin un fondo claro, el PiP se vería sobre negro: se deja la única cámara
+            // que haya como capa A.
+            if (camA == null) {
+                b.canvas.scene.cams().firstOrNull()?.let { item ->
+                    camA = item.slot
+                    item.rect.set(0f, 0f, 1f, 1f)
+                    b.canvas.scene.sendToBack(item)
+                }
+            }
+            activeLayer = if (camA == null) 'A' else 'B'
+            toast(
+                if (camA == null) "PiP activado · elige primero la cámara del fondo (A)"
+                else "PiP activado · toca la cámara que va en la ventana (B)"
+            )
+        } else {
+            // Quitar la ventana y dejar el fondo a pantalla completa.
+            camB?.let { slot ->
+                b.canvas.scene.camAt(slot)?.let { item ->
+                    b.canvas.scene.remove(item)
+                    if (slot == LocalCam.SLOT) {
+                        b.canvas.detachTrack(slot, localCam.track)
+                    } else {
+                        b.canvas.detachTrack(slot, hub.session(slot)?.videoTrack)
+                    }
+                }
+            }
+            camB = null
+            camA?.let { slot ->
+                b.canvas.scene.camAt(slot)?.let { item ->
+                    item.rect.set(0f, 0f, 1f, 1f)
+                    b.canvas.scene.sendToBack(item)
+                }
+            }
+            activeLayer = 'A'
+            toast("PiP desactivado · una cámara al aire")
+        }
+        styleLayerButtons()
+        updateTip()
+        b.canvas.requestRender()
+        refreshUi()
+    }
+
+    /** Pone la cámara elegida al aire (una sola, a pantalla completa). */
+    private fun mostrarEnPrograma(slot: Int) {
+        val scene = b.canvas.scene
+        // Sacar del lienzo cualquier otra cámara: el visor muestra solo la elegida.
+        scene.cams().filter { it.slot != slot }.forEach { item ->
+            scene.remove(item)
+            if (item.slot == LocalCam.SLOT) {
+                b.canvas.detachTrack(item.slot, localCam.track)
+            } else {
+                b.canvas.detachTrack(item.slot, hub.session(item.slot)?.videoTrack)
+            }
+        }
+        camB = null
+        val item = scene.camAt(slot) ?: scene.addCam(slot) ?: return
+        item.label = when {
+            slot == LocalCam.SLOT -> "Tablet"
+            else -> hub.session(slot)?.name ?: "Cámara ${slot + 1}"
+        }
+        item.rect.set(0f, 0f, 1f, 1f)
+        scene.sendToBack(item)
+        camA = slot
+        if (slot == LocalCam.SLOT) {
+            localCam.track?.let { b.canvas.attachTrack(slot, it) }
+        } else {
+            hub.session(slot)?.videoTrack?.let { b.canvas.attachTrack(slot, it) }
+        }
+        scene.selectedId = item.id
+        b.canvas.animarEntrada(item)
+        b.canvas.requestRender()
+        refreshUi()
+        onSelectionChanged(item)
+    }
+
+    // ------------------------------------------------------------------ multicámara (pantalla partida)
+
+    /**
+     * Zona que ocupa cada capa en pantalla partida.
+     * Horizontal: corte vertical (izquierda / derecha). Vertical: corte horizontal (arriba / abajo).
+     */
+    private fun mitadDe(capa: Char): RectF = if (vertical) {
+        if (capa == 'A') RectF(0f, 0f, 1f, 0.5f) else RectF(0f, 0.5f, 1f, 1f)
+    } else {
+        if (capa == 'A') RectF(0f, 0f, 0.5f, 1f) else RectF(0.5f, 0f, 1f, 1f)
+    }
+
+    private fun fuenteDisponible(slot: Int): Boolean = when {
+        slot == LocalCam.SLOT -> localCam.encendida
+        else -> hub.session(slot) != null
+    }
+
+    private fun camarasDisponibles(): List<Int> {
+        val lista = ArrayList<Int>()
+        for (i in 0..5) if (hub.session(i) != null) lista.add(i)
+        if (localCam.encendida) lista.add(LocalCam.SLOT)
+        return lista
+    }
+
+    private fun quitarCamaraDelLienzo(item: CamItem) {
+        b.canvas.scene.remove(item)
+        if (item.slot == LocalCam.SLOT) {
+            b.canvas.detachTrack(item.slot, localCam.track)
+        } else {
+            b.canvas.detachTrack(item.slot, hub.session(item.slot)?.videoTrack)
+        }
+    }
+
+    private fun engancharFuente(slot: Int) {
+        if (slot == LocalCam.SLOT) {
+            localCam.track?.let { b.canvas.attachTrack(slot, it) }
+        } else {
+            hub.session(slot)?.videoTrack?.let { b.canvas.attachTrack(slot, it) }
+        }
+    }
+
+    private fun nombreFuente(slot: Int): String = when {
+        slot == LocalCam.SLOT -> "Tablet"
+        else -> hub.session(slot)?.name ?: "Cámara ${slot + 1}"
+    }
+
+    /** Coloca las dos mitades con las cámaras actuales (A y B). */
+    private fun aplicarLayoutSplit() {
+        val scene = b.canvas.scene
+        // Solo quedan en el lienzo las dos cámaras de las mitades.
+        scene.cams().filter { it.slot != camA && it.slot != camB }.forEach { quitarCamaraDelLienzo(it) }
+
+        listOfNotNull(camA?.let { 'A' to it }, camB?.let { 'B' to it }).forEach { par ->
+            val capa = par.first
+            val slot = par.second
+            val item = scene.camAt(slot) ?: scene.addCam(slot) ?: return@forEach
+            item.label = nombreFuente(slot)
+            item.rect.set(mitadDe(capa))
+            engancharFuente(slot)
+        }
+        b.canvas.requestRender()
+    }
+
+    /** Enciende o apaga la pantalla partida 50/50. */
+    private fun alternarSplit() {
+        splitActivo = !splitActivo
+        if (splitActivo) {
+            pipActivo = false
+            // Relleno automático: las dos primeras cámaras disponibles.
+            val disponibles = camarasDisponibles()
+            if (disponibles.isEmpty()) {
+                splitActivo = false
+                toast("Conecta al menos una cámara para la pantalla partida")
+                styleLayerButtons()
+                return
+            }
+            if (camA == null || !fuenteDisponible(camA!!)) camA = disponibles.getOrNull(0)
+            if (camB == null || !fuenteDisponible(camB!!) || camB == camA) {
+                camB = disponibles.firstOrNull { it != camA } ?: camA
+            }
+            aplicarLayoutSplit()
+            activeLayer = 'B'
+            toast(
+                if (vertical) "Multicámara activa · A arriba, B abajo. Toca una cámara para cambiarla"
+                else "Multicámara activa · A izquierda, B derecha. Toca una cámara para cambiarla"
+            )
+        } else {
+            camB?.let { slot ->
+                b.canvas.scene.camAt(slot)?.let { quitarCamaraDelLienzo(it) }
+            }
+            camB = null
+            camA?.let { slot ->
+                b.canvas.scene.camAt(slot)?.let { item ->
+                    item.rect.set(0f, 0f, 1f, 1f)
+                    b.canvas.scene.sendToBack(item)
+                }
+            }
+            activeLayer = 'A'
+            toast("Multicámara desactivada · una cámara al aire")
+        }
+        styleLayerButtons()
+        updateTip()
+        b.canvas.requestRender()
+        refreshUi()
+    }
+
+    /** Intercambia las dos cámaras de la pantalla partida. */
+    private fun intercambiarLados() {
+        if (!splitActivo) {
+            toast("Activa «2 cam» para intercambiar lados")
+            return
+        }
+        val a = camA
+        camA = camB
+        camB = a
+        aplicarLayoutSplit()
+        refreshUi()
+        updateTip()
+        toast("Lados intercambiados")
+    }
+
+    /** Acerca la cámara seleccionada (alternativa al pellizco). */
+    private fun cambiarZoomSeleccion(delta: Float) {
+        val item = b.canvas.selection as? CamItem ?: run {
+            toast("Selecciona una cámara en el lienzo")
+            return
+        }
+        item.zoom = (item.zoom + delta).coerceIn(1f, 5f)
+        b.canvas.requestRender()
+        updateTip()
+        toast(String.format(java.util.Locale.US, "Zoom %.1f×", item.zoom))
+    }
+
+    /** Devuelve la cámara seleccionada al plano completo. */
+    private fun quitarZoomSeleccion() {
+        val item = b.canvas.selection as? CamItem ?: run {
+            toast("Selecciona una cámara en el lienzo")
+            return
+        }
+        item.resetZoom()
+        b.canvas.requestRender()
+        updateTip()
+        toast("Zoom 1.0× (plano completo)")
+    }
+
+    // ------------------------------------------------------------------ acciones de UI
+
+    private fun wireClicks() {
+        b.btnOrientacion.setOnClickListener { cambiarOrientacion(!vertical) }
+        b.btnLayerA.setOnClickListener { switchActiveLayer('A') }
+        b.btnLayerB.setOnClickListener { switchActiveLayer('B') }
+        b.btnPip.setOnClickListener { alternarPip() }
+        b.btnSplit.setOnClickListener { alternarSplit() }
+        b.btnPip.setOnLongClickListener { cyclePip(); true }
+        b.btnPhoto.setOnClickListener { tomarFoto() }
+        b.btnRecord.setOnClickListener { toggleRecording() }
+        b.btnSettings.setOnClickListener { showSettings() }
+        b.btnAudio.setOnClickListener { dialogoAudio() }
+        b.btnFacebook.setOnClickListener { dialogoFacebook() }
+        b.btnTransiciones.setOnClickListener { dialogoTransiciones() }
+        val botonesVideo = mapOf(
+            "luz" to b.btnLuz,
+            "contraste" to b.btnContraste,
+            "wb" to b.btnWb,
+            "color" to b.btnColor,
+            "vineta" to b.btnVineta,
+            "poster" to b.btnPoster
+        )
+        botonesVideo.forEach { (clave, boton) ->
+            boton.setOnClickListener { seleccionarParametro(clave) }
+        }
+        estilizarFader(b.sbAjuste)
+        b.sbAjuste.max = 200
+        b.sbAjuste.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar?, value: Int, fromUser: Boolean) {
+                aplicarSliderAjuste(value)
+            }
+
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+        })
+        b.btnAjusteReset.setOnClickListener {
+            val cam = b.canvas.selection as? CamItem
+            if (cam == null) {
+                toast("Selecciona una cámara para ajustar su imagen")
+            } else {
+                fijarVideo(cam, paramVideo, 0f)
+                b.canvas.requestRender()
+                refrescarPanelAjuste()
+            }
+        }
+        b.btnPlantillas.setOnClickListener { dialogoPlantillas() }
+        b.btnZoomIn.setOnClickListener { cambiarZoomSeleccion(0.5f) }
+        b.btnZoomOut.setOnClickListener { cambiarZoomSeleccion(-0.5f) }
+        b.btnTabletLens.setOnClickListener { ciclarLenteTablet() }
+        styleLayerButtons()
+        actualizarBotonSesion()
+    }
+
+    // ------------------------------------------------------------------ modo celular
+
+    /** El diseño principal está pensado para tablet; en un celular se compacta. */
+    private fun esPantallaCelular(): Boolean =
+        resources.configuration.smallestScreenWidthDp < 600
+
+    /** Ajusta el diseño para celular: más visor, controles pequeños y ajustes en ventana. */
+    private fun aplicarModoCelular() {
+        runCatching {
+            // 1) Más espacio para el visor (solo en horizontal: en vertical el ancho del
+            // visor lo fija la relación 9:16, no un peso).
+            if (!vertical) {
+                (b.panelFuentes.layoutParams as? LinearLayout.LayoutParams)?.let { it.weight = 0.50f }
+                (b.panelPrograma.layoutParams as? LinearLayout.LayoutParams)?.let { it.weight = 0.50f }
+            }
+            // El visor se pega a la derecha para aprovechar el hueco libre.
+            (b.canvasHost.layoutParams as? LinearLayout.LayoutParams)?.let { it.gravity = Gravity.END }
+
+            // 2) Barra superior compacta.
+            b.btnPlantillas.text = "Plant."
+            b.btnTransiciones.text = "Trans."
+            b.txtLive.visibility = View.GONE
+            (b.imgLogo.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.width = 34.dp
+                it.height = 26.dp
+            }
+            listOf(
+                b.btnSettings, b.btnPlantillas, b.btnTransiciones,
+                b.btnOrientacion, b.btnAudio
+            ).forEach { vista ->
+                vista.textSize = 10f
+                vista.setPadding(7.dp, 4.dp, 7.dp, 4.dp)
+                (vista.layoutParams as? LinearLayout.LayoutParams)?.let { it.marginStart = 4.dp }
+            }
+
+            // 3) Controles bajo el visor más pequeños.
+            for (i in 0 until b.controlesCapa.childCount) {
+                val v = b.controlesCapa.getChildAt(i) as? TextView ?: continue
+                recordarEstilo(v)
+                v.textSize = 8f
+                v.setPadding(4.dp, 2.dp, 4.dp, 2.dp)
+            }
+
+            // 4) Los ajustes de imagen se van a una ventana aparte.
+            b.cajaVideo.visibility = View.GONE
+            val botonImagen = TextView(this).apply {
+                text = "Img."
+                textSize = 10f
+                gravity = Gravity.CENTER
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+                setBackgroundResource(R.drawable.bg_pill_ghost)
+                setPadding(5.dp, 2.dp, 5.dp, 2.dp)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { marginStart = 6.dp }
+                setOnClickListener { dialogoAjustesImagen() }
+            }
+            // El medidor se va a la barra superior para que la fila de controles quepa.
+            (b.audioMeter.parent as? ViewGroup)?.removeView(b.audioMeter)
+            b.audioMeter.layoutParams = LinearLayout.LayoutParams(44.dp, 15.dp)
+            // A la barra superior, antes del separador de la derecha.
+            val barraSup = b.btnAudio.parent as? LinearLayout
+            if (barraSup != null) barraSup.addView(b.audioMeter, barraSup.indexOfChild(b.btnAudio) + 1)
+            b.btnTabletLens.text = "Lente"
+            b.btnSplit.text = "2cam"
+            b.controlesCapa.addView(botonImagen, 0)
+            b.controlesCapa.requestLayout()
+        }
+    }
+
+    /** Ventana con los seis ajustes de imagen de la cámara activa. */
+    private fun dialogoAjustesImagen() {
+        val contenedor = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20.dp, 8.dp, 20.dp, 8.dp)
+        }
+        val cam = camaraParaAjustes()
+        paramsVideo.forEach { (clave, nombre, pista) ->
+            val fila = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 5.dp, 0, 5.dp)
+            }
+            fila.addView(TextView(this).apply {
+                text = nombre
+                textSize = 11f
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+                width = 64.dp
+            })
+            val valor = TextView(this).apply {
+                text = etiquetaAjuste(clave, cam?.let { valorVideo(it, clave) } ?: 0f)
+                textSize = 11f
+                gravity = Gravity.END
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
+                width = 42.dp
+            }
+            val barra = android.widget.SeekBar(this).apply {
+                estilizarFader(this)
+                max = 200
+                progress = (if (escalaVideo(clave)) {
+                    100f + (cam?.let { valorVideo(it, clave) } ?: 0f) * 100f
+                } else {
+                    ((cam?.let { valorVideo(it, clave) } ?: 0f) + 1f) * 100f
+                }).toInt().coerceIn(0, 200)
+                setOnSeekBarChangeListener(object :
+                    android.widget.SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(
+                        sb: android.widget.SeekBar?,
+                        value: Int,
+                        fromUser: Boolean
+                    ) {
+                        val objetivo = camaraParaAjustes() ?: return
+                        val v = if (escalaVideo(clave)) {
+                            ((value - 100f) / 100f).coerceAtLeast(0f)
+                        } else {
+                            value / 100f - 1f
+                        }
+                        fijarVideo(objetivo, clave, v)
+                        valor.text = etiquetaAjuste(clave, v)
+                        b.canvas.requestRender()
+                    }
+
+                    override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+                    override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+                })
+            }
+            fila.addView(
+                barra,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    .apply { setMargins(6.dp, 0, 6.dp, 0) }
+            )
+            fila.addView(valor)
+            contenedor.addView(fila)
+        }
+        val dialogo = AlertDialog.Builder(this)
+            .setTitle("Imagen · ${cam?.label ?: "sin cámara"}")
+            .setView(ScrollView(this).apply { addView(contenedor) })
+            .setPositiveButton("Listo", null)
+            .setNeutralButton("Restablecer") { _, _ ->
+                camaraParaAjustes()?.let { objetivo ->
+                    objetivo.resetImagen()
+                    b.canvas.requestRender()
+                }
+            }
+            .create()
+        dialogo.show()
+        // A la izquierda y angosto: el visor sigue visible mientras se ajusta.
+        dialogo.window?.let { ventana ->
+            val anchoPantalla = resources.displayMetrics.widthPixels
+            ventana.setGravity(Gravity.CENTER_VERTICAL or Gravity.START)
+            ventana.setLayout((anchoPantalla * 0.46f).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            val attrs = ventana.attributes
+            attrs.x = 10.dp
+            ventana.attributes = attrs
+        }
+    }
+    /** Ajuste de imagen de la cámara seleccionada (luz, contraste, WB, temperatura, color). */
+    // ------------------------------------------------------------------ ajustes de imagen
+
+    /** Parámetro de imagen seleccionado en el panel permanente. */
+    private var paramVideo = "luz"
+
+    /** Contenedor e índice originales del bloque de ajustes (para volver a horizontal). */
+    private var huecoVideo: ViewGroup? = null
+    private var indiceVideo = 0
+
+    private val paramsVideo = listOf(
+        Triple("luz", "Luz", "Brillo general"),
+        Triple("contraste", "Contraste", "Separa luces y sombras"),
+        Triple("wb", "WB", "Balance de blancos (magenta ↔ verde)"),
+        Triple("color", "Color", "Saturación"),
+        Triple("vineta", "Viñeta", "Oscurece las orillas"),
+        Triple("poster", "Poster.", "Reduce los niveles de color")
+    )
+
+    private fun valorVideo(cam: CamItem, clave: String): Float = when (clave) {
+        "luz" -> cam.luz
+        "contraste" -> cam.contraste
+        "wb" -> cam.wb
+        "color" -> cam.color
+        "vineta" -> cam.vineta
+        else -> cam.poster
+    }
+
+    private fun fijarVideo(cam: CamItem, clave: String, v: Float) {
+        when (clave) {
+            "luz" -> cam.luz = v
+            "contraste" -> cam.contraste = v
+            "wb" -> cam.wb = v
+            "color" -> cam.color = v
+            "vineta" -> cam.vineta = v.coerceIn(0f, 1f)
+            "poster" -> cam.poster = v.coerceIn(0f, 1f)
+        }
+    }
+
+    /** Escala real del parámetro: viñeta y posterización van de 0 a 1. */
+    private fun escalaVideo(clave: String): Boolean = clave == "vineta" || clave == "poster"
+
+    private fun etiquetaAjuste(clave: String, v: Float): String {
+        val n = (v * 100).toInt()
+        return if (escalaVideo(clave)) "$n" else if (n > 0) "+$n" else "$n"
+    }
+
+    /** Refresca el panel del deslizable con el parámetro y la cámara actuales. */
+    /** Cámara sobre la que actúan los ajustes: la seleccionada o, si no hay, la que está al aire. */
+    private fun camaraParaAjustes(): CamItem? {
+        (b.canvas.selection as? CamItem)?.let { return it }
+        val slotAire = camA ?: camB ?: return null
+        return b.canvas.scene.items.filterIsInstance<CamItem>().firstOrNull { it.slot == slotAire }
+    }
+
+    private fun refrescarPanelAjuste() {
+        val (clave, nombre, pista) = paramsVideo.firstOrNull { it.first == paramVideo }
+            ?: paramsVideo.first()
+        val cam = b.canvas.selection as? CamItem
+        b.txtAjusteNombre.text = nombre
+        b.txtAjusteNombre.contentDescription = pista
+        val v = cam?.let { valorVideo(it, clave) } ?: 0f
+        b.sbAjuste.isEnabled = cam != null
+        b.sbAjuste.alpha = if (cam != null) 1f else 0.45f
+        b.sbAjuste.progress = (if (escalaVideo(clave)) (100f + v * 100f) else ((v + 1f) * 100f))
+            .toInt().coerceIn(0, 200)
+        b.txtAjusteValor.text = etiquetaAjuste(clave, v)
+        // Resalta el botón del parámetro activo
+        val mapa = mapOf(
+            "luz" to b.btnLuz,
+            "contraste" to b.btnContraste,
+            "wb" to b.btnWb,
+            "color" to b.btnColor,
+            "vineta" to b.btnVineta,
+            "poster" to b.btnPoster
+        )
+        mapa.forEach { (k, boton) ->
+            val activo = k == clave
+            // El seleccionado se rellena de naranja y se ve un poco más grande.
+            boton.setBackgroundResource(
+                if (activo) R.drawable.bg_pill_accent else R.drawable.bg_pill_ghost
+            )
+            boton.setTextColor(
+                ContextCompat.getColor(this, if (activo) R.color.bg_root else R.color.text_primary)
+            )
+            boton.alpha = 1f
+            boton.scaleX = if (activo) 1.08f else 1f
+            boton.scaleY = if (activo) 1.08f else 1f
+        }
+    }
+
+    /**
+     * Elige el parámetro. En horizontal cambia el deslizable permanente; en vertical abre
+     * el cuadro de ajuste como al principio.
+     */
+    private fun seleccionarParametro(clave: String) {
+        paramVideo = clave
+        refrescarPanelAjuste()
+        if (vertical) dialogoAjuste(clave)
+    }
+
+    /** Cuadro de ajuste de un solo parámetro (modo vertical). */
+    private fun dialogoAjuste(clave: String) {
+        val info = paramsVideo.firstOrNull { it.first == clave }
+        val nombre = info?.second ?: clave
+        val pista = info?.third ?: ""
+        val caja = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24.dp, 12.dp, 24.dp, 12.dp)
+        }
+        val valor = TextView(this).apply {
+            textSize = 14f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
+        }
+        val barra = android.widget.SeekBar(this).apply {
+            estilizarFader(this)
+            max = 200
+        }
+        fun pintar(v: Float) {
+            barra.progress = if (escalaVideo(clave)) (100f + v * 100f).toInt().coerceIn(0, 200)
+            else ((v + 1f) * 100f).toInt().coerceIn(0, 200)
+            valor.text = etiquetaAjuste(clave, v)
+        }
+        pintar(camaraParaAjustes()?.let { valorVideo(it, clave) } ?: 0f)
+        barra.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar?, value: Int, fromUser: Boolean) {
+                val cam = camaraParaAjustes() ?: return
+                val v = if (escalaVideo(clave)) ((value - 100f) / 100f).coerceAtLeast(0f)
+                else value / 100f - 1f
+                fijarVideo(cam, clave, v)
+                valor.text = etiquetaAjuste(clave, v)
+                b.canvas.requestRender()
+            }
+
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+        })
+        caja.addView(valor)
+        caja.addView(TextView(this).apply {
+            text = pista
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            setPadding(0, 2.dp, 0, 10.dp)
+        })
+        caja.addView(barra)
+        caja.addView(
+            TextView(this).apply {
+                text = "Restablecer"
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+                setBackgroundResource(R.drawable.bg_pill_ghost)
+                setPadding(16.dp, 8.dp, 16.dp, 8.dp)
+                setOnClickListener {
+                    camaraParaAjustes()?.let { cam ->
+                        fijarVideo(cam, clave, 0f)
+                        b.canvas.requestRender()
+                        pintar(0f)
+                    }
+                }
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 14.dp }
+        )
+        AlertDialog.Builder(this)
+            .setTitle("$nombre · ${camaraParaAjustes()?.label ?: "sin cámara"}")
+            .setView(caja)
+            .setPositiveButton("Listo", null)
+            .show()
+    }
+
+    private fun aplicarSliderAjuste(progress: Int) {
+        val cam = b.canvas.selection as? CamItem ?: return
+        val clave = paramVideo
+        val v = if (escalaVideo(clave)) ((progress - 100f) / 100f).coerceAtLeast(0f)
+        else progress / 100f - 1f
+        fijarVideo(cam, clave, v)
+        b.txtAjusteValor.text = etiquetaAjuste(clave, v)
+        b.canvas.requestRender()
+    }
+
+    private fun cyclePip() {
+        pipCorner = (pipCorner + 1) % 4
+        val names = listOf("superior izquierda", "superior derecha", "inferior izquierda", "inferior derecha")
+        toast("PiP en esquina ${names[pipCorner]}")
+        val slot = camB ?: return
+        b.canvas.applyPip(pipCorner, slot)
+    }
+
+    private fun removeSelected() {
+        val item = b.canvas.selection ?: return
+        b.canvas.scene.remove(item)
+        if (item is CamItem) {
+            if (camA == item.slot) camA = null
+            if (camB == item.slot) camB = null
+            if (item.slot == LocalCam.SLOT) {
+                b.canvas.detachTrack(item.slot, localCam.track)
+            } else {
+                b.canvas.detachTrack(item.slot, hub.session(item.slot)?.videoTrack)
+            }
+            // Si queda otra cámara en el lienzo, esa pasa a ser el fondo (capa A).
+            val restante = b.canvas.scene.cams().firstOrNull()
+            if (restante != null && camA == null) {
+                camA = restante.slot
+                restante.rect.set(0f, 0f, 1f, 1f)
+                b.canvas.scene.sendToBack(restante)
+            }
+        }
+        b.canvas.requestRender()
+        refreshUi()
+        onSelectionChanged(null)
+    }
+
+    private fun addOverlay(uri: Uri) {
+        // Permiso permanente para que la imagen siga disponible al abrir una plantilla
+        runCatching {
+            contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        try {
+            val bitmap = loadScaledBitmap(uri) ?: run {
+                toast("No se pudo abrir la imagen")
+                return
+            }
+            val item = b.canvas.scene.addImage(bitmap, "Overlay", uri.toString())
+            b.canvas.requestRender()
+            onSelectionChanged(item)
+            toast("Imagen agregada: arrástrala en el lienzo")
+        } catch (t: Throwable) {
+            L.e("studio", "overlay: ${t.message}", t)
+            toast("No se pudo cargar la imagen")
+        }
+    }
+
+    private fun loadScaledBitmap(uri: Uri, maxSide: Int = 1600): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > maxSide) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        return contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+    }
+
+    // ------------------------------------------------------------------ grabación
+
+    private fun toggleRecording() {
+        // «Solo transmitir» y «Grabar y transmitir a la vez» arrancan el directo: en los dos
+        // la grabación va con el mismo codificador del envío. Solo «Solo grabar» usa el
+        // grabador local.
+        if (modoSesion == "transmitir" || modoSesion == "ambos") {
+            if (transmitiendo) {
+                cortarTransmision()
+                return
+            }
+            // Sin permiso de micrófono el codificador de audio no arranca y la sesión falla:
+            // se pide antes y, si se niega, no se abre el directo.
+            if (recAudio && ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.RECORD_AUDIO
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                return
+            }
+            iniciarTransmision()
+            return
+        }
+        if (recorder.isRecording) {
+            stopRecording()
+        } else {
+            if (recAudio && ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.RECORD_AUDIO
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+            } else {
+                startRecording(recAudio)
+            }
+        }
+    }
+
+    /** Protege micrófono y cámara mientras la sesión sigue fuera de la pantalla. */
+    private fun iniciarProteccionSesion() {
+        com.jfrmedia.switcher.studio.stream.EmisionService.iniciar(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            permisoNotificaciones.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    private fun detenerProteccionSesion() {
+        com.jfrmedia.switcher.studio.stream.EmisionService.detener(this)
+    }
+
+    private fun startRecording(withAudio: Boolean) {
+        // Durante la transmisión se graba con el mismo codificador del emisor.
+        if (transmitiendo) {
+            if (grabarConEmisor()) {
+                recStartMs = SystemClock.elapsedRealtime()
+                b.liveDot.setBackgroundResource(R.drawable.bg_dot_red)
+            }
+            return
+        }
+        if (recorder.isRecording) return
+        // Si el codificador del equipo no acepta la resolución elegida (2K y 4K no existen en
+        // esta tablet), se baja a la anterior hasta que alguna arranque: es lo que promete la
+        // pantalla de Ajustes. Se silencia el aviso del grabador para no llenar de toasts.
+        val avisoGrabador = recorder.onError
+        recorder.onError = null
+        var surface: Surface? = null
+        var anchoGrabado = recAncho
+        var altoGrabado = recAlto
+        var ladoGrabado = recAltoElegido
+        try {
+            for (lado in resolucionesGrabacion()) {
+                val (w, h) = tamanoGrabacion(lado)
+                surface = recorder.start(w, h, 30, recBitrate, withAudio)
+                if (surface != null) {
+                    anchoGrabado = w
+                    altoGrabado = h
+                    ladoGrabado = lado
+                    break
+                }
+            }
+        } finally {
+            recorder.onError = avisoGrabador
+        }
+        if (surface == null) {
+            toast("No se pudo iniciar la grabación")
+            return
+        }
+        if (ladoGrabado != recAltoElegido) {
+            toast("El equipo no acepta ${recAltoElegido}p: se graba en ${ladoGrabado}p ($anchoGrabado×$altoGrabado)")
+        }
+        anchoGrabando = anchoGrabado
+        altoGrabando = altoGrabado
+        actualizarInfoLienzo()
+        b.canvas.beginRecordingOutput(surface, anchoGrabado, altoGrabado, recorder.baseTimeNs)
+        recStartMs = SystemClock.elapsedRealtime()
+        iniciarProteccionSesion()
+        actualizarCandadoOrientacion()
+        b.liveDot.setBackgroundResource(R.drawable.bg_dot_red)
+        abrirRegistro("grabación")
+        b.txtLive.text = "Grabando"
+        b.btnRecord.text = "Detener"
+        b.btnRecord.setBackgroundResource(R.drawable.bg_pill_ghost)
+        b.btnRecord.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+        handler.post(ticker)
+    }
+
+    private fun stopRecording() {
+        b.canvas.endRecordingOutput()
+        recorder.stop()
+        handler.removeCallbacks(ticker)
+        actualizarCandadoOrientacion()
+        b.liveDot.setBackgroundResource(R.drawable.bg_dot_gray)
+        if (!emisor.transmitiendo) cerrarRegistro()
+        b.txtLive.text = "Sin grabación"
+        b.txtTimer.text = "00:00"
+        actualizarBotonSesion()
+        b.btnRecord.setBackgroundResource(R.drawable.bg_pill_accent)
+        b.btnRecord.setTextColor(ContextCompat.getColor(this, R.color.bg_root))
+
+        val file = recorder.outputFile
+        if (file != null && file.exists() && file.length() > 1024) {
+            lastVideoFile = file
+            lastVideoUri = publishVideo(file)
+            val mb = file.length() / (1024 * 1024)
+            toast("Grabación lista: ${mb.coerceAtLeast(1)} MB")
+        } else {
+            toast("No se generó el archivo de video")
+        }
+        // El chip del visor vuelve a mostrar la resolución elegida en Ajustes.
+        anchoGrabando = 0
+        altoGrabando = 0
+        actualizarInfoLienzo()
+        // Si no queda ninguna sesión abierta, se suelta la protección de segundo plano.
+        if (!transmitiendo) detenerProteccionSesion()
+    }
+
+    /** Publica el MP4 en la galería (Android 10+) y regresa su URI. */
+    /**
+     * Foto instantánea del visor (programa). Captura lo que se ve en el lienzo con
+     * PixelCopy y la guarda en Pictures/JFR Switcher.
+     */
+    private fun tomarFoto() {
+        val vista = b.canvas
+        if (vista.width == 0 || vista.height == 0) {
+            toast("El lienzo todavía no está listo")
+            return
+        }
+        val ancho = vista.width
+        val alto = vista.height
+        val bitmap = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
+        // Se quita el marco de selección para que no salga en la foto.
+        val seleccion = b.canvas.scene.selectedId
+        b.canvas.scene.selectedId = null
+        b.canvas.requestRender()
+        handler.postDelayed({
+            try {
+                android.view.PixelCopy.request(
+                    vista, bitmap,
+                    { resultado ->
+                        b.canvas.scene.selectedId = seleccion
+                        b.canvas.requestRender()
+                        if (resultado == android.view.PixelCopy.SUCCESS) {
+                            guardarFoto(bitmap)
+                        } else {
+                            toast("No se pudo capturar el cuadro (código $resultado)")
+                        }
+                    },
+                    handler
+                )
+            } catch (t: Throwable) {
+                b.canvas.scene.selectedId = seleccion
+                toast("No se pudo capturar: ${t.message}")
+            }
+        }, 120)
+    }
+
+    /** Guarda el bitmap como JPEG en la galería. */
+    private fun guardarFoto(bitmap: Bitmap) {
+        val nombre = "JFR_Foto_" + java.text.SimpleDateFormat(
+            "yyyyMMdd_HHmmss", java.util.Locale.US
+        ).format(java.util.Date()) + ".jpg"
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, nombre)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/JFR Switcher")
+                }
+                val uri = contentResolver.insert(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+                )
+                if (uri != null) {
+                    contentResolver.openOutputStream(uri)?.use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                    }
+                    toast("Foto guardada en Pictures/JFR Switcher")
+                    return
+                }
+            }
+            val carpeta = File(getExternalFilesDir(null), "Fotos").apply { mkdirs() }
+            val archivo = File(carpeta, nombre)
+            archivo.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+            toast("Foto guardada en ${archivo.parentFile?.name}/$nombre")
+        } catch (t: Throwable) {
+            L.e("studio", "foto: ${t.message}", t)
+            toast("No se pudo guardar la foto")
+        }
+    }
+
+    private fun publishVideo(file: File): Uri? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        return try {
+            val values = ContentValues().apply {
+                put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
+                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/JFR Switcher")
+            }
+            val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+                ?: return null
+            contentResolver.openOutputStream(uri)?.use { out ->
+                file.inputStream().use { input -> input.copyTo(out) }
+            }
+            file.delete()
+            uri
+        } catch (t: Throwable) {
+            L.e("studio", "publicar: ${t.message}", t)
+            null
+        }
+    }
+
+    private fun shareLast() {
+        val uri = lastVideoUri
+        if (uri == null) {
+            val file = lastVideoFile
+            if (file == null || !file.exists()) {
+                toast("Todavía no hay grabaciones")
+                return
+            }
+            toast("Video en: ${file.absolutePath}")
+            return
+        }
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "video/mp4"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching { startActivity(Intent.createChooser(send, "Compartir video")) }
+    }
+
+    // ------------------------------------------------------------------ diálogos
+
+    private fun updatePairingLabels() {
+        val ip = Net.primaryIp() ?: "Sin WiFi"
+        actualizarProgramaCamaras()
+        b.txtCamCount.text = "${hub.count()} / 6"
+        pairingBinding?.let {
+            it.txtIp.text = ip
+            it.txtConnCount.text = "Cámaras conectadas: ${hub.count()} / 6"
+        }
+    }
+
+    private var pairingBinding: DialogPairingBinding? = null
+
+    private var slotAB: LinearLayout? = null
+
+    // ------------------------------------------------------------------ parrilla de fuentes
+
+    private lateinit var overlayContainer: LinearLayout
+
+    private lateinit var mediosContainer: LinearLayout
+
+    /**
+     * Construye la parrilla de fuentes: 3 tarjetas por fila.
+     * Primero las 6 cámaras (2 filas) y después el grupo de overlays, que se
+     * reconstruye cada vez que se agrega, oculta o quita uno.
+     */
+    /** En vertical las tarjetas son verticales (9:16) y entran más por fila. */
+    private fun columnasFuentes(): Int = when {
+        // En vertical, 3 por fila: cada tarjeta conserva su tamaño y el cuarto hueco pasa a la
+        // columna de controles (allí caben los botones y el monitor de audio).
+        vertical -> 3
+        else -> 3
+    }
+
+    private fun buildSourcesGrid() {
+        val grid = b.llGrid
+        grid.removeAllViews()
+        tiles.clear()
+        val cols = columnasFuentes()
+        // En horizontal se agrega la cámara de la propia tablet como 7ª fuente.
+        val total = if (vertical) 6 else 7
+
+        for (fila in 0 until (total + cols - 1) / cols) {
+            val filaView = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            grid.addView(
+                filaView,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+            for (col in 0 until cols) {
+                val index = fila * cols + col
+                if (index >= total) {
+                    filaView.addView(Space(this), celdaParams())
+                    continue
+                }
+                val tile = SourceTileView(this)
+                tile.modoVertical(vertical)
+                if (index == LocalCam.SLOT) {
+                    tile.setup(index) { onTileTap(LocalCam.SLOT) }
+                    tile.setEstadoLocal(localCam.encendida)
+                } else {
+                    tile.setup(index) { onTileTap(index) }
+                }
+                filaView.addView(tile, celdaParams())
+                tiles.add(tile)
+            }
+        }
+
+        val etiqueta = TextView(this).apply {
+            text = "OVERLAYS"
+            textSize = 10f
+            letterSpacing = 0.12f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+            setPadding(6.dp, 12.dp, 6.dp, 4.dp)
+        }
+        grid.addView(etiqueta)
+
+        overlayContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        grid.addView(
+            overlayContainer,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        refreshOverlayTiles()
+
+        val etiquetaMedios = TextView(this).apply {
+            text = "MEDIOS · VIDEOS Y FOTOS"
+            textSize = 10f
+            letterSpacing = 0.12f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+            setPadding(6.dp, 12.dp, 6.dp, 4.dp)
+        }
+        grid.addView(etiquetaMedios)
+
+        mediosContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        grid.addView(
+            mediosContainer,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        refreshMediaTiles()
+    }
+
+    // ------------------------------------------------------------------ medios (videos y fotos)
+
+    /** Medio cargado en el grupo MEDIOS. */
+    data class Medio(val uri: String, val video: Boolean, val nombre: String) {
+        var thumb: Bitmap? = null
+    }
+
+    private val medios = ArrayList<Medio>()
+
+    /** Reconstruye las tarjetas de medios + la tarjeta de agregar. */
+    private fun refreshMediaTiles() {
+        if (!::mediosContainer.isInitialized) return
+        mediosContainer.removeAllViews()
+        val cols = columnasFuentes()
+        val total = medios.size + 1
+        val filas = (total + cols - 1) / cols
+        for (fila in 0 until filas) {
+            val filaView = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            mediosContainer.addView(
+                filaView,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+            for (col in 0 until cols) {
+                val index = fila * cols + col
+                when {
+                    index < medios.size -> {
+                        val medio = medios[index]
+                        filaView.addView(tarjetaMedio(medio), celdaParams())
+                    }
+
+                    index == medios.size -> filaView.addView(tarjetaAgregarMedio(), celdaParams())
+                    else -> filaView.addView(Space(this), celdaParams())
+                }
+            }
+        }
+    }
+
+    /** Tarjeta de un medio: miniatura, nombre y botón para quitarlo del grupo. */
+    private fun tarjetaMedio(medio: Medio): View {
+        val frame = AspectFrameLayout(this).apply {
+            aspect = if (vertical) 9f / 16f else 16f / 9f
+            setBackgroundResource(R.drawable.bg_tile)
+            isClickable = true
+            isFocusable = true
+        }
+        val imagen = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+            setImageBitmap(medio.thumb)
+        }
+        frame.addView(
+            imagen,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        val velo = View(this).apply {
+            setBackgroundColor(0x99000000.toInt())
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                54.dp,
+                Gravity.BOTTOM
+            )
+        }
+        frame.addView(velo)
+        frame.addView(
+            TextView(this).apply {
+                text = (if (medio.video) "▶ " else "") + medio.nombre
+                textSize = 11f
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+                setPadding(8.dp, 0, 8.dp, 0)
+            },
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                54.dp,
+                Gravity.BOTTOM
+            ).apply { gravity = Gravity.BOTTOM or Gravity.START }
+        )
+        // Botón para quitar del grupo
+        frame.addView(
+            TextView(this).apply {
+                text = "✕"
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+                setBackgroundResource(R.drawable.bg_delete)
+                setOnClickListener {
+                    medios.remove(medio)
+                    refreshMediaTiles()
+                }
+            },
+            FrameLayout.LayoutParams(30.dp, 30.dp, Gravity.TOP or Gravity.END).apply {
+                topMargin = 6.dp
+                marginEnd = 6.dp
+            }
+        )
+        frame.setOnClickListener { alternarMedio(medio) }
+        return frame
+    }
+
+    /** Agrega al grupo un archivo elegido del dispositivo. */
+    private fun agregarMedio(uri: Uri) {
+        runCatching {
+            contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        val tipo = contentResolver.getType(uri) ?: ""
+        val esVideo = tipo.startsWith("video")
+        val nombre = (tipo.substringAfterLast("/", "medio")) + " " + (medios.size + 1)
+        val medio = Medio(uri.toString(), esVideo, nombre)
+        medio.thumb = cargarMiniatura(medio)
+        medios.add(medio)
+        refreshMediaTiles()
+        toast(if (esVideo) "Video agregado a MEDIOS" else "Foto agregada a MEDIOS")
+    }
+
+    private fun tarjetaAgregarMedio(): View {
+        val frame = AspectFrameLayout(this).apply {
+            aspect = if (vertical) 9f / 16f else 16f / 9f
+            setBackgroundResource(R.drawable.bg_tile)
+            isClickable = true
+            isFocusable = true
+        }
+        frame.addView(
+            TextView(this).apply {
+                text = "+ Medio"
+                gravity = Gravity.CENTER
+                textSize = 12f
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            },
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        frame.setOnClickListener { pickMedia.launch(arrayOf("image/*", "video/*")) }
+        return frame
+    }
+
+    /** Muestra u oculta un medio en el programa. */
+    private fun alternarMedio(medio: Medio) {
+        val scene = b.canvas.scene
+        if (medio.video) {
+            val actual = scene.items.filterIsInstance<MediaItem>().firstOrNull { it.uri == medio.uri }
+            if (actual != null) {
+                b.canvas.detenerVideo()
+                scene.remove(actual)
+                b.canvas.requestRender()
+                refreshMediaTiles()
+                toast("Video detenido")
+                return
+            }
+            val item = MediaItem(scene.nextId(), medio.uri, true, medio.nombre)
+            item.rect.set(0f, 0f, 1f, 1f)
+            scene.agregar(item)
+            scene.selectedId = item.id
+            b.canvas.animarEntrada(item)
+            b.canvas.requestRender()
+            b.canvas.reproducirVideo(item) {
+                // Al terminar se quita solo y vuelve la cámara que estaba al aire.
+                scene.remove(item)
+                b.canvas.requestRender()
+                onSelectionChanged(scene.selected())
+                toast("Fin del video: vuelve la cámara")
+            }
+            refreshMediaTiles()
+            toast("Reproduciendo ${medio.nombre}")
+        } else {
+            val item = scene.cams().firstOrNull()
+            val existente = scene.images().firstOrNull { it.uri == medio.uri }
+            if (existente != null) {
+                existente.visible = !existente.visible
+                b.canvas.requestRender()
+                refreshMediaTiles()
+                return
+            }
+            val bmp = cargarMiniatura(medio) ?: run {
+                toast("No se pudo abrir la imagen")
+                return
+            }
+            val img = scene.addImage(bmp, medio.nombre, medio.uri) ?: return
+            img.rect.set(0f, 0f, 1f, 1f)
+            scene.sendToBack(img)
+            scene.selectedId = img.id
+            b.canvas.animarEntrada(img)
+            b.canvas.requestRender()
+            refreshMediaTiles()
+            if (item == null) toast("Imagen al aire")
+        }
+    }
+
+    /** Carga la miniatura de un medio (foto o primer cuadro del video). */
+    private fun cargarMiniatura(medio: Medio): Bitmap? {
+        medio.thumb?.let { return it }
+        val bmp = try {
+            if (medio.video) {
+                val r = android.media.MediaMetadataRetriever()
+                r.setDataSource(this, Uri.parse(medio.uri))
+                val marco = r.getFrameAtTime(0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                r.release()
+                marco
+            } else {
+                loadScaledBitmap(Uri.parse(medio.uri))
+            }
+        } catch (t: Throwable) {
+            L.w("medios", "miniatura: ${t.message}")
+            null
+        }
+        medio.thumb = bmp
+        return bmp
+    }
+
+    private fun celdaParams(): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            setMargins(4.dp, 4.dp, 4.dp, 4.dp)
+        }
+
+    /** Reconstruye las tarjetas de overlays (3 por fila) + la tarjeta de agregar. */
+    private fun refreshOverlayTiles() {
+        if (!::overlayContainer.isInitialized) return
+        overlayContainer.removeAllViews()
+        val imagenes = b.canvas.scene.images()
+        val cols = columnasFuentes()
+        val total = imagenes.size + 1
+        val filas = (total + cols - 1) / cols
+
+        for (fila in 0 until filas) {
+            val filaView = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            overlayContainer.addView(
+                filaView,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+            for (col in 0 until cols) {
+                val index = fila * cols + col
+                when {
+                    index < imagenes.size -> {
+                        val item = imagenes[index]
+                        val tile = OverlayTileView(this)
+                        tile.modoVertical(vertical)
+                        tile.bind(
+                            item = item,
+                            selected = b.canvas.scene.selectedId == item.id,
+                            onTap = { toggleOverlay(item) },
+                            onDelete = { borrarOverlay(item) }
+                        )
+                        filaView.addView(tile, celdaParams())
+                    }
+
+                    index == imagenes.size -> filaView.addView(tarjetaAgregarOverlay(), celdaParams())
+                    else -> filaView.addView(Space(this), celdaParams())
+                }
+            }
+        }
+    }
+
+    private fun tarjetaAgregarOverlay(): View {
+        val frame = AspectFrameLayout(this).apply {
+            aspect = if (vertical) 9f / 16f else 16f / 9f
+            setBackgroundResource(R.drawable.bg_tile)
+            isClickable = true
+            isFocusable = true
+        }
+        val texto = TextView(this).apply {
+            text = "+ Overlay"
+            gravity = Gravity.CENTER
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+        }
+        frame.addView(
+            texto,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        frame.setOnClickListener { pickImage.launch(arrayOf("image/*")) }
+        return frame
+    }
+
+    /** Tocar un overlay lo muestra u oculta en el lienzo (switch rápido). */
+    private fun toggleOverlay(item: ImageItem) {
+        item.visible = !item.visible
+        if (item.visible) {
+            b.canvas.scene.selectedId = item.id
+        } else if (b.canvas.scene.selectedId == item.id) {
+            b.canvas.scene.selectedId = null
+        }
+        b.canvas.scene.touch()
+        b.canvas.requestRender()
+        onSelectionChanged(b.canvas.scene.selected())
+    }
+
+    private fun borrarOverlay(item: ImageItem) {
+        b.canvas.scene.remove(item)
+        b.canvas.requestRender()
+        onSelectionChanged(b.canvas.selection)
+    }
+
+    private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
+
+    // ------------------------------------------------------------------ orientación del lienzo
+
+    private fun actualizarInfoLienzo() {
+        // En vertical el chip ya dice 9:16, así que la leyenda muestra solo la resolución.
+        // Si el equipo bajó la resolución al grabar, se muestra la que de verdad se usa.
+        val ancho = if (anchoGrabando > 0) anchoGrabando else recAncho
+        val alto = if (altoGrabando > 0) altoGrabando else recAlto
+        b.txtCanvasInfo.text =
+            if (vertical) "$ancho×$alto" else "16:9 · $ancho×$alto"
+        b.btnOrientacion.text = if (vertical) "9:16" else "16:9"
+        // La cabecera del visor se acorta en vertical (el medidor la reescribe cada 2 s).
+        if (vertical) b.txtEtiquetaPrograma.text = "PROGRAMA"
+    }
+
+    private fun cambiarOrientacion(nuevoVertical: Boolean) {
+        if (vertical == nuevoVertical) return
+        // Candado: el formato no se puede cambiar en medio de una grabación o transmisión.
+        if (sesionEnCurso()) {
+            toast("Formato bloqueado mientras grabas o transmites")
+            return
+        }
+        vertical = nuevoVertical
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putBoolean(CLAVE_VERTICAL, vertical).apply()
+        aplicarOrientacion()
+        toast(
+            if (vertical) {
+                "Lienzo vertical 9:16: listo para historias y transmisión vertical"
+            } else {
+                "Lienzo horizontal 16:9"
+            }
+        )
+    }
+
+    /** Hay una sesión en curso que no admite cambios de formato. */
+    private fun sesionEnCurso(): Boolean = recorder.isRecording || transmitiendo
+
+    /** Refleja en la UI el candado de orientación (chip). */
+    private fun actualizarCandadoOrientacion() {
+        val bloqueado = sesionEnCurso()
+        b.btnOrientacion.alpha = if (bloqueado) 0.4f else 1f
+        b.btnOrientacion.text = when {
+            bloqueado -> (if (vertical) "🔒 9:16" else "🔒 16:9")
+            vertical -> "9:16"
+            else -> "16:9"
+        }
+    }
+
+    /** Cambia la duración de la transición entre 300, 500, 800 y 1200 ms. */
+    /** Selector de las 12 transiciones de entrada. */
+    /** Selector de transición con vista previa y duración con barra. */
+    private fun dialogoTransiciones() {
+        val db = DialogTransicionesBinding.inflate(layoutInflater)
+        val tipos = CompositorView.Transicion.values()
+
+        // Lista de las 12 opciones
+        db.rgTransiciones.removeAllViews()
+        tipos.forEachIndexed { i, tipo ->
+            val rb = RadioButton(this).apply {
+                id = 2000 + i
+                text = tipo.label
+                textSize = 14f
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+                buttonTintList = ContextCompat.getColorStateList(this@StudioActivity, R.color.accent)
+                isChecked = tipo == b.canvas.transicion
+            }
+            db.rgTransiciones.addView(rb)
+        }
+
+        // Duración con barra: 200..1600 ms
+        db.sbDuracion.progress = (b.canvas.transicionMs - 200).coerceIn(0, 1400)
+        db.txtDuracion.text = "Duración: ${b.canvas.transicionMs} ms"
+
+        fun duracionActual(): Int = db.sbDuracion.progress + 200
+
+        fun guardar() {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(CLAVE_TRANSICION, b.canvas.transicion.id)
+                .putInt(CLAVE_TRANSICION_MS, b.canvas.transicionMs)
+                .apply()
+        }
+
+        db.rgTransiciones.setOnCheckedChangeListener { grupo, id ->
+            val i = id - 2000
+            if (i in tipos.indices) {
+                b.canvas.transicion = tipos[i]
+                b.canvas.transicionMs = duracionActual()
+                guardar()
+                reproducirPreview(db, tipos[i], b.canvas.transicionMs)
+            }
+        }
+
+        db.sbDuracion.setOnSeekBarChangeListener(
+            object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    sb: android.widget.SeekBar?,
+                    value: Int,
+                    fromUser: Boolean
+                ) {
+                    db.txtDuracion.text = "Duración: ${value + 200} ms"
+                    if (fromUser) {
+                        b.canvas.transicionMs = value + 200
+                        guardar()
+                    }
+                }
+
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {
+                    reproducirPreview(db, b.canvas.transicion, b.canvas.transicionMs)
+                }
+            }
+        )
+
+        db.btnProbar.setOnClickListener {
+            reproducirPreview(db, b.canvas.transicion, b.canvas.transicionMs)
+        }
+
+        val dialogo = AlertDialog.Builder(this).setView(db.root).create()
+        db.btnCerrar.setOnClickListener {
+            guardar()
+            dialogo.dismiss()
+            toast("Transición: ${b.canvas.transicion.label} · ${b.canvas.transicionMs} ms")
+        }
+        dialogo.setOnShowListener {
+            // Primera pasada automática para mostrar cómo se ve
+            db.preview.postDelayed(
+                { reproducirPreview(db, b.canvas.transicion, b.canvas.transicionMs) },
+                250
+            )
+        }
+        dialogo.show()
+    }
+
+    /** Anima la vista previa del diálogo imitando la transición del lienzo. */
+    private fun reproducirPreview(
+        db: DialogTransicionesBinding,
+        tipo: CompositorView.Transicion,
+        duracionMs: Int
+    ) {
+        val item = db.previewItem
+        val cortina = db.previewCortina
+        val ancho = db.preview.width.toFloat().coerceAtLeast(1f)
+        val alto = db.preview.height.toFloat().coerceAtLeast(1f)
+
+        // Estado inicial de cada transición
+        item.animate().cancel()
+        cortina.animate().cancel()
+        item.alpha = 1f
+        item.translationX = 0f
+        item.translationY = 0f
+        item.scaleX = 1f
+        item.scaleY = 1f
+        cortina.visibility = View.GONE
+        cortina.translationX = 0f
+        cortina.translationY = 0f
+
+        val d = duracionMs.toLong().coerceIn(80L, 2000L)
+        val suave = android.view.animation.DecelerateInterpolator()
+
+        when (tipo) {
+            CompositorView.Transicion.CORTE -> {
+                item.alpha = 1f
+                return
+            }
+
+            CompositorView.Transicion.FUNDIDO -> {
+                item.alpha = 0f
+                item.animate().alpha(1f).setDuration(d).setInterpolator(suave).start()
+            }
+
+            CompositorView.Transicion.DESLIZ_IZQ -> {
+                item.translationX = -ancho
+                item.animate().translationX(0f).setDuration(d).setInterpolator(suave).start()
+            }
+
+            CompositorView.Transicion.DESLIZ_DER -> {
+                item.translationX = ancho
+                item.animate().translationX(0f).setDuration(d).setInterpolator(suave).start()
+            }
+
+            CompositorView.Transicion.DESLIZ_ARRIBA -> {
+                item.translationY = -alto
+                item.animate().translationY(0f).setDuration(d).setInterpolator(suave).start()
+            }
+
+            CompositorView.Transicion.DESLIZ_ABAJO -> {
+                item.translationY = alto
+                item.animate().translationY(0f).setDuration(d).setInterpolator(suave).start()
+            }
+
+            CompositorView.Transicion.WIPE_IZQ, CompositorView.Transicion.WIPE_DER,
+            CompositorView.Transicion.WIPE_ARRIBA, CompositorView.Transicion.WIPE_ABAJO -> {
+                item.alpha = 1f
+                cortina.visibility = View.VISIBLE
+                when (tipo) {
+                    CompositorView.Transicion.WIPE_IZQ -> {
+                        cortina.translationX = 0f
+                        cortina.animate().translationX(ancho).setDuration(d)
+                            .setInterpolator(suave).start()
+                    }
+
+                    CompositorView.Transicion.WIPE_DER -> {
+                        cortina.translationX = 0f
+                        cortina.animate().translationX(-ancho).setDuration(d)
+                            .setInterpolator(suave).withEndAction { cortina.visibility = View.GONE }.start()
+                    }
+
+                    CompositorView.Transicion.WIPE_ARRIBA -> {
+                        cortina.translationY = 0f
+                        cortina.animate().translationY(-alto).setDuration(d)
+                            .setInterpolator(suave).withEndAction { cortina.visibility = View.GONE }.start()
+                    }
+
+                    else -> {
+                        cortina.translationY = 0f
+                        cortina.animate().translationY(alto).setDuration(d)
+                            .setInterpolator(suave).start()
+                    }
+                }
+                cortina.animate().withEndAction { cortina.visibility = View.GONE }.start()
+            }
+
+            CompositorView.Transicion.ZOOM_IN -> {
+                item.alpha = 0f
+                item.scaleX = 1.35f
+                item.scaleY = 1.35f
+                item.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(d)
+                    .setInterpolator(suave).start()
+            }
+
+            CompositorView.Transicion.ZOOM_OUT -> {
+                item.alpha = 0f
+                item.scaleX = 0.75f
+                item.scaleY = 0.75f
+                item.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(d)
+                    .setInterpolator(suave).start()
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ audio
+
+    private val rutaAudio by lazy { AudioRuta(this) }
+
+    private fun dbAProgreso(progreso: Int): Float = (progreso / 100f) * 24f - 12f
+
+    /**
+     * Deja lista la entrada de audio al abrir la app: si el dispositivo guardado sigue
+     * disponible se usa ese; si no, cae en el micrófono de la tablet (entrada del sistema).
+     */
+    private fun aplicarAudioGuardado() {
+        runCatching {
+            val p = getSharedPreferences(PREFS, MODE_PRIVATE)
+            val id = p.getInt(CLAVE_AUDIO_ID, -1)
+            val tipo = p.getInt(CLAVE_AUDIO_TIPO, -1)
+            val entradas = rutaAudio.entradas()
+            val elegida = entradas.firstOrNull { it.id == id }
+                ?: entradas.firstOrNull { it.tipo == tipo }
+                ?: entradas.firstOrNull { it.tipo == android.media.AudioDeviceInfo.TYPE_BUILTIN_MIC }
+                ?: entradas.firstOrNull()
+            if (elegida != null) {
+                rutaAudio.seleccionar(elegida.id, elegida.tipo)
+                recorder.entradaExterna = rutaAudio.entradaExterna
+                entradaAudioNombre = elegida.nombre
+                L.i("audio", "entrada al arrancar: ${elegida.nombre}")
+            }
+        }
+    }
+
+    /** Recupera los EQ, el volumen de monitoreo y su estado de las preferencias. */
+    private fun cargarAudioAvanzado() {
+        runCatching {
+            val p = getSharedPreferences(PREFS, MODE_PRIVATE)
+            eqEntrada.fijarTodas(
+                floatArrayOf(
+                    p.getFloat(CLAVE_EQ_ENT_0, 0f),
+                    p.getFloat(CLAVE_EQ_ENT_1, 0f),
+                    p.getFloat(CLAVE_EQ_ENT_2, 0f),
+                    p.getFloat(CLAVE_EQ_ENT_3, 0f),
+                    p.getFloat(CLAVE_EQ_ENT_4, 0f)
+                )
+            )
+            monitorAudio.eq.fijarTodas(
+                floatArrayOf(
+                    p.getFloat(CLAVE_EQ_SAL_0, 0f),
+                    p.getFloat(CLAVE_EQ_SAL_1, 0f),
+                    p.getFloat(CLAVE_EQ_SAL_2, 0f),
+                    p.getFloat(CLAVE_EQ_SAL_3, 0f),
+                    p.getFloat(CLAVE_EQ_SAL_4, 0f)
+                )
+            )
+            monitorAudio.volumen = p.getFloat(CLAVE_AUDIO_MON_VOL, 1f)
+        }
+    }
+
+    /** Diálogo de audio: fuente de entrada, medidor, ganancia y silencio. */
+    // ------------------------------------------------------------------ audio: EQ y monitoreo
+
+    private val eqEntrada by lazy { AudioEq() }
+    private val monitorAudio by lazy { AudioMonitor(this) }
+
+    /** Deja un SeekBar con aspecto de fader de consola (riel oscuro y agarradera naranja). */
+    private fun estilizarFader(sb: android.widget.SeekBar) {
+        sb.progressDrawable = ContextCompat.getDrawable(this, R.drawable.fader_track)
+        sb.thumb = ContextCompat.getDrawable(this, R.drawable.fader_thumb)
+        sb.splitTrack = false
+        sb.minHeight = 42.dp
+        sb.setPadding(6.dp, 5.dp, 6.dp, 5.dp)
+        sb.progressTintList = null
+        sb.thumbTintList = null
+    }
+
+    /** Fila de control para una banda del ecualizador. */
+    private fun filaBanda(
+        titulo: String,
+        eq: AudioEq,
+        indice: Int,
+        alCambiar: () -> Unit
+    ): Triple<View, android.widget.SeekBar, TextView> {
+        val fila = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        fila.addView(TextView(this).apply {
+            text = titulo
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            width = 62.dp
+        })
+        val valor = TextView(this).apply {
+            text = String.format(java.util.Locale.US, "%+.0f dB", eq.gananciasDb[indice])
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
+            gravity = Gravity.END
+            width = 56.dp
+        }
+        val barra = android.widget.SeekBar(this).apply {
+            estilizarFader(this)
+            max = 2400
+            progress = ((eq.gananciasDb[indice] + 12f) * 100f).toInt().coerceIn(0, 2400)
+            setOnSeekBarChangeListener(object :
+                android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    sb: android.widget.SeekBar?,
+                    value: Int,
+                    fromUser: Boolean
+                ) {
+                    val db = value / 100f - 12f
+                    eq.fijarBanda(indice, db)
+                    valor.text = String.format(java.util.Locale.US, "%+.0f dB", db)
+                    if (fromUser) alCambiar()
+                }
+
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+            })
+        }
+        fila.addView(
+            barra,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 12.dp; marginEnd = 12.dp }
+        )
+        fila.addView(valor)
+        fila.setPadding(0, 4.dp, 0, 4.dp)
+        return Triple(fila, barra, valor)
+    }
+
+    /** Bloque de ecualizador con sus 5 bandas y presets. */
+    private fun bloqueEq(eq: AudioEq, alCambiar: () -> Unit): View {
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val bandas = ArrayList<Triple<View, android.widget.SeekBar, TextView>>()
+        for (i in AudioEq.BANDAS.indices) {
+            val fila = filaBanda(AudioEq.NOMBRES[i], eq, i, alCambiar)
+            bandas.add(fila)
+            col.addView(fila.first)
+        }
+        val presets = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 8.dp, 0, 0)
+        }
+        fun boton(texto: String, curva: FloatArray): TextView = TextView(this).apply {
+            text = texto
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+            setBackgroundResource(R.drawable.bg_pill_ghost)
+            setPadding(12.dp, 6.dp, 12.dp, 6.dp)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { marginEnd = 6.dp }
+            setOnClickListener {
+                eq.fijarTodas(curva)
+                // Mover los faders para que se vea el preset
+                bandas.forEachIndexed { i, banda ->
+                    val db = curva.getOrNull(i) ?: 0f
+                    banda.second.progress = ((db + 12f) * 100f).toInt().coerceIn(0, 2400)
+                    banda.third.text = String.format(java.util.Locale.US, "%+.0f dB", db)
+                }
+                alCambiar()
+                toast("Preset aplicado: $texto")
+            }
+        }
+        presets.addView(boton("Plano", AudioEq.presetPlano()))
+        presets.addView(boton("Voz", AudioEq.presetVoz()))
+        presets.addView(boton("Música", AudioEq.presetMusica()))
+        presets.addView(boton("Ambiente", AudioEq.presetAmbiente()))
+        col.addView(presets)
+        return col
+    }
+
+    private fun seccion(titulo: String): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(0, 14.dp, 0, 0)
+        addView(TextView(this@StudioActivity).apply {
+            text = titulo
+            textSize = 11f
+            letterSpacing = 0.1f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+            setPadding(0, 0, 0, 6.dp)
+        })
+    }
+
+    /**
+     * Editor de audio: fuente de entrada con su ecualizador y monitoreo de salida con
+     * el suyo. El EQ es real (biquad de 5 bandas) y se aplica a lo que se graba y a
+     * lo que se escucha.
+     */
+    // ------------------------------------------------------------------ transmisión
+
+    // ------------------------------------------------------------------ transmisión (RootEncoder)
+
+    /** Motor de salida: un solo codificador para RTMP y para el archivo. */
+    /** Motor de salida: uno solo por proceso y fuera de la pantalla (ver [Emision]). */
+    private val emisor: com.jfrmedia.switcher.studio.stream.Emisor
+        get() = com.jfrmedia.switcher.studio.stream.Emision.obtener(this)
+
+    /**
+     * Vuelve a enganchar esta pantalla como escucha del emisor.
+     *
+     * Se llama al crear la pantalla porque Android la recrea (cambio de ventana, poca memoria) y el
+     * emisor sigue siendo el mismo: sin esto la pantalla nueva no se enteraba de nada y mostraba
+     * «Transmitir» con el directo en el aire.
+     */
+    private fun escucharEmisor() {
+        emisor.alEstado = { estado, mensaje ->
+            runOnUiThread {
+                L.i("stream", "estado: $estado · $mensaje")
+                anotar("estado: $estado · $mensaje")
+                when (estado) {
+                    com.jfrmedia.switcher.studio.stream.Emisor.Estado.TRANSMITIENDO -> {
+                        // El cronómetro mide el tiempo ENVIANDO a Facebook, no el del directo
+                        // publicado (ese solo lo sabe el Producer).
+                        b.txtLive.text = "ENVIANDO"
+                        b.liveDot.setBackgroundResource(R.drawable.bg_dot_red)
+                        recStartMs = SystemClock.elapsedRealtime()
+                        handler.removeCallbacks(ticker)
+                        handler.post(ticker)
+                        abrirRegistro("transmisión")
+                        anotar("conectado a Facebook")
+                    }
+
+                    com.jfrmedia.switcher.studio.stream.Emisor.Estado.ERROR -> {
+                        b.txtLive.text = "Sin conexión"
+                        b.txtTimer.text = "00:00"
+                        handler.removeCallbacks(ticker)
+                        b.liveDot.setBackgroundResource(R.drawable.bg_dot_gray)
+                        anotar("error: $mensaje")
+                    }
+
+                    com.jfrmedia.switcher.studio.stream.Emisor.Estado.DETENIDO -> {
+                        b.txtLive.text = "Sin transmisión"
+                        b.txtTimer.text = "00:00"
+                        handler.removeCallbacks(ticker)
+                        b.liveDot.setBackgroundResource(R.drawable.bg_dot_gray)
+                        if (!recorder.isRecording) cerrarRegistro()
+                    }
+
+                    else -> Unit
+                }
+                actualizarBotonSesion()
+                actualizarCandadoOrientacion()
+            }
+        }
+    }
+
+    /** MP4 de respaldo del directo, pendiente de publicar en la galería. */
+    private var archivoEmision: java.io.File? = null
+
+    /** true cuando el usuario detiene el directo: entonces sí se publica la grabación. */
+    private var publicarEmision = false
+
+    /** Graba en MP4 con el mismo codificador que está transmitiendo. */
+    private fun grabarConEmisor(): Boolean {
+        val carpeta = java.io.File(getExternalFilesDir(null) ?: filesDir, "Emision")
+        if (!carpeta.exists()) carpeta.mkdirs()
+        val nombre = "JFR_" + java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+            .format(java.util.Date()) + ".mp4"
+        val archivo = java.io.File(carpeta, nombre)
+        archivoEmision = archivo
+        publicarEmision = false
+        emisor.alCerrarGrabacion = { ruta ->
+            runOnUiThread { publicarGrabacionDelDirecto(java.io.File(ruta)) }
+        }
+        val ok = emisor.grabar(archivo.absolutePath)
+        if (ok) toast("Grabando en $nombre") else {
+            archivoEmision = null
+            toast("No se pudo grabar")
+        }
+        return ok
+    }
+
+    /** true mientras se está publicando, para que no se copie dos veces. */
+    private var publicandoEmision = false
+
+    /**
+     * Publica en la galería la grabación hecha durante el directo. Solo cuando la sesión la
+     * detiene el usuario: si el envío falla, el respaldo se queda en «Emision» como antes.
+     *
+     * El muxer escribe el índice («moov») al cerrar, un instante DESPUÉS del aviso STOPPED.
+     * Si se copia antes, el MP4 queda sin índice y ningún reproductor lo abre: se espera y
+     * se reintenta hasta que el índice está.
+     */
+    private fun publicarGrabacionDelDirecto(archivo: java.io.File, intento: Int = 0) {
+        if (!publicarEmision || archivoEmision == null) return
+        if (intento == 0) {
+            if (publicandoEmision) return
+            publicandoEmision = true
+        }
+        val terminar = {
+            archivoEmision = null
+            publicarEmision = false
+            publicandoEmision = false
+        }
+        if (!archivo.exists() || archivo.length() < 1024) {
+            if (intento < 8) {
+                handler.postDelayed({ publicarGrabacionDelDirecto(archivo, intento + 1) }, 400)
+            } else {
+                terminar()
+            }
+            return
+        }
+        if (!mp4TieneIndice(archivo)) {
+            if (intento < 10) {
+                handler.postDelayed({ publicarGrabacionDelDirecto(archivo, intento + 1) }, 500)
+            } else {
+                terminar()
+                toast("La grabación del directo no se pudo cerrar; quedó en la carpeta Emision")
+            }
+            return
+        }
+        val mb = (archivo.length() / (1024 * 1024)).coerceAtLeast(1)
+        terminar()
+        val uri = publishVideo(archivo)
+        if (uri != null) {
+            lastVideoUri = uri
+            toast("Grabación del directo guardada en la galería ($mb MB)")
+        } else {
+            toast("Grabación del directo en ${archivo.parentFile?.name}/${archivo.name}")
+        }
+    }
+
+    /** true si el MP4 ya tiene su átomo «moov» (índice): sin él no se puede reproducir. */
+    private fun mp4TieneIndice(archivo: java.io.File): Boolean = runCatching {
+        val buscado = byteArrayOf(
+            'm'.code.toByte(), 'o'.code.toByte(), 'o'.code.toByte(), 'v'.code.toByte()
+        )
+        java.io.FileInputStream(archivo).use { entrada ->
+            val buffer = ByteArray(64 * 1024)
+            var leidos = entrada.read(buffer)
+            while (leidos > 0) {
+                var i = 0
+                while (i + 4 <= leidos) {
+                    if (buffer[i] == buscado[0] && buffer[i + 1] == buscado[1] &&
+                        buffer[i + 2] == buscado[2] && buffer[i + 3] == buscado[3]
+                    ) {
+                        return@use true
+                    }
+                    i++
+                }
+                leidos = entrada.read(buffer)
+            }
+            false
+        }
+    }.getOrDefault(false)
+    // --------------------------------------------------- Facebook: página y directo automático
+
+    /** WebView donde se hace el login de Facebook (OAuth implícito). */
+    /** Callback del SDK de Facebook. */
+    private val fbCallback = com.facebook.CallbackManager.Factory.create()
+
+    /**
+     * Login con el **SDK oficial**: Meta bloquea el acceso desde navegadores incrustados,
+     * así que se usa la app de Facebook o Chrome (Custom Tabs).
+     */
+    private fun loginFacebook() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val appId = prefs.getString(CLAVE_FB_APPID, "").orEmpty().trim()
+        if (appId.isEmpty()) {
+            toast("Falta el App ID de Facebook")
+            return
+        }
+        com.facebook.FacebookSdk.setApplicationId(appId)
+        com.facebook.FacebookSdk.setAutoLogAppEventsEnabled(false)
+        com.facebook.FacebookSdk.setAdvertiserIDCollectionEnabled(false)
+        com.facebook.FacebookSdk.sdkInitialize(this)
+
+        val gestor = com.facebook.login.LoginManager.getInstance()
+        gestor.registerCallback(fbCallback, object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+            override fun onSuccess(resultado: com.facebook.login.LoginResult) {
+                pedirPermisoPublicar(resultado.accessToken.token)
+            }
+
+            override fun onCancel() {
+                toast("Inicio de sesión cancelado")
+            }
+
+            override fun onError(error: com.facebook.FacebookException) {
+                toast("No se pudo entrar: ${error.message}")
+            }
+        })
+        gestor.logInWithReadPermissions(
+            this,
+            listOf("pages_show_list", "pages_read_engagement", "pages_manage_posts")
+        )
+    }
+
+    /** «publish_video» es permiso de publicación: Meta exige pedirlo en una segunda pasada. */
+    private fun pedirPermisoPublicar(tokenActual: String?) {
+        val token = com.facebook.AccessToken.getCurrentAccessToken()
+        if (token != null && token.permissions.contains("publish_video")) {
+            guardarSesionFacebook(token.token ?: return)
+            return
+        }
+        com.facebook.login.LoginManager.getInstance().registerCallback(
+            fbCallback,
+            object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+                override fun onSuccess(resultado: com.facebook.login.LoginResult) {
+                    guardarSesionFacebook(resultado.accessToken.token)
+                }
+
+                override fun onCancel() {
+                    // Sin permiso de publicación se guarda la sesión igual: la app avisará.
+                    tokenActual?.let { guardarSesionFacebook(it) }
+                }
+
+                override fun onError(error: com.facebook.FacebookException) {
+                    tokenActual?.let { guardarSesionFacebook(it) }
+                }
+            }
+        )
+        com.facebook.login.LoginManager.getInstance()
+            .logInWithPublishPermissions(this, listOf("publish_video"))
+    }
+
+    /** Con el token de usuario se listan las páginas y se guarda la elegida. */
+    private fun guardarSesionFacebook(tokenUsuario: String) {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        prefs.edit().putString(CLAVE_FB_USER, tokenUsuario).apply()
+        toast("Sesión iniciada, buscando páginas…")
+        Thread {
+            val paginas = com.jfrmedia.switcher.studio.stream.Facebook.paginas(tokenUsuario)
+            runOnUiThread {
+                if (paginas.isEmpty()) {
+                    toast("No se encontraron páginas que administres")
+                    return@runOnUiThread
+                }
+                val nombres = paginas.map { it.nombre }.toTypedArray()
+                AlertDialog.Builder(this)
+                    .setTitle("¿En qué página transmitir?")
+                    .setItems(nombres) { _, cual ->
+                        val p = paginas[cual]
+                        prefs.edit()
+                            .putString(CLAVE_FB_PAGE_ID, p.id)
+                            .putString(CLAVE_FB_PAGE_NAME, p.nombre)
+                            .putString(CLAVE_FB_PAGE_TOKEN, p.token)
+                            .apply()
+                        toast("Página elegida: ${p.nombre}")
+                    }
+                    .show()
+            }
+        }.start()
+    }
+
+    /** Crea el directo en la página elegida y devuelve la URL RTMPS. */
+    private fun abrirDirectoFacebook(): String? {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val pageId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty()
+        val pageToken = prefs.getString(CLAVE_FB_PAGE_TOKEN, "").orEmpty()
+        if (pageId.isEmpty() || pageToken.isEmpty()) return null
+        val titulo = "JFR Media Lab · " +
+            java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.US).format(java.util.Date())
+        val directo = com.jfrmedia.switcher.studio.stream.Facebook
+            .crearDirecto(pageId, pageToken, titulo)
+        if (directo == null) {
+            toast("Facebook no permitió crear el directo")
+            return null
+        }
+        directoActivoId = directo.id
+        return directo.urlRtmp
+    }
+
+    /** Cierra el directo abierto por la app. */
+    private fun cerrarDirectoFacebook() {
+        val id = directoActivoId ?: return
+        directoActivoId = null
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val pageToken = prefs.getString(CLAVE_FB_PAGE_TOKEN, "").orEmpty()
+        if (pageToken.isEmpty()) return
+        Thread {
+            com.jfrmedia.switcher.studio.stream.Facebook.terminarDirecto(id, pageToken)
+        }.start()
+    }
+    /**
+     * Abre el Live Producer de Facebook en Chrome, a pantalla completa.
+     *
+     * Se fuerza Chrome porque Android entrega los enlaces de facebook.com a la app de Facebook,
+     * que abre su Producer en modo cámara (pantalla negra y sin opción de RTMP).
+     */
+    private fun abrirLiveProducer() {
+        val pagina = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
+        if (pagina.isBlank()) {
+            toast("Escribe el ID de tu página en este diálogo para abrir su Producer")
+            return
+        }
+        // Sin `target` Facebook manda al muro en vez del Producer.
+        val url = "https://www.facebook.com/live/producer/?target=$pagina"
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            setPackage("com.android.chrome")
+        }
+        val abierto = runCatching { startActivity(intent) }.isSuccess
+        if (!abierto) {
+            val suelto = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { startActivity(suelto) }
+                .onFailure { toast("No hay navegador para abrir el Live Producer") }
+        }
+    }
+
+    /** Arranca el envío a Facebook con la clave guardada. */
+    private fun iniciarTransmision() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val clave = prefs.getString(CLAVE_FB_CLAVE, "").orEmpty().trim()
+        if (clave.isEmpty()) {
+            toast("Falta la clave de transmisión en «Facebook»")
+            return
+        }
+        // Si hay una página conectada, la app crea el directo y entra en vivo sola.
+        val urlDirecto = abrirDirectoFacebook()
+        val url = urlDirecto
+            ?: (prefs.getString(CLAVE_FB_URL, FB_URL_POR_DEFECTO).orEmpty().trim() + clave)
+        // El envío usa el mismo criterio que la grabación: el número es el lado corto, así que
+        // en vertical 720p sale 720×1280 (antes se forzaba 16:9 y el lienzo vertical se iba
+        // con barras negras a los lados).
+        val ladoCorto = when {
+            streamAlto >= 1080 -> 1080
+            streamAlto >= 720 -> 720
+            else -> 480
+        }
+        val (ancho, alto) = tamanoGrabacion(ladoCorto)
+        val kbps = if (bitrateAuto) bitrateEmisionAuto(ladoCorto) else streamBitrateKbps
+        emisor.volteoVertical = prefs.getBoolean("stream_flip", false)
+        val superficie = emisor.preparar(ancho, alto, kbps, 30, vertical)
+        if (superficie == null) {
+            toast("No se pudo preparar la transmisión")
+            return
+        }
+        // El compositor dibuja el programa en la superficie del emisor.
+        b.canvas.beginRecordingOutput(superficie, ancho, alto, System.nanoTime())
+        // La grabación va antes de transmitir: así el muxer recibe el formato de video.
+        // En «Grabar y transmitir a la vez» se graba siempre, aunque el interruptor de
+        // respaldo esté apagado.
+        val grabarRespaldo = modoSesion == "ambos" || prefs.getBoolean(CLAVE_FB_GRABAR, true)
+        if (grabarRespaldo && !emisor.grabando) {
+            if (grabarConEmisor()) {
+                recStartMs = SystemClock.elapsedRealtime()
+                b.liveDot.setBackgroundResource(R.drawable.bg_dot_red)
+            }
+        }
+        if (!emisor.transmitir(url)) {
+            // Sin conexión no se deja abierta la grabación de respaldo: quedaba un MP4
+            // creciendo en la carpeta «Emision» que la pantalla no mostraba ni podía detener
+            // (pasó de verdad al probar el 27/10).
+            if (emisor.grabando) emisor.detenerGrabacion()
+            b.canvas.endRecordingOutput()
+            b.canvas.salidaInvertida = false
+            b.liveDot.setBackgroundResource(R.drawable.bg_dot_gray)
+            return
+        }
+        ventanasRedFloja = 0
+        actualizarBotonSesion()
+        actualizarCandadoOrientacion()
+        abrirRegistro("transmisión")
+        iniciarProteccionSesion()
+        toast("Conectando con Facebook…")
+        // Cronómetro del directo: si no hay grabación local, cuenta el tiempo en el aire.
+        if (!recorder.isRecording) {
+            if (!emisor.grabando) recStartMs = SystemClock.elapsedRealtime()
+            handler.removeCallbacks(ticker)
+            handler.post(ticker)
+        }
+    }
+
+    /** Corta la transmisión y libera la superficie del compositor. */
+    private fun cortarTransmision() {
+        // El usuario cierra la sesión: la grabación de respaldo sí se publica en la galería.
+        publicarEmision = archivoEmision != null
+        if (emisor.grabando) emisor.detenerGrabacion()        // Si la librería no avisa del cierre del MP4, se publica igual un instante después.
+        val pendiente = archivoEmision
+        if (publicarEmision && pendiente != null) {
+            handler.postDelayed({
+                if (publicarEmision && archivoEmision != null) {
+                    publicarGrabacionDelDirecto(pendiente)
+                }
+            }, 1500)
+        }
+        emisor.detenerTransmision()
+        b.canvas.endRecordingOutput()
+        b.canvas.salidaInvertida = false
+        actualizarBotonSesion()
+        actualizarCandadoOrientacion()
+        if (!recorder.isRecording) {
+            handler.removeCallbacks(ticker)
+            b.txtTimer.text = "00:00"
+            b.liveDot.setBackgroundResource(R.drawable.bg_dot_gray)
+            cerrarRegistro()
+            detenerProteccionSesion()
+        }
+        // Se apaga el aviso de red floja: ya no hay envío que vigilar.
+        handler.removeCallbacks(parpadeoRed)
+        ventanasRedFloja = 0
+        if (redFloja) {
+            redFloja = false
+            valoresEstado["red"]?.alpha = 1f
+            valoresEstado["red"]?.setTextColor(
+                ContextCompat.getColor(this, R.color.text_primary)
+            )
+        }
+        toast("Transmisión detenida")
+    }
+    /** Clave y URL de la transmisión (Facebook por ahora, luego más destinos). */
+    private fun dialogoFacebook() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val caja = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(22.dp, 10.dp, 22.dp, 10.dp)
+        }
+
+        // --- Cuenta y página ---
+        val paginaActual = prefs.getString(CLAVE_FB_PAGE_NAME, "").orEmpty()
+        caja.addView(TextView(this).apply {
+            text = if (paginaActual.isEmpty()) {
+                "Sin página conectada"
+            } else {
+                "Página: $paginaActual"
+            }
+            textSize = 13f
+            setTextColor(
+                ContextCompat.getColor(
+                    this@StudioActivity,
+                    if (paginaActual.isEmpty()) R.color.text_secondary else R.color.accent
+                )
+            )
+            setPadding(0, 0, 0, 8.dp)
+        })
+
+        caja.addView(TextView(this).apply {
+            text = "App ID de Meta"
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+        })
+        val campoApp = EditText(this).apply {
+            setText(prefs.getString(CLAVE_FB_APPID, ""))
+            textSize = 12f
+            setSingleLine(true)
+            hint = "Número de tu app en developers.facebook.com"
+        }
+        caja.addView(campoApp)
+
+        val botonLogin = TextView(this).apply {
+            text = "Entrar con Facebook y elegir página"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.bg_root))
+            setBackgroundResource(R.drawable.bg_pill_accent)
+            setPadding(16.dp, 12.dp, 16.dp, 12.dp)
+            setOnClickListener {
+                prefs.edit().putString(CLAVE_FB_APPID, campoApp.text.toString().trim()).apply()
+                loginFacebook()
+            }
+        }
+        caja.addView(
+            botonLogin,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 12.dp }
+        )
+
+        caja.addView(TextView(this).apply {
+            text = "Al conectar, la app crea el directo y entra en vivo sola en la página que " +
+                "elijas. Ya no necesitas el Live Producer."
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            setPadding(0, 8.dp, 0, 4.dp)
+        })
+
+        // --- Respaldo manual (URL + clave) ---
+        caja.addView(TextView(this).apply {
+            text = "Respaldo manual · RTMPS"
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+            setPadding(0, 14.dp, 0, 0)
+        })
+        val campoUrl = EditText(this).apply {
+            setText(prefs.getString(CLAVE_FB_URL, FB_URL_POR_DEFECTO))
+            textSize = 12f
+            setSingleLine(true)
+        }
+        caja.addView(campoUrl)
+        val campoClave = EditText(this).apply {
+            setText(prefs.getString(CLAVE_FB_CLAVE, ""))
+            textSize = 12f
+            setSingleLine(true)
+            hint = "Clave del Live Producer (opcional)"
+        }
+        caja.addView(campoClave)
+
+        // --- Live Producer en el navegador ---
+        caja.addView(TextView(this).apply {
+            text = "Elige primero el destino en el Producer (perfil o página): cada uno tiene su clave."
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            setPadding(0, 12.dp, 0, 6.dp)
+        })
+        caja.addView(TextView(this).apply {
+            text = "Abrir Live Producer"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+            setBackgroundResource(R.drawable.bg_pill_ghost)
+            setPadding(16.dp, 12.dp, 16.dp, 12.dp)
+            setOnClickListener { abrirLiveProducer() }
+        })
+
+        AlertDialog.Builder(this)
+            .setTitle("Conectar con Facebook")
+            .setView(ScrollView(this).apply { addView(caja) })
+            .setPositiveButton(if (transmitiendo) "Detener" else "Transmitir") { _, _ ->
+                prefs.edit()
+                    .putString(CLAVE_FB_APPID, campoApp.text.toString().trim())
+                    .putString(CLAVE_FB_URL, campoUrl.text.toString().trim())
+                    .putString(CLAVE_FB_CLAVE, campoClave.text.toString().trim())
+                    .apply()
+                if (transmitiendo) cortarTransmision() else iniciarTransmision()
+            }
+            .setNegativeButton("Cerrar", null)
+            .show()
+    }
+    private fun dialogoAudio() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val contenedor = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(22.dp, 10.dp, 22.dp, 22.dp)
+        }
+
+        fun guardarTodo() {
+            prefs.edit()
+                .putFloat(CLAVE_AUDIO_DB, 20f * kotlin.math.log10(recorder.ganancia.coerceAtLeast(0.01f)))
+                .putBoolean(CLAVE_AUDIO_MUDO, recorder.silencio)
+                .putInt(CLAVE_AUDIO_MON, if (monitorAudio.encendido) 1 else 0)
+                .putFloat(CLAVE_AUDIO_MON_VOL, monitorAudio.volumen)
+                .putFloat(CLAVE_EQ_ENT_0, eqEntrada.gananciasDb[0])
+                .putFloat(CLAVE_EQ_ENT_1, eqEntrada.gananciasDb[1])
+                .putFloat(CLAVE_EQ_ENT_2, eqEntrada.gananciasDb[2])
+                .putFloat(CLAVE_EQ_ENT_3, eqEntrada.gananciasDb[3])
+                .putFloat(CLAVE_EQ_ENT_4, eqEntrada.gananciasDb[4])
+                .putFloat(CLAVE_EQ_SAL_0, monitorAudio.eq.gananciasDb[0])
+                .putFloat(CLAVE_EQ_SAL_1, monitorAudio.eq.gananciasDb[1])
+                .putFloat(CLAVE_EQ_SAL_2, monitorAudio.eq.gananciasDb[2])
+                .putFloat(CLAVE_EQ_SAL_3, monitorAudio.eq.gananciasDb[3])
+                .putFloat(CLAVE_EQ_SAL_4, monitorAudio.eq.gananciasDb[4])
+                .apply()
+        }
+
+        // ---- ENTRADA ----
+        val secEnt = seccion("ENTRADA · lo que se graba y se transmite")
+        contenedor.addView(secEnt)
+        val rgEnt = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+        val entradas = rutaAudio.entradas()
+        val idGuardado = prefs.getInt(CLAVE_AUDIO_ID, -1)
+        entradas.forEachIndexed { i, entrada ->
+            rgEnt.addView(RadioButton(this).apply {
+                id = 1000 + i
+                text = entrada.nombre
+                textSize = 13f
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+                buttonTintList = ContextCompat.getColorStateList(this@StudioActivity, R.color.accent)
+                tag = entrada
+                isChecked = entrada.id == idGuardado || (idGuardado == -1 && i == 0)
+            })
+        }
+        rgEnt.setOnCheckedChangeListener { grupo, id ->
+            val elegida = grupo.findViewById<RadioButton>(id)?.tag as? AudioRuta.Entrada
+            if (elegida != null) {
+                rutaAudio.seleccionar(elegida.id, elegida.tipo)
+                recorder.entradaExterna = rutaAudio.entradaExterna
+                entradaAudioNombre = elegida.nombre
+                actualizarEntradaAudio()
+                prefs.edit()
+                    .putInt(CLAVE_AUDIO_ID, elegida.id)
+                    .putInt(CLAVE_AUDIO_TIPO, elegida.tipo)
+                    .apply()
+                eqEntrada.reiniciar()
+            }
+        }
+        secEnt.addView(rgEnt)
+
+        secEnt.addView(TextView(this).apply {
+            text = "Ganancia de entrada"
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            setPadding(0, 8.dp, 0, 0)
+        })
+        val txtGanancia = TextView(this).apply {
+            text = String.format(
+                java.util.Locale.US, "%+.1f dB",
+                20f * kotlin.math.log10(recorder.ganancia.coerceAtLeast(0.01f))
+            )
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
+        }
+        secEnt.addView(txtGanancia)
+        val sbGanancia = android.widget.SeekBar(this).apply {
+            estilizarFader(this)
+            max = 2400
+            progress = (((20f * kotlin.math.log10(recorder.ganancia.coerceAtLeast(0.01f))) + 12f) * 100f)
+                .toInt().coerceIn(0, 2400)
+        }
+        sbGanancia.setOnSeekBarChangeListener(object :
+            android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar?, value: Int, fromUser: Boolean) {
+                val db = value / 100f - 12f
+                recorder.ganancia = Math.pow(10.0, (db / 20.0)).toFloat()
+                txtGanancia.text = String.format(java.util.Locale.US, "%+.1f dB", db)
+                if (fromUser) guardarTodo()
+            }
+
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+        })
+        secEnt.addView(sbGanancia)
+
+        val swMudo = android.widget.CheckBox(this).apply {
+            text = "Silenciar la entrada"
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            buttonTintList = ContextCompat.getColorStateList(this@StudioActivity, R.color.accent)
+            isChecked = recorder.silencio
+            setOnCheckedChangeListener { _, valor ->
+                recorder.silencio = valor
+                guardarTodo()
+            }
+        }
+        secEnt.addView(swMudo)
+
+        secEnt.addView(TextView(this).apply {
+            text = "ECUALIZADOR DE ENTRADA"
+            textSize = 11f
+            letterSpacing = 0.1f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+            setPadding(0, 12.dp, 0, 4.dp)
+        })
+        secEnt.addView(bloqueEq(eqEntrada) { guardarTodo() })
+
+        secEnt.addView(TextView(this).apply {
+            text = "Nivel de entrada (se mueve al grabar)"
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            setPadding(0, 10.dp, 0, 4.dp)
+        })
+        secEnt.addView(
+            com.jfrmedia.switcher.studio.ui.AudioMeterView(this).apply {
+                levelProvider = { recorder.lastLevel }
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, 24.dp
+                )
+            }
+        )
+
+        // ---- SALIDA ----
+        val secSal = seccion("SALIDA · monitoreo para escuchar cómo queda")
+        contenedor.addView(secSal)
+        val swMon = android.widget.CheckBox(this).apply {
+            text = "Escuchar por la salida (usa audífonos para evitar acople)"
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            buttonTintList = ContextCompat.getColorStateList(this@StudioActivity, R.color.accent)
+            isChecked = prefs.getInt(CLAVE_AUDIO_MON, 0) == 1
+            setOnCheckedChangeListener { _, valor ->
+                if (valor) {
+                    if (monitorAudio.arrancar()) toast("Monitoreo encendido") else toast("No se pudo abrir la salida")
+                } else {
+                    monitorAudio.detener()
+                }
+                guardarTodo()
+            }
+        }
+        secSal.addView(swMon)
+
+        val rgSal = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+        val salidas = monitorAudio.salidas()
+        salidas.forEachIndexed { i, salida ->
+            rgSal.addView(RadioButton(this).apply {
+                id = 3000 + i
+                text = salida.nombre
+                textSize = 13f
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+                buttonTintList = ContextCompat.getColorStateList(this@StudioActivity, R.color.accent)
+                tag = salida
+                isChecked = i == 0
+            })
+        }
+        rgSal.setOnCheckedChangeListener { grupo, id ->
+            val elegida = grupo.findViewById<RadioButton>(id)?.tag as? AudioMonitor.Salida
+            if (elegida != null) monitorAudio.seleccionarSalida(elegida.id)
+        }
+        secSal.addView(rgSal)
+
+        val txtVol = TextView(this).apply {
+            text = "Volumen de monitoreo: ${(monitorAudio.volumen * 100).toInt()}%"
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
+            setPadding(0, 8.dp, 0, 0)
+        }
+        secSal.addView(txtVol)
+        val sbVol = android.widget.SeekBar(this).apply {
+            estilizarFader(this)
+            max = 150
+            progress = (monitorAudio.volumen * 100).toInt().coerceIn(0, 150)
+            setOnSeekBarChangeListener(object :
+                android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    sb: android.widget.SeekBar?,
+                    value: Int,
+                    fromUser: Boolean
+                ) {
+                    monitorAudio.volumen = value / 100f
+                    txtVol.text = "Volumen de monitoreo: $value%"
+                    if (fromUser) guardarTodo()
+                }
+
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+            })
+        }
+        secSal.addView(sbVol)
+
+        secSal.addView(TextView(this).apply {
+            text = "ECUALIZADOR DE SALIDA"
+            textSize = 11f
+            letterSpacing = 0.1f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+            setPadding(0, 12.dp, 0, 4.dp)
+        })
+        secSal.addView(bloqueEq(monitorAudio.eq) { guardarTodo() })
+
+        val scroll = ScrollView(this).apply { addView(contenedor) }
+        AlertDialog.Builder(this)
+            .setTitle("Audio")
+            .setView(scroll)
+            .setNegativeButton("Cerrar") { _, _ -> guardarTodo() }
+            .show()
+    }
+
+    /**
+     * Horizontal: fuentes a la izquierda y programa con los controles debajo.
+     * Vertical: controles en columna a la izquierda, lienzo 9:16 al centro y las
+     * fuentes (cámaras y overlays, 3 por fila) ocupando el espacio libre a la derecha.
+     */
+    private fun aplicarOrientacion() {
+        val aspecto = if (vertical) 9f / 16f else 16f / 9f
+        b.canvas.scene.aspect = aspecto
+        b.canvasHost.aspect = aspecto
+
+        // El visor vive siempre dentro de su panel; en vertical el ancho se ajusta al alto.
+        b.canvasHost.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+        )
+
+        ajustarBarraPorOrientacion()
+        hub.vertical = vertical
+        // La cámara de la tablet solo existe en horizontal: en vertical se apaga.
+        if (vertical) {
+            if (localCam.encendida) apagarCamaraTablet()
+        } else {
+            // Solo se enciende sola si el usuario la dejó encendida la última vez.
+            if (getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_TABLET_CAM, false) &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                encenderCamaraTablet()
+            }
+        }
+        moverControles()
+        reacomodarCuerpo()
+        buildSourcesGrid()
+        // La rejilla se reconstruye: hay que volver a enganchar la cámara local a su tarjeta.
+        localCam.track?.let { pista ->
+            tiles.getOrNull(LocalCam.SLOT)?.bindLocal(pista, "Tablet")
+        }
+        // Si ya hay cámaras conectadas, se les avisa la nueva orientación del lienzo.
+        hub.all().forEach { runCatching { it.enviarOrientacion() } }
+        actualizarBotonTablet()
+        // El corte de la pantalla partida depende de la orientación: se recoloca.
+        if (splitActivo) aplicarLayoutSplit()
+        actualizarInfoLienzo()
+        ajustarLienzo()
+        b.canvas.requestRender()
+        refreshOverlayTiles()
+    }
+
+    /**
+     * En vertical el visor vive DENTRO del cuerpo (así empieza debajo de la barra superior y
+     * nunca la tapa) y ocupa toda la altura libre con relación 9:16, así que hay que fijarle
+     * el ancho exacto al panel. En horizontal vuelve a repartirse con las fuentes por peso.
+     */
+    private fun ajustarLienzo() {
+        handler.postDelayed({ aplicarAjusteLienzo(0) }, 120)
+    }
+
+    /**
+     * Fija el ancho del panel del programa (vertical) al alto que queda libre. Se repite unas
+     * cuantas veces porque al cambiar el ancho la cabecera «PROGRAMA» puede pasar de una a dos
+     * líneas: el ancho definitivo es el que ya no cambia, para que el lienzo llene el alto justo.
+     */
+    private fun aplicarAjusteLienzo(intento: Int) {
+        if (!vertical) {
+            b.contenido.setPadding(0, 0, 0, 0)
+            b.canvasHost.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+            )
+            b.canvasHost.requestLayout()
+            return
+        }
+        b.canvasHost.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+        )
+        val ancho = anchoPrograma()
+        if (ancho <= 0) return
+        if (b.panelPrograma.layoutParams?.width != ancho) {
+            b.panelPrograma.layoutParams = LinearLayout.LayoutParams(
+                ancho, ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            b.panelPrograma.requestLayout()
+        }
+        if (intento < 4) b.panelPrograma.post { aplicarAjusteLienzo(intento + 1) }
+    }
+
+    /**
+     * Ancho que necesita el panel del programa en vertical: el alto del cuerpo, menos la
+     * cabecera «PROGRAMA» y los rellenos del panel, pasado a 9:16, más los rellenos.
+     */
+    private fun anchoPrograma(): Int {
+        val altoPanel = b.cuerpo.height
+        if (altoPanel <= 0) return 0
+        val panel = b.panelPrograma
+        val cabecera = if (b.cabeceraPrograma.visibility == View.VISIBLE) {
+            b.cabeceraPrograma.height
+        } else {
+            0
+        }
+        val altoLienzo = (altoPanel - panel.paddingTop - panel.paddingBottom - cabecera)
+            .coerceAtLeast(1)
+        val anchoLienzo = (altoLienzo * 9f / 16f).toInt()
+        return anchoLienzo + panel.paddingStart + panel.paddingEnd
+    }
+
+    private fun reacomodarCuerpo() {
+        val cuerpo = b.cuerpo
+        cuerpo.removeAllViews()
+        (b.panelPrograma.parent as? ViewGroup)?.removeView(b.panelPrograma)
+        // En vertical no hay banda: los dos bloques van a la columna.
+        (zonaControles?.parent as? ViewGroup)?.removeView(zonaControles)
+        if (vertical) {
+            // La rejilla ocupa 3/4 del ancho y la columna de controles el cuarto que antes
+            // usaba la cuarta cámara: ahí caben los botones en dos columnas y el monitor.
+            cuerpo.addView(
+                b.panelFuentes,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 3f)
+            )
+            cuerpo.addView(
+                b.slotIzquierdo,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+            )
+            // El visor va dentro del cuerpo, no en la raíz: así la barra superior queda
+            // libre y el panel empieza justo debajo de ella. El ancho definitivo lo pone
+            // ajustarLienzo() en cuanto el cuerpo tiene alto medido.
+            cuerpo.addView(
+                b.panelPrograma,
+                LinearLayout.LayoutParams(
+                    anchoPrograma(),
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+            b.slotIzquierdo.visibility = View.VISIBLE
+        } else {
+            b.slotIzquierdo.visibility = View.GONE
+            b.contenido.setPadding(0, 0, 0, 0)
+            cuerpo.addView(
+                b.panelFuentes,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.45f)
+            )
+            cuerpo.addView(
+                b.panelPrograma,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.55f)
+            )
+        }
+        ubicarPanelAudio()
+    }
+    /** Tipo de letra y relleno originales de cada botón (para restaurarlos al volver a horizontal). */
+    private val estilosOriginales = HashMap<TextView, Triple<Float, Int, Int>>()
+
+    private fun recordarEstilo(v: TextView) {
+        if (!estilosOriginales.containsKey(v)) {
+            val sp = v.textSize / resources.displayMetrics.scaledDensity
+            estilosOriginales[v] = Triple(sp, v.paddingStart, v.paddingEnd)
+        }
+    }
+
+    private fun restaurarEstilo(v: TextView) {
+        val original = estilosOriginales[v] ?: return
+        v.textSize = original.first
+        v.setPadding(original.second, v.paddingTop, original.third, v.paddingBottom)
+    }
+
+    /** Coloca la fila de ajustes de imagen: segunda fila en horizontal, continuación en vertical. */
+    /**
+     * Coloca el bloque de ajustes de imagen: debajo del visor en horizontal (botones centrados
+     * y deslizable permanente abajo) y en la columna lateral en vertical (deslizable vertical).
+     */
+    /**
+     * Coloca el bloque de ajustes: en horizontal debajo del visor con el deslizable fijo;
+     * en vertical con los botones a la izquierda y el deslizable VERTICAL entre ellos y el visor.
+     */
+    /**
+     * Ajustes de imagen. En horizontal: botones que se reparten el ancho del visor y deslizable
+     * permanente debajo. En vertical: botones de tamaño uniforme y el deslizable aparece al tocar
+     * uno de ellos (en un cuadro de diálogo), para no robar espacio a la columna.
+     */
+    private fun moverFilaVideo() {
+        val caja = b.cajaVideo
+        (caja.parent as? ViewGroup)?.removeView(caja)
+        val botones = listOf(
+            b.btnLuz, b.btnContraste, b.btnWb, b.btnColor, b.btnVineta, b.btnPoster
+        )
+        for (v in botones) (v.parent as? ViewGroup)?.removeView(v)
+
+        if (vertical) {
+            // Dos columnas de ajustes: la columna es más ancha y así queda sitio para el monitor.
+            caja.orientation = LinearLayout.VERTICAL
+            b.filaVideo.removeAllViews()
+            b.filaVideo.orientation = LinearLayout.VERTICAL
+            botones.forEachIndexed { indice, v ->
+                if (indice % 2 == 0) {
+                    b.filaVideo.addView(LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        layoutParams = LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        ).apply { topMargin = if (indice == 0) 0 else 3.dp }
+                    })
+                }
+                recordarEstilo(v)
+                v.layoutParams = LinearLayout.LayoutParams(0, 32.dp, 1f).apply {
+                    if (indice % 2 == 1) marginStart = 3.dp
+                }
+                v.gravity = Gravity.CENTER
+                v.textSize = 10f
+                v.setPadding(2.dp, v.paddingTop, 2.dp, v.paddingBottom)
+                (b.filaVideo.getChildAt(b.filaVideo.childCount - 1) as LinearLayout).addView(v)
+            }
+            // El deslizable no se muestra: cada botón abre su propio cuadro de ajuste.
+            b.panelAjuste.visibility = View.GONE
+            b.slotIzquierdo.addView(
+                caja,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = 6.dp }
+            )
+        } else {
+            caja.orientation = LinearLayout.VERTICAL
+            b.filaVideo.removeAllViews()
+            b.filaVideo.orientation = LinearLayout.HORIZONTAL
+            botones.forEachIndexed { i, v ->
+                restaurarEstilo(v)
+                v.layoutParams = LinearLayout.LayoutParams(
+                    0,
+                    34.dp,
+                    1f
+                ).apply { setMargins(if (i == 0) 0 else 5.dp, 0, 0, 0) }
+                v.gravity = Gravity.CENTER
+                b.filaVideo.addView(v)
+            }
+            b.panelAjuste.visibility = View.VISIBLE
+            b.panelAjuste.orientation = LinearLayout.HORIZONTAL
+            (b.sbAjuste.parent as? ViewGroup)?.removeView(b.sbAjuste)
+            b.sbAjuste.rotation = 0f
+            b.txtAjusteNombre.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            b.sbAjuste.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { marginStart = 8.dp }
+            b.txtAjusteValor.layoutParams =
+                LinearLayout.LayoutParams(52.dp, ViewGroup.LayoutParams.WRAP_CONTENT)
+            b.btnAjusteReset.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = 8.dp }
+            b.panelAjuste.addView(b.sbAjuste, 1)
+            if (b.panelAjuste.parent !== caja) {
+                (b.panelAjuste.parent as? ViewGroup)?.removeView(b.panelAjuste)
+                caja.addView(b.panelAjuste)
+            }
+            // Los ajustes de imagen viven en la banda fija, debajo de la fila de controles.
+            montarZonaControles()
+            asegurarZonaControles().addView(
+                caja,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+        refrescarPanelAjuste()
+    }
+
+    // ------------------------------------------------------- controles imagen / audio
+
+    /** «imagen» = Luz, contraste, WB… · «audio» = monitor de onda (solo en horizontal). */
+    private var vistaControles = "imagen"
+    private var btnVistaControles: TextView? = null
+    private var panelAudio: LinearLayout? = null
+    private var txtEntradaAudio: TextView? = null
+    private var txtFormatoAudio: TextView? = null
+    private var txtAyudaAudio: TextView? = null
+    private var ondaAudio: com.jfrmedia.switcher.studio.ui.AudioWaveView? = null
+
+    // ------------------------------------------------------- estado del equipo
+
+    /** Últimos valores medidos, para el tablero que se muestra en vertical. */
+    private var cpuActual = 0L
+    private var ramActual = 0L
+    private var mbpsActual = 0.0
+    private var tempActual: Int? = null
+    private var panelEstado: LinearLayout? = null
+    private val valoresEstado = HashMap<String, TextView>()
+
+    /** true mientras la subida esté por debajo de lo esperado: tiñe y hace parpadear SUBIDA. */
+    private var redFloja = false
+    private var ventanasRedFloja = 0
+    private var parpadeoEncendido = true
+
+    private val parpadeoRed = object : Runnable {
+        override fun run() {
+            if (!redFloja) {
+                valoresEstado["red"]?.alpha = 1f
+                return
+            }
+            parpadeoEncendido = !parpadeoEncendido
+            valoresEstado["red"]?.alpha = if (parpadeoEncendido) 0.35f else 1f
+            handler.postDelayed(this, 450)
+        }
+    }
+
+    /** Tablero con CPU, RAM, temperatura y subida de red (vertical, debajo del monitor). */
+    private fun crearPanelEstado() {
+        if (panelEstado != null) return
+        val caja = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.bg_tile)
+            setPadding(8.dp, 6.dp, 8.dp, 6.dp)
+        }
+
+        fun celda(etiqueta: String, clave: String): LinearLayout {
+            val columna = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                )
+            }
+            columna.addView(TextView(this).apply {
+                text = etiqueta
+                textSize = 8f
+                letterSpacing = 0.08f
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+            })
+            val valor = TextView(this).apply {
+                text = "—"
+                textSize = 12f
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+            }
+            valoresEstado[clave] = valor
+            columna.addView(valor)
+            return columna
+        }
+
+        val fila1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fila1.addView(celda("CPU", "cpu"))
+        fila1.addView(celda("RAM", "ram"))
+        val fila2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fila2.addView(celda("TEMP.", "temp"))
+        fila2.addView(celda("SUBIDA", "red"))
+        caja.addView(
+            fila1,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        caja.addView(
+            fila2,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 6.dp }
+        )
+        panelEstado = caja
+        actualizarEstadoEquipo()
+    }
+
+    private fun actualizarEstadoEquipo() {
+        if (valoresEstado.isEmpty()) return
+        valoresEstado["cpu"]?.text = "$cpuActual%"
+        valoresEstado["ram"]?.text = "$ramActual%"
+        valoresEstado["temp"]?.text = tempActual?.let { "$it°" } ?: "—°"
+        valoresEstado["red"]?.text = String.format(Locale.US, "%.1f Mbps", mbpsActual)
+        // La temperatura alta se marca en rojo para que se note.
+        valoresEstado["temp"]?.setTextColor(
+            ContextCompat.getColor(
+                this,
+                if ((tempActual ?: 0) >= 45) R.color.danger else R.color.text_primary
+            )
+        )
+
+        // Red floja: el cliente RTMP avisa de congestión (su cola de envío crece porque la
+        // subida no aguanta el bitrate). Se piden dos avisos seguidos para no parpadear por
+        // un bache de un instante.
+        val bajaAhora = transmitiendo && emisor.congestionada
+        ventanasRedFloja = if (bajaAhora) ventanasRedFloja + 1 else 0
+        val floja = ventanasRedFloja >= 2
+        if (floja != redFloja) {
+            redFloja = floja
+            val vista = valoresEstado["red"]
+            if (floja) {
+                vista?.setTextColor(ContextCompat.getColor(this, R.color.warn_yellow))
+                parpadeoEncendido = true
+                handler.removeCallbacks(parpadeoRed)
+                handler.post(parpadeoRed)
+            } else {
+                handler.removeCallbacks(parpadeoRed)
+                vista?.alpha = 1f
+                vista?.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+            }
+        }
+    }
+
+    /** Nombre de la entrada de audio elegida en el diálogo de Audio. */
+    private var entradaAudioNombre = "Micrófono interno"
+
+    /** Refresca la fuente de entrada mostrada mientras el monitor está abierto. */
+    private val refrescoEntrada = object : Runnable {
+        override fun run() {
+            actualizarEntradaAudio()
+            if (vistaControles == "audio") handler.postDelayed(this, 1000)
+        }
+    }
+
+    /**
+     * Fuente que se está capturando: la elegida y, si el sistema entrega otra distinta, también
+     * la real (el grabador la consulta al abrir el micrófono). Así se ve de un vistazo si se
+     * está usando el micrófono correcto.
+     */
+    private fun actualizarEntradaAudio() {
+        val real = if (recorder.isRecording) recorder.entradaReal else null
+        val texto = buildString {
+            append(entradaAudioNombre)
+            if (real != null && !real.equals(entradaAudioNombre, ignoreCase = true)) {
+                append("  →  en uso: ").append(real)
+            }
+        }
+        txtEntradaAudio?.text = texto
+    }
+
+    /**
+     * Interruptor «♪ Audio» dentro de la fila de controles y panel del monitor.
+     *
+     * En horizontal el hueco de Luz/Contraste se puede cambiar por el monitor de audio, que
+     * muestra la onda de entrada con zonas verde/naranja/rojo para ver cuándo se está
+     * acercando al recorte. En vertical el hueco no existe, así que el interruptor se oculta.
+     */
+    private fun montarControlesAudio() {
+        val chip = TextView(this).apply {
+            text = "♪ Audio"
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+            setBackgroundResource(R.drawable.bg_pill_ghost)
+            setPadding(10.dp, 4.dp, 10.dp, 4.dp)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = 10.dp }
+            setOnClickListener {
+                mostrarVistaControles(if (vistaControles == "audio") "imagen" else "audio")
+            }
+        }
+        btnVistaControles = chip
+        chip.visibility = if (vertical) View.GONE else View.VISIBLE
+        // Al principio de la fila: si se quedara al final, la barra deslizable lo escondía.
+        b.controlesCapa.addView(chip, 0)
+
+        val caja = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        // Cabecera: qué fuente de audio se está usando.
+        val cabecera = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(3.dp, 0, 3.dp, 3.dp)
+        }
+        cabecera.addView(TextView(this).apply {
+            text = "ENTRADA"
+            textSize = 9f
+            letterSpacing = 0.12f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+        })
+        val nombre = TextView(this).apply {
+            text = entradaAudioNombre
+            textSize = 11f
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
+            setPadding(8.dp, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        txtEntradaAudio = nombre
+        cabecera.addView(nombre)
+        val formato = TextView(this).apply {
+            text = "44,1 kHz · mono"
+            textSize = 9f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+        }
+        txtFormatoAudio = formato
+        cabecera.addView(formato)
+        caja.addView(cabecera)
+        val onda = com.jfrmedia.switcher.studio.ui.AudioWaveView(this).apply {
+            proveedorPico = { picoActual() }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 118.dp
+            )
+        }
+        ondaAudio = onda
+        caja.addView(onda)
+        val ayuda = TextView(this).apply {
+            text = "Verde < −12 dB · naranja −12 a −3 · rojo > −3 · CLIP = entrada al máximo. " +
+                "Se activa al grabar o transmitir."
+            textSize = 9f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+            setPadding(3.dp, 3.dp, 3.dp, 0)
+        }
+        txtAyudaAudio = ayuda
+        caja.addView(ayuda)
+        panelAudio = caja
+        crearPanelEstado()
+        // El sitio del panel depende de la orientación; lo coloca `ubicarPanelAudio()`.
+        ubicarPanelAudio()
+    }
+
+    /**
+     * Coloca el monitor de audio donde corresponde: en horizontal vive en la zona de los
+     * controles de imagen (oculto hasta que se elige «♪ Audio») y en vertical va siempre al
+     * final de la columna de botones, debajo de ellos.
+     */
+    private fun ubicarPanelAudio() {
+        val caja = panelAudio ?: return
+        (caja.parent as? ViewGroup)?.removeView(caja)
+        val estado = panelEstado
+        (estado?.parent as? ViewGroup)?.removeView(estado)
+        if (vertical) {
+            b.cajaVideo.visibility = View.VISIBLE
+            caja.visibility = View.VISIBLE
+            txtFormatoAudio?.visibility = View.GONE
+            txtAyudaAudio?.text = "Verde < −12 · naranja −12 a −3 · rojo > −3"
+            ondaAudio?.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 100.dp
+            )
+            b.slotIzquierdo.addView(
+                caja,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = 10.dp }
+            )
+            if (estado != null) {
+                estado.visibility = View.VISIBLE
+                b.slotIzquierdo.addView(
+                    estado,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply { topMargin = 8.dp }
+                )
+                actualizarEstadoEquipo()
+            }
+            actualizarEntradaAudio()
+        } else {
+            estado?.visibility = View.GONE
+            txtFormatoAudio?.visibility = View.VISIBLE
+            txtAyudaAudio?.text = "Verde < −12 dB · naranja −12 a −3 · rojo > −3 · CLIP = entrada al máximo. " +
+                "Se activa al grabar o transmitir."
+            // La onda se lleva el alto de la banda: así el visor no cambia al alternar vistas.
+            ondaAudio?.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+            )
+            montarZonaControles()
+            asegurarZonaControles().addView(
+                caja,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+            caja.visibility = if (vistaControles == "audio") View.VISIBLE else View.GONE
+        }
+    }
+
+    private fun mostrarVistaControles(vista: String) {
+        val audio = vista == "audio" && !vertical
+        vistaControles = if (audio) "audio" else "imagen"
+        if (!vertical) {
+            // Los dos viven en la misma banda de altura fija: el visor no se mueve al cambiar.
+            b.cajaVideo.visibility =
+                if (!audio && !esPantallaCelular()) View.VISIBLE else View.GONE
+            panelAudio?.visibility = if (audio) View.VISIBLE else View.GONE
+        } else {
+            b.cajaVideo.visibility = View.VISIBLE
+            panelAudio?.visibility = View.VISIBLE
+        }
+        btnVistaControles?.text = if (audio) "Imagen" else "♪ Audio"
+        handler.removeCallbacks(refrescoEntrada)
+        if (audio || vertical) {
+            actualizarEntradaAudio()
+            handler.post(refrescoEntrada)
+        }
+    }
+
+    /** Alto de la banda donde se alternan los ajustes de imagen y el monitor de audio. */
+    private val ALTO_ZONA = 132
+
+    /**
+     * Banda de altura fija, debajo de la fila de controles, donde se alternan los ajustes de
+     * imagen y el monitor de audio. Al no cambiar de alto, el visor del programa tampoco.
+     */
+    private var zonaControles: LinearLayout? = null
+
+    private fun asegurarZonaControles(): LinearLayout {
+        val zona = zonaControles ?: LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }.also { zonaControles = it }
+        if (zona.layoutParams == null) {
+            zona.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ALTO_ZONA.dp
+            )
+        }
+        return zona
+    }
+
+    /** Mete la banda en el panel del programa, justo debajo de la fila de controles. */
+    private fun montarZonaControles() {
+        val zona = asegurarZonaControles()
+        if (zona.parent is ViewGroup) zona.requestLayout()
+        val panel = b.panelPrograma
+        if (zona.parent !== panel) {
+            (zona.parent as? ViewGroup)?.removeView(zona)
+            val indice = panel.indexOfChild(b.slotControles)
+            panel.addView(
+                zona, if (indice >= 0) indice + 1 else panel.childCount,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ALTO_ZONA.dp)
+            )
+        }
+    }
+
+    /** Pico de entrada actual (0..1): del grabador o del emisor, según la sesión. */
+    private fun picoActual(): Float = when {
+        recorder.isRecording -> recorder.lastPeak
+        transmitiendo -> emisor.nivel
+        else -> 0f
+    }
+
+    private fun moverControles() {
+        val fila = b.controlesCapa
+        (fila.parent as? ViewGroup)?.removeView(fila)
+        val botones = listOf(
+            b.btnLayerA, b.btnLayerB, b.btnPip, b.btnSplit, b.btnZoomOut, b.btnZoomIn
+        )
+        for (v in botones) (v.parent as? ViewGroup)?.removeView(v)
+
+        if (vertical) {
+            b.slotIzquierdo.removeAllViews()
+            // La cabecera («PROGRAMA» + 9:16 y resolución) se queda visible: ahora el visor
+            // va dentro del cuerpo y no flota encima de la barra superior.
+            b.txtEtiquetaPrograma.visibility = View.VISIBLE
+            b.cabeceraPrograma.visibility = View.VISIBLE
+
+            // Dos columnas: A|B, PiP|2 cam, −|+. Así la columna deja sitio al monitor.
+            val rejilla = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            botones.forEachIndexed { indice, v ->
+                if (indice % 2 == 0) {
+                    rejilla.addView(LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        layoutParams = LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        ).apply { topMargin = if (indice == 0) 0 else 4.dp }
+                    })
+                }
+                recordarEstilo(v)
+                v.layoutParams = LinearLayout.LayoutParams(0, 36.dp, 1f).apply {
+                    if (indice % 2 == 1) marginStart = 4.dp
+                }
+                v.gravity = Gravity.CENTER
+                v.textSize = 11f
+                if (v.id == R.id.btnPip) {
+                    // Sin icono: el texto queda perfectamente centrado
+                    v.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
+                }
+                v.setPadding(3.dp, v.paddingTop, 3.dp, v.paddingBottom)
+                (rejilla.getChildAt(rejilla.childCount - 1) as LinearLayout).addView(v)
+            }
+            b.slotIzquierdo.addView(
+                rejilla,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        } else {
+            // La cabecera del programa ya viene completa del XML: solo se muestra.
+            b.txtEtiquetaPrograma.visibility = View.VISIBLE
+            b.cabeceraPrograma.visibility = View.VISIBLE
+
+            b.scrollControles.removeAllViews()
+            fila.removeAllViews()
+            fila.orientation = LinearLayout.HORIZONTAL
+            btnVistaControles?.let { fila.addView(it) }
+            b.btnLayerA.layoutParams =
+                LinearLayout.LayoutParams(40.dp, ViewGroup.LayoutParams.WRAP_CONTENT)
+            b.btnLayerB.layoutParams =
+                LinearLayout.LayoutParams(40.dp, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    .apply { setMargins(6.dp, 0, 0, 0) }
+            b.btnLayerA.gravity = Gravity.CENTER
+            b.btnLayerB.gravity = Gravity.CENTER
+            restaurarEstilo(b.btnLayerA)
+            restaurarEstilo(b.btnLayerB)
+            b.btnLayerA.setPadding(0, b.btnLayerA.paddingTop, 0, b.btnLayerA.paddingBottom)
+            b.btnLayerB.setPadding(0, b.btnLayerB.paddingTop, 0, b.btnLayerB.paddingBottom)
+            fila.addView(b.btnLayerA)
+            fila.addView(b.btnLayerB)
+            for (v in listOf(b.btnPip, b.btnSplit, b.btnZoomOut, b.btnZoomIn)) {
+                restaurarEstilo(v)
+                if (v.id == R.id.btnPip) {
+                    v.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_pip, 0, 0, 0)
+                    v.compoundDrawablePadding = 6.dp
+                }
+                v.layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(6.dp, 0, 0, 0) }
+                v.gravity = Gravity.CENTER
+                fila.addView(v)
+            }
+            fila.addView(
+                b.audioMeter,
+                LinearLayout.LayoutParams(70.dp, 22.dp).apply { setMargins(8.dp, 0, 0, 0) }
+            )
+            b.scrollControles.addView(
+                fila,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+        // El hueco de Luz/Contraste solo existe en horizontal: en vertical el interruptor se
+        // oculta y el monitor vive siempre en la columna.
+        btnVistaControles?.visibility = if (vertical) View.GONE else View.VISIBLE
+        moverFilaVideo()
+    }
+    // ------------------------------------------------------------------ plantillas de escena
+
+    private fun plantillaActual(nombre: String): Plantilla {
+        val camaras = ArrayList<CamPlantilla>()
+        b.canvas.scene.items.filterIsInstance<CamItem>().forEach { item ->
+            camaras.add(
+                CamPlantilla(
+                    slot = item.slot,
+                    capa = if (item.slot == camA) "A" else "B",
+                    x = item.rect.left,
+                    y = item.rect.top,
+                    ancho = item.rect.width(),
+                    alto = item.rect.height(),
+                    visible = item.visible,
+                    zoom = item.zoom,
+                    panX = item.panX,
+                    panY = item.panY
+                )
+            )
+        }
+        val imagenes = ArrayList<ImagenPlantilla>()
+        b.canvas.scene.items.filterIsInstance<ImageItem>().forEach { item ->
+            val uri = item.uri
+            if (!uri.isNullOrBlank()) {
+                imagenes.add(
+                    ImagenPlantilla(
+                        uri = uri,
+                        nombre = item.label,
+                        x = item.rect.left,
+                        y = item.rect.top,
+                        ancho = item.rect.width(),
+                        alto = item.rect.height(),
+                        visible = item.visible,
+                        opacidad = item.opacity
+                    )
+                )
+            }
+        }
+        val mediosGuardados = medios.map { MedioPlantilla(it.uri, it.video, it.nombre) }
+        val ajustes = AjustesPlantilla(
+            modo = modoSesion,
+            recAlto = recAltoElegido,
+            recKbps = recBitrateKbps,
+            streamAlto = streamAlto,
+            streamKbps = streamBitrateKbps,
+            autoBitrate = bitrateAuto,
+            audioMudo = recorder.silencio,
+            audioDb = getSharedPreferences(PREFS, MODE_PRIVATE).getFloat(CLAVE_AUDIO_DB, 0f)
+        )
+        val transicion = TransicionPlantilla(b.canvas.transicion.id, b.canvas.transicionMs)
+        return Plantilla(nombre, vertical, camaras, imagenes, ajustes, transicion, mediosGuardados)
+    }
+
+    /** Aplica orientación de sesión, transición y audio guardados en la plantilla. */
+    private fun aplicarAjustesDePlantilla(plantilla: Plantilla) {
+        modoSesion = plantilla.ajustes.modo
+        recAltoElegido = plantilla.ajustes.recAlto
+        recBitrateKbps = plantilla.ajustes.recKbps
+        streamAlto = plantilla.ajustes.streamAlto
+        streamBitrateKbps = plantilla.ajustes.streamKbps
+        bitrateAuto = plantilla.ajustes.autoBitrate
+        grabarAlta = recAltoElegido >= 1080
+        recorder.silencio = plantilla.ajustes.audioMudo
+        val lineal = Math.pow(10.0, (plantilla.ajustes.audioDb / 20.0)).toFloat()
+        recorder.ganancia = lineal
+        CompositorView.Transicion.values()
+            .firstOrNull { it.id == plantilla.transicion.id }
+            ?.let {
+                b.canvas.transicion = it
+                b.canvas.transicionMs = plantilla.transicion.ms
+            }
+        guardarAjustes()
+        actualizarInfoLienzo()
+        actualizarBotonSesion()
+    }
+
+    // ------------------------------------------------------------------ gestor de plantillas
+
+    /** Tarjeta con resumen y miniaturas de una plantilla, con acciones. */
+    private fun tarjetaPlantilla(
+        nombre: String,
+        plantilla: Plantilla,
+        alCambiar: () -> Unit
+    ): View {
+        val tarjeta = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.bg_tile)
+            setPadding(14.dp, 12.dp, 14.dp, 12.dp)
+        }
+        tarjeta.addView(TextView(this).apply {
+            text = nombre
+            textSize = 15f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+        })
+
+        val modo = when (plantilla.ajustes.modo) {
+            "grabar" -> "Grabar"
+            "transmitir" -> "Transmitir"
+            else -> "Grabar + transmitir"
+        }
+        val trans = CompositorView.Transicion.values().firstOrNull { it.id == plantilla.transicion.id }
+        val resumen = buildString {
+            append(if (plantilla.vertical) "9:16 vertical" else "16:9 horizontal")
+            append(" · ")
+            append(modo)
+            append(" · grabación ")
+            append(plantilla.ajustes.recAlto)
+            append("p")
+            append(" · transición ")
+            append(trans?.label ?: plantilla.transicion.id)
+            append(" (")
+            append(plantilla.transicion.ms)
+            append(" ms)")
+            append(" · ")
+            append(plantilla.imagenes.size)
+            append(if (plantilla.imagenes.size == 1) " overlay" else " overlays")
+            append(" · ")
+            append(plantilla.medios.size)
+            append(if (plantilla.medios.size == 1) " medio" else " medios")
+        }
+        tarjeta.addView(TextView(this).apply {
+            text = resumen
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            setPadding(0, 4.dp, 0, 8.dp)
+        })
+
+        // Miniaturas de overlays y medios
+        val filaMini = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        var pintadas = 0
+        (plantilla.imagenes.map { Triple(it.uri, false, it.nombre) } +
+            plantilla.medios.map { Triple(it.uri, it.video, it.nombre) })
+            .take(6)
+            .forEach { (uri, video, etiqueta) ->
+                val mini = android.widget.ImageView(this).apply {
+                    scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                    setBackgroundResource(R.drawable.bg_tile)
+                    setImageBitmap(miniaturaDe(uri, video))
+                }
+                filaMini.addView(
+                    mini,
+                    LinearLayout.LayoutParams(72.dp, 46.dp).apply { marginEnd = 6.dp }
+                )
+                pintadas++
+            }
+        if (pintadas > 0) tarjeta.addView(filaMini)
+
+        // Acciones
+        val filaAcciones = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 10.dp, 0, 0)
+        }
+        fun accion(texto: String, alTocar: () -> Unit): TextView =
+            TextView(this).apply {
+                this.text = texto
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+                setBackgroundResource(R.drawable.bg_pill_ghost)
+                setPadding(14.dp, 7.dp, 14.dp, 7.dp)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { marginStart = 6.dp }
+                setOnClickListener { alTocar() }
+            }
+
+        filaAcciones.addView(accion("Abrir") {
+            cargarPlantilla(nombre)
+            alCambiar()
+        })
+        filaAcciones.addView(accion("Duplicar") {
+            val copia = Plantillas.duplicar(this, nombre)
+            toast(if (copia != null) "Duplicada como «$copia»" else "No se pudo duplicar")
+            alCambiar()
+        })
+        filaAcciones.addView(accion("Renombrar") {
+            dialogoRenombrar(nombre, alCambiar)
+        })
+        filaAcciones.addView(accion("Borrar") {
+            AlertDialog.Builder(this)
+                .setMessage("¿Borrar la plantilla «$nombre»?")
+                .setPositiveButton("Borrar") { _, _ ->
+                    Plantillas.borrar(this, nombre)
+                    toast("Plantilla borrada")
+                    alCambiar()
+                }
+                .setNegativeButton("Cancelar", null)
+                .show()
+        })
+        tarjeta.addView(filaAcciones)
+        return tarjeta
+    }
+
+    private fun miniaturaDe(uri: String, video: Boolean): Bitmap? = try {
+        if (video) {
+            val r = android.media.MediaMetadataRetriever()
+            r.setDataSource(this, Uri.parse(uri))
+            val marco = r.getFrameAtTime(0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            r.release()
+            marco
+        } else {
+            loadScaledBitmap(Uri.parse(uri))
+        }
+    } catch (t: Throwable) {
+        null
+    }
+
+    private fun dialogoRenombrar(nombre: String, alTerminar: () -> Unit) {
+        val campo = EditText(this).apply {
+            setText(nombre)
+            setSelection(text.length)
+            setPadding(30.dp, 20.dp, 30.dp, 20.dp)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Renombrar plantilla")
+            .setView(campo)
+            .setPositiveButton("Guardar") { _, _ ->
+                val nuevo = campo.text.toString().trim()
+                if (nuevo.isEmpty()) {
+                    toast("Escribe un nombre")
+                    return@setPositiveButton
+                }
+                if (Plantillas.renombrar(this, nombre, nuevo)) {
+                    toast("Plantilla renombrada")
+                    alTerminar()
+                } else {
+                    toast("No se pudo renombrar")
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    /** Gestor de plantillas con resumen, miniaturas y acciones. */
+    private fun dialogoPlantillas() {
+        val contenedor = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val scroll = ScrollView(this).apply { addView(contenedor) }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Plantillas de escena")
+            .setView(scroll)
+            .setNegativeButton("Cerrar", null)
+            .create()
+
+        fun refrescar() {
+            contenedor.removeAllViews()
+            val nombres = Plantillas.listar(this)
+            if (nombres.isEmpty()) {
+                contenedor.addView(TextView(this).apply {
+                    text = "Todavía no hay plantillas. Guarda la escena actual abajo."
+                    textSize = 12f
+                    setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+                    setPadding(16.dp, 16.dp, 16.dp, 16.dp)
+                })
+            }
+            nombres.forEach { nombre ->
+                val plantilla = Plantillas.cargar(this, nombre) ?: return@forEach
+                val tarjeta = tarjetaPlantilla(nombre, plantilla) { refrescar() }
+                contenedor.addView(
+                    tarjeta,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply { setMargins(10.dp, 6.dp, 10.dp, 6.dp) }
+                )
+            }
+            contenedor.addView(TextView(this).apply {
+                text = "+ Guardar la escena actual como plantilla"
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.bg_root))
+                setBackgroundResource(R.drawable.bg_pill_accent)
+                setPadding(16.dp, 12.dp, 16.dp, 12.dp)
+                setOnClickListener {
+                    dialogoGuardarPlantilla()
+                    dialog.dismiss()
+                    handler.postDelayed({ dialogoPlantillas() }, 600)
+                }
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(10.dp, 10.dp, 10.dp, 10.dp) })
+        }
+
+        refrescar()
+        dialog.show()
+    }
+
+    private fun dialogoGuardarPlantilla() {
+        val entrada = EditText(this).apply {
+            hint = "Nombre de la plantilla"
+            setText(if (vertical) "Vertical" else "Horizontal")
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Guardar plantilla de escena")
+            .setMessage(
+                "Se guarda la orientación del lienzo, qué cámara va en A y B, " +
+                    "y la posición de cada overlay."
+            )
+            .setView(entrada)
+            .setPositiveButton("Guardar", null)
+            .setNegativeButton("Cancelar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val nombre = entrada.text?.toString()?.trim().orEmpty()
+                if (nombre.isEmpty()) {
+                    toast("Escribe un nombre para la plantilla")
+                    return@setOnClickListener
+                }
+                if (Plantillas.guardar(this, plantillaActual(nombre))) {
+                    toast("Plantilla «$nombre» guardada")
+                    dialog.dismiss()
+                } else {
+                    toast("No se pudo guardar la plantilla")
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun dialogoAbrirPlantilla() {
+        val nombres = Plantillas.listar(this)
+        if (nombres.isEmpty()) {
+            toast("Todavía no hay plantillas guardadas")
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Abrir plantilla")
+            .setItems(nombres.toTypedArray()) { _, which -> cargarPlantilla(nombres[which]) }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun dialogoBorrarPlantilla() {
+        val nombres = Plantillas.listar(this)
+        if (nombres.isEmpty()) {
+            toast("Todavía no hay plantillas guardadas")
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Borrar plantilla")
+            .setItems(nombres.toTypedArray()) { _, which ->
+                val nombre = nombres[which]
+                if (Plantillas.borrar(this, nombre)) toast("Plantilla «$nombre» eliminada")
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun cargarPlantilla(nombre: String) {
+        val plantilla = Plantillas.cargar(this, nombre) ?: run {
+            toast("No se pudo leer la plantilla")
+            return
+        }
+
+        if (plantilla.vertical != vertical) {
+            vertical = plantilla.vertical
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(CLAVE_VERTICAL, vertical).apply()
+            aplicarOrientacion()
+        }
+
+        // Limpiar escena actual
+        for (slot in 0 until 6) {
+            b.canvas.detachTrack(slot, hub.session(slot)?.videoTrack)
+        }
+        b.canvas.scene.items.toList().forEach { b.canvas.scene.remove(it) }
+        camA = null
+        camB = null
+
+        plantilla.camaras.forEach { c ->
+            val item = b.canvas.scene.addCam(c.slot) ?: return@forEach
+            item.rect.set(c.x, c.y, c.x + c.ancho, c.y + c.alto)
+            item.visible = c.visible
+            item.zoom = c.zoom
+            item.panX = c.panX
+            item.panY = c.panY
+            if (c.capa == "A") camA = c.slot else camB = c.slot
+            if (c.slot == LocalCam.SLOT) {
+                localCam.track?.let { b.canvas.attachTrack(c.slot, it) }
+            } else {
+                hub.session(c.slot)?.videoTrack?.let { b.canvas.attachTrack(c.slot, it) }
+            }
+        }
+
+        var imagenesFallidas = 0
+        plantilla.imagenes.forEach { i ->
+            try {
+                val bitmap = loadScaledBitmap(Uri.parse(i.uri))
+                if (bitmap == null) {
+                    imagenesFallidas++
+                    return@forEach
+                }
+                val rect = RectF(i.x, i.y, i.x + i.ancho, i.y + i.alto)
+                val item = b.canvas.scene.addImage(bitmap, i.nombre, i.uri, rect)
+                item.visible = i.visible
+                item.opacity = i.opacidad
+            } catch (t: Throwable) {
+                imagenesFallidas++
+            }
+        }
+
+        // Ajustes, transición y medios que viajan con la plantilla
+        aplicarAjustesDePlantilla(plantilla)
+        medios.clear()
+        plantilla.medios.forEach { m ->
+            val medio = Medio(m.uri, m.video, m.nombre)
+            medio.thumb = cargarMiniatura(medio)
+            medios.add(medio)
+        }
+        refreshMediaTiles()
+
+        b.canvas.scene.selectedId = null
+        b.canvas.requestRender()
+        refreshUi()
+        onSelectionChanged(null)
+        toast(
+            if (imagenesFallidas == 0) "Plantilla «$nombre» cargada"
+            else "Plantilla «$nombre» cargada ($imagenesFallidas overlays no se pudieron leer)"
+        )
+    }
+    private fun showPairing() {
+        val db = DialogPairingBinding.inflate(layoutInflater)
+        pairingBinding = db
+        db.txtIp.text = Net.primaryIp() ?: "Sin WiFi"
+        // QR con el enlace de emparejamiento: el celular lo escanea y no teclea nada.
+        // Lleva IP y puerto, así que sigue sirviendo aunque el servidor no consiga el 8787.
+        runCatching {
+            val ip = Net.primaryIp()
+            val enlace = ip?.let { com.jfrmedia.switcher.core.net.QrLink.armar(it, server.port) }
+            db.imgQr.setImageBitmap(enlace?.let { com.jfrmedia.switcher.studio.ui.QrCode.bitmap(it, 480) })
+            db.imgQr.visibility = if (enlace == null) View.GONE else View.VISIBLE
+            if (enlace != null) L.i("emparejamiento", "QR: $enlace")
+        }
+        db.txtPort.text = if (server.port == Proto.DEFAULT_PORT) {
+            "Puerto ${server.port} · misma red WiFi que los celulares"
+        } else {
+            "⚠ Puerto ${server.port}: el 8787 estaba ocupado. Escanea el QR tal cual (ya trae el puerto)."
+        }
+        db.txtConnCount.text = "Cámaras conectadas: ${hub.count()} / 6"
+        db.btnCopyIp.setOnClickListener {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("IP", db.txtIp.text))
+            toast("IP copiada")
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setView(db.root)
+            .create()
+        dialog.setOnDismissListener { pairingBinding = null }
+        db.btnClose.setOnClickListener { dialog.dismiss() }
+        dialog.show()
+    }
+
+    private fun showSettings() {
+        val db = DialogSettingsBinding.inflate(layoutInflater)
+        when (preset.label) {
+            VideoPresets.BAJA.label -> db.rb360.isChecked = true
+            VideoPresets.ALTA.label -> db.rb720.isChecked = true
+            else -> db.rb540.isChecked = true
+        }
+        when (modoSesion) {
+            "grabar" -> db.rbSoloGrabar.isChecked = true
+            "transmitir" -> db.rbSoloTransmitir.isChecked = true
+            else -> db.rbAmbos.isChecked = true
+        }
+        when (recAltoElegido) {
+            360 -> db.rbRec360.isChecked = true
+            480 -> db.rbRec480.isChecked = true
+            1080 -> db.rbRec1080.isChecked = true
+            1440 -> db.rbRec2k.isChecked = true
+            2160 -> db.rbRec4k.isChecked = true
+            else -> db.rbRec720.isChecked = true
+        }
+        fun ladoCortoGrabacion(): Int = when {
+            db.rbRec360.isChecked -> 360
+            db.rbRec480.isChecked -> 480
+            db.rbRec1080.isChecked -> 1080
+            db.rbRec2k.isChecked -> 1440
+            db.rbRec4k.isChecked -> 2160
+            else -> 720
+        }
+
+        fun ladoCortoEmision(): Int = when {
+            db.rbStream480.isChecked -> 480
+            db.rbStream1080.isChecked -> 1080
+            else -> 720
+        }
+
+        // Con el automático, el bitrate sale de la resolución elegida; si no, del deslizable.
+        fun refrescarBitrates() {
+            val auto = db.swAutoBitrate.isChecked
+            if (auto) {
+                db.txtBitrateRec.text =
+                    "Grabación: ${bitrateGrabacionAuto(ladoCortoGrabacion()) / 1000} Mbps (automático)"
+                db.txtBitrateStream.text =
+                    "Bitrate de transmisión: ${bitrateEmisionAuto(ladoCortoEmision()) / 1000} Mbps (automático)"
+            } else {
+                db.txtBitrateRec.text = "Grabación: ${(db.sbBitrateRec.progress + 2000) / 1000} Mbps"
+                db.txtBitrateStream.text =
+                    "Bitrate de transmisión: ${(db.sbBitrateStream.progress + 1000) / 1000} Mbps"
+            }
+            db.sbBitrateRec.isEnabled = !auto
+            db.sbBitrateRec.alpha = if (auto) 0.4f else 1f
+            db.sbBitrateStream.isEnabled = !auto
+            db.sbBitrateStream.alpha = if (auto) 0.4f else 1f
+        }
+
+        db.sbBitrateRec.progress = (recBitrateKbps - 2000).coerceIn(0, 38000)
+        db.sbBitrateRec.setOnSeekBarChangeListener(
+            object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    sb: android.widget.SeekBar?,
+                    value: Int,
+                    fromUser: Boolean
+                ) {
+                    if (!db.swAutoBitrate.isChecked) {
+                        db.txtBitrateRec.text = "Grabación: ${(value + 2000) / 1000} Mbps"
+                    }
+                }
+
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+            }
+        )
+        when (streamAlto) {
+            480 -> db.rbStream480.isChecked = true
+            1080 -> db.rbStream1080.isChecked = true
+            else -> db.rbStream720.isChecked = true
+        }
+        db.sbBitrateStream.progress = (streamBitrateKbps - 1000).coerceIn(0, 11000)
+        db.txtBitrateStream.text = "Bitrate de transmisión: ${streamBitrateKbps / 1000} Mbps"
+        db.sbBitrateStream.setOnSeekBarChangeListener(
+            object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    sb: android.widget.SeekBar?,
+                    value: Int,
+                    fromUser: Boolean
+                ) {
+                    if (!db.swAutoBitrate.isChecked) {
+                        db.txtBitrateStream.text =
+                            "Bitrate de transmisión: ${(value + 1000) / 1000} Mbps"
+                    }
+                }
+
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+            }
+        )
+        db.swAutoBitrate.isChecked = bitrateAuto
+        // Al cambiar el modo automático o la resolución, la etiqueta muestra lo que se usará.
+        db.swAutoBitrate.setOnCheckedChangeListener { _, _ -> refrescarBitrates() }
+        db.rgRes.setOnCheckedChangeListener { _, _ -> refrescarBitrates() }
+        db.rgStreamRes.setOnCheckedChangeListener { _, _ -> refrescarBitrates() }
+        refrescarBitrates()
+        db.swAudio.isChecked = recAudio
+        db.txtFolder.text = "Los videos van a Movies/JFR Switcher · fotos a Pictures/JFR Switcher"
+
+        val dialog = AlertDialog.Builder(this).setView(db.root).create()
+        db.btnClose.setOnClickListener {
+            // Elegir una calidad fija desactiva el modo automático.
+            calidadAuto = false
+            preset = when {
+                db.rb360.isChecked -> VideoPresets.BAJA
+                db.rb720.isChecked -> VideoPresets.ALTA
+                else -> VideoPresets.MEDIA
+            }
+            modoSesion = when {
+                db.rbSoloGrabar.isChecked -> "grabar"
+                db.rbSoloTransmitir.isChecked -> "transmitir"
+                else -> "ambos"
+            }
+            recAltoElegido = when {
+                db.rbRec360.isChecked -> 360
+                db.rbRec480.isChecked -> 480
+                db.rbRec1080.isChecked -> 1080
+                db.rbRec2k.isChecked -> 1440
+                db.rbRec4k.isChecked -> 2160
+                else -> 720
+            }
+            recBitrateKbps = db.sbBitrateRec.progress + 2000
+            streamAlto = when {
+                db.rbStream480.isChecked -> 480
+                db.rbStream1080.isChecked -> 1080
+                else -> 720
+            }
+            streamBitrateKbps = db.sbBitrateStream.progress + 1000
+            bitrateAuto = db.swAutoBitrate.isChecked
+            recAudio = db.swAudio.isChecked
+            grabarAlta = recAltoElegido >= 1080
+            guardarAjustes()
+            actualizarInfoLienzo()
+            actualizarBotonSesion()
+            applyQualityToCameras()
+            val (w, h) = tamanoGrabacion(recAltoElegido)
+            val kbpsGrabacion = if (bitrateAuto) {
+                bitrateGrabacionAuto(recAltoElegido)
+            } else {
+                recBitrateKbps
+            }
+            val kbpsEnvio = if (bitrateAuto) bitrateEmisionAuto(streamAlto) else streamBitrateKbps
+            toast(
+                when (modoSesion) {
+                    "grabar" -> "Solo grabar · ${recAltoElegido}p ($w×$h) · ${kbpsGrabacion / 1000} Mbps"
+                    "transmitir" -> "Solo transmitir · ${streamAlto}p · ${kbpsEnvio / 1000} Mbps"
+                    else -> "Grabar + transmitir · ${recAltoElegido}p · ${kbpsGrabacion / 1000} Mbps"
+                }
+            )
+            dialog.dismiss()
+        }
+        dialog.show()
+    }
+
+    /** Guarda los ajustes para que se recuerden al abrir la app. */
+    private fun guardarAjustes() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putString(CLAVE_MODO, modoSesion)
+            .putInt(CLAVE_REC_ALTO, recAltoElegido)
+            .putInt(CLAVE_REC_KBPS, recBitrateKbps)
+            .putInt(CLAVE_STREAM_ALTO, streamAlto)
+            .putInt(CLAVE_STREAM_KBPS, streamBitrateKbps)
+            .putBoolean(CLAVE_AUTO_KBPS, bitrateAuto)
+            .putBoolean(CLAVE_REC_AUDIO, recAudio)
+            .putString(CLAVE_PRESET, preset.label)
+            .apply()
+    }
+
+    /** El botón principal cambia según lo que se haya elegido hacer. */
+    private fun actualizarBotonSesion() {
+        // Con el directo en el aire el botón debe poder cortarlo, aunque el texto del modo
+        // sea «Transmitir» (antes se quedaba igual y parecía que no había nada corriendo).
+        if (recorder.isRecording || transmitiendo) {
+            b.btnRecord.text = "Detener"
+            return
+        }
+        b.btnRecord.text = when (modoSesion) {
+            "grabar" -> "Grabar"
+            "transmitir" -> "Transmitir"
+            else -> "Rec + Broadcast"
+        }
+    }
+
+    /**
+     * Calidad efectiva. En modo automático se pide 720p mientras haya pocas cámaras
+     * (más detalle en el visor) y 480p cuando hay muchas (para que la tablet no sufra).
+     */
+    private fun presetEfectivo(): VideoPreset {
+        if (!calidadAuto) return preset
+        val cuantas = hub.all().count { it.videoTrack != null }
+        return if (cuantas <= 2) VideoPresets.ALTA else VideoPresets.MEDIA
+    }
+
+    private fun applyQualityToCameras() {
+        val calidad = presetEfectivo()
+        hub.all().forEach { session ->
+            session.preset = calidad
+            session.sendCmd(
+                Msg.builder(Proto.CMD)
+                    .put(Proto.K_ACTION, Proto.A_QUALITY)
+                    .put(Proto.K_WIDTH, calidad.width)
+                    .put(Proto.K_HEIGHT, calidad.height)
+                    .put(Proto.K_FPS, calidad.fps)
+                    .put(Proto.K_KBPS, calidad.kbps)
+                    .build()
+            )
+        }
+    }
+
+    // ------------------------------------------------------------------ listener del lienzo
+
+    override fun onSelectionChanged(item: CanvasItem?) {
+        val has = item != null
+        refrescarPanelAjuste()
+        // Mantiene sincronizadas las miniaturas (seleccionado / oculto) con el lienzo.
+        refreshOverlayTiles()
+    }
+
+    /** El texto de ayuda de la barra inferior ya no existe. */
+    private fun updateTip() {
+        // sin barra inferior: los avisos van por toast
+    }
+
+    override fun onSceneChanged() {
+        // nada extra por ahora: el lienzo se redibuja solo
+    }
+
+    private fun toast(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
+    companion object {
+        private const val PREFS = "jfr_studio"
+        private const val CLAVE_TABLET_CAM = "tablet_cam"
+        private const val CLAVE_FB_URL = "fb_url"
+        private const val CLAVE_FB_CLAVE = "fb_clave"
+        private const val CLAVE_FB_GRABAR = "fb_grabar"
+        private const val CLAVE_FB_APPID = "fb_appid"
+        private const val CLAVE_FB_USER = "fb_user"
+        private const val CLAVE_FB_PAGE_ID = "fb_page_id"
+        private const val CLAVE_FB_PAGE_NAME = "fb_page_name"
+        private const val CLAVE_FB_PAGE_TOKEN = "fb_page_token"
+        private const val FB_URL_POR_DEFECTO = "rtmps://live-api-s.facebook.com:443/rtmp/"
+        private const val CLAVE_TABLET_FRONTAL = "tablet_cam_frontal"
+        private const val CLAVE_VERTICAL = "vertical"
+        private const val CLAVE_AUDIO_ID = "audio_id"
+        private const val CLAVE_AUDIO_TIPO = "audio_tipo"
+        private const val CLAVE_AUDIO_MON = "audio_mon"
+        private const val CLAVE_AUDIO_MON_VOL = "audio_mon_vol"
+        private const val CLAVE_EQ_ENT_0 = "eq_ent_0"
+        private const val CLAVE_EQ_ENT_1 = "eq_ent_1"
+        private const val CLAVE_EQ_ENT_2 = "eq_ent_2"
+        private const val CLAVE_EQ_ENT_3 = "eq_ent_3"
+        private const val CLAVE_EQ_ENT_4 = "eq_ent_4"
+        private const val CLAVE_EQ_SAL_0 = "eq_sal_0"
+        private const val CLAVE_EQ_SAL_1 = "eq_sal_1"
+        private const val CLAVE_EQ_SAL_2 = "eq_sal_2"
+        private const val CLAVE_EQ_SAL_3 = "eq_sal_3"
+        private const val CLAVE_EQ_SAL_4 = "eq_sal_4"
+        private const val CLAVE_AUDIO_DB = "audio_db"
+        private const val CLAVE_AUDIO_MUDO = "audio_mudo"
+        private const val CLAVE_MODO = "modo_sesion"
+        private const val CLAVE_REC_ALTO = "rec_alto"
+        private const val CLAVE_REC_KBPS = "rec_kbps"
+        private const val CLAVE_STREAM_ALTO = "stream_alto"
+        private const val CLAVE_STREAM_KBPS = "stream_kbps"
+        private const val CLAVE_AUTO_KBPS = "auto_kbps"
+        private const val CLAVE_REC_AUDIO = "rec_audio"
+        private const val CLAVE_PRESET = "preset"
+        private const val CLAVE_TRANSICION = "transicion"
+        private const val CLAVE_TRANSICION_MS = "transicion_ms"
+    }
+}

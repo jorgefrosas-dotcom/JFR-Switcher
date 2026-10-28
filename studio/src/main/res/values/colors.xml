@@ -1,0 +1,22 @@
+<resources>
+    <color name="bg_root">#FF0E1116</color>
+    <color name="bg_bar">#FF0A0C10</color>
+    <color name="bg_panel">#FF16191F</color>
+    <color name="bg_panel_alt">#FF1D2128</color>
+    <color name="bg_tile">#FF20242B</color>
+    <color name="stroke">#FF2A2F38</color>
+    <color name="stroke_soft">#FF1F242C</color>
+    <color name="text_primary">#FFF2F4F7</color>
+    <color name="text_secondary">#FF9BA5B4</color>
+    <color name="text_dim">#FF6C7686</color>
+    <color name="accent">#FFFF5A2B</color>
+    <color name="accent_dark">#FFE04A1E</color>
+    <color name="accent_soft">#33FF5A2B</color>
+    <color name="live_green">#FF35C759</color>
+    <color name="preview_blue">#FF2F8FFF</color>
+    <color name="warn_yellow">#FFFFC13B</color>
+    <color name="danger">#FFFF3B30</color>
+    <color name="scrim">#B3000000</color>
+    <color name="canvas_bg">#FF0C0E11</color>
+    <color name="ic_launcher_background">#FFFFFFFF</color>
+</resources>

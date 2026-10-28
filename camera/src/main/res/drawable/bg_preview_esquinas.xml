@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Velo que se dibuja encima de la vista previa: deja ver el video por el centro
+  y pinta de bg_root un marco fino más las cuatro esquinas redondeadas.
+  Se usa evenOdd para que el relleno sea "cuadrado exterior menos rectángulo
+  redondeado interior"; así los picos de las esquinas quedan tapados.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="1600"
+    android:viewportHeight="900">
+
+    <path
+        android:fillColor="@color/bg_root"
+        android:fillType="evenOdd"
+        android:pathData="M0,0H1600V900H0Z M88,16H1512A72,72 0 0 1 1584,88V812A72,72 0 0 1 1512,884H88A72,72 0 0 1 16,812V88A72,72 0 0 1 88,16Z" />
+</vector>

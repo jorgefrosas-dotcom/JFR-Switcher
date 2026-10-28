@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Cuerpo del fader -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="5dp" />
+            <solid android:color="#FF6A2C" />
+            <stroke
+                android:width="1dp"
+                android:color="#0C0E11" />
+            <size
+                android:width="22dp"
+                android:height="34dp" />
+        </shape>
+    </item>
+    <!-- Línea central que simula la agarradera de consola -->
+    <item
+        android:gravity="center"
+        android:height="3dp"
+        android:width="14dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="2dp" />
+            <solid android:color="#3A1D0C" />
+        </shape>
+    </item>
+</layer-list>

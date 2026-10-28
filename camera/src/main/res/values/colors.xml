@@ -1,0 +1,23 @@
+<resources>
+    <color name="bg_root">#FF0E1116</color>
+    <color name="bg_panel">#FF16191F</color>
+    <color name="accent">#FFFF5A2B</color>
+    <color name="live_green">#FF35C759</color>
+
+    <!-- Superficies y texto -->
+    <color name="bg_panel_2">#FF1B1F26</color>
+    <color name="borde">#FF2A2F38</color>
+    <color name="texto_principal">#FFE8EAED</color>
+    <color name="texto_tenue">#FF8A93A0</color>
+    <color name="on_accent">#FF111318</color>
+    <color name="on_chip">#FF111318</color>
+    <color name="velo_oscuro">#D90E1116</color>
+    <color name="linterna_encendida">#FF3A2418</color>
+
+    <!-- Estados del chip -->
+    <color name="estado_gris">#FF9AA3AE</color>
+    <color name="estado_amarillo">#FFF5C542</color>
+    <color name="estado_verde">#FF35C759</color>
+    <color name="estado_rojo">#FFFF6B60</color>
+    <color name="ic_launcher_background">#FFFFFFFF</color>
+</resources>

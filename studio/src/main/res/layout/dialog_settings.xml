@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="22dp">
+
+        <TextView
+            style="@style/Txt.Title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Ajustes"
+            android:textSize="18sp" />
+
+        <TextView
+            style="@style/Txt.Micro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="QUÉ QUIERES HACER" />
+
+        <RadioGroup
+            android:id="@+id/rgModo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rbSoloGrabar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="Solo grabar"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbSoloTransmitir"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="Solo transmitir"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbAmbos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="Grabar y transmitir a la vez"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </RadioGroup>
+
+        <TextView
+            style="@style/Txt.Micro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="CALIDAD DE LAS CÁMARAS" />
+
+        <RadioGroup
+            android:id="@+id/rgQuality"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rb360"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="360p — máxima fluidez con 6 cámaras"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rb540"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="480p — equilibrado (recomendado)"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rb720"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="720p — más detalle, más carga"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </RadioGroup>
+
+        <TextView
+            style="@style/Txt.Micro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="RESOLUCIÓN DE GRABACIÓN" />
+
+        <RadioGroup
+            android:id="@+id/rgRes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rbRec360"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="360p — ligero"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbRec480"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="480p"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbRec720"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="720p — recomendado"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbRec1080"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="1080p — full HD"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbRec2k"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="2K — 1440p (equipos potentes)"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbRec4k"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="4K — 2160p (puede no estar soportado)"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </RadioGroup>
+
+        <TextView
+            style="@style/Txt.Micro"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Si el equipo no puede codificar esa resolución, la app baja automáticamente a la anterior."
+            android:textColor="@color/text_dim" />
+
+        <TextView
+            style="@style/Txt.Micro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="BITRATE DE GRABACIÓN" />
+
+        <TextView
+            android:id="@+id/txtBitrateRec"
+            style="@style/Txt.Micro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="12 Mbps"
+            android:textColor="@color/accent" />
+
+        <SeekBar
+            android:id="@+id/sbBitrateRec"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="38"
+            android:progress="10" />
+
+        <TextView
+            style="@style/Txt.Micro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="TRANSMISIÓN (se usará cuando activemos RTMP)" />
+
+        <RadioGroup
+            android:id="@+id/rgStreamRes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rbStream480"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="480p — conexiones lentas"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbStream720"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="720p — equilibrado"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbStream1080"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="1080p — internet rápido"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </RadioGroup>
+
+        <TextView
+            android:id="@+id/txtBitrateStream"
+            style="@style/Txt.Micro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Bitrate de transmisión: 4 Mbps"
+            android:textColor="@color/accent" />
+
+        <SeekBar
+            android:id="@+id/sbBitrateStream"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="11"
+            android:progress="3" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/swAutoBitrate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Bitrate automático por resolución"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <TextView
+            style="@style/Txt.Micro"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Con el automático, el bitrate se ajusta a la resolución elegida: 480p ≈ 4 Mbps, 720p ≈ 7 Mbps, 1080p ≈ 12 Mbps. Apágalo para fijarlo a mano con los deslizables."
+            android:textColor="@color/text_dim" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/swAudio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Grabar audio del micrófono"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/txtFolder"
+            style="@style/Txt.Micro"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Los videos se guardan en la carpeta Grabaciones de la app." />
+
+        <TextView
+            android:id="@+id/btnClose"
+            style="@style/PillButton.Accent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="Cerrar" />
+
+    </LinearLayout>
+</ScrollView>

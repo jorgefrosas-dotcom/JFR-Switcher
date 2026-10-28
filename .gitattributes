@@ -1,0 +1,13 @@
+# Normaliza los finales de línea para que las dos PC vean los archivos igual.
+* text=auto eol=lf
+
+# Los .cmd de Windows necesitan CRLF o los saltos internos fallan.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binarios: no tocar
+*.png binary
+*.jpg binary
+*.jks binary
+*.jar binary
+*.keystore binary

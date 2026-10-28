@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="22dp">
+
+    <TextView
+        style="@style/Txt.Title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Transición de entrada"
+        android:textSize="18sp" />
+
+    <!-- Vista previa de la transición -->
+    <FrameLayout
+        android:id="@+id/preview"
+        android:layout_width="match_parent"
+        android:layout_height="120dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_canvas"
+        android:clipChildren="true">
+
+        <TextView
+            android:id="@+id/previewFondo"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#1A1F27"
+            android:gravity="center"
+            android:text="CÁMARA A"
+            android:textColor="#5A6472"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/previewItem"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#FF6A2C"
+            android:gravity="center"
+            android:text="CÁMARA B"
+            android:textColor="#111318"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <View
+            android:id="@+id/previewCortina"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#1A1F27"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <TextView
+        style="@style/Txt.Micro"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Se repite con cada cambio de cámara o al entrar un medio"
+        android:textColor="@color/text_dim" />
+
+    <!-- Lista de transiciones -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        android:layout_marginTop="10dp"
+        android:scrollbars="none">
+
+        <RadioGroup
+            android:id="@+id/rgTransiciones"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <TextView
+        android:id="@+id/txtDuracion"
+        style="@style/Txt.Micro"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="Duración: 420 ms"
+        android:textColor="@color/accent" />
+
+    <SeekBar
+        android:id="@+id/sbDuracion"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="1400"
+        android:progress="220" />
+
+    <TextView
+        android:id="@+id/btnProbar"
+        style="@style/PillButton.Ghost"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center"
+        android:text="Repetir vista previa" />
+
+    <TextView
+        android:id="@+id/btnCerrar"
+        style="@style/PillButton.Accent"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:text="Listo" />
+
+    </LinearLayout>
+</ScrollView>
