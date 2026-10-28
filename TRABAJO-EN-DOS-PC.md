@@ -60,6 +60,21 @@ Si `SUBIR.cmd` se queja de **conflicto**: no borres nada, avísame y lo fusionam
 
 ---
 
+## La primera vez en cada PC (solo una vez)
+
+```powershell
+git clone https://github.com/jorgefrosas-dotcom/JFR-Switcher.git
+cd JFR-Switcher
+git config --local credential.username jorgefrosas-dotcom
+```
+
+Después copiar a esta carpeta los **dos** archivos de la llave: `keystore/jfr-upload.jks` y
+`keystore.properties`.
+
+**Ojo con las cuentas:** la PC de trabajo tiene guardada la cuenta `produccionesdangel-CRM` (la del
+CRM). Si no se pone `credential.username` como arriba, Git usa esa cuenta y GitHub contesta
+*403 Permission denied*. Con esa línea queda atada al repo correcto, sin tocar la otra cuenta.
+
 ## La llave de firma (esto es lo más delicado)
 
 - `keystore/jfr-upload.jks` y `keystore.properties` **no están en GitHub** (a propósito:
