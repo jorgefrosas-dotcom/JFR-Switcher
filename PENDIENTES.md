@@ -1,5 +1,17 @@
 # PENDIENTES — JFR Switcher Multicam
 
+## Cómo instalar en el POCO (MIUI/HyperOS) — truco que sí funciona
+
+- `adb install` normal falla con **`INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`**,
+  incluso con el cable puesto y la pantalla desbloqueada. Tocar el APK desde Archivos a veces también
+  lo bloquea el instalador de MIUI.
+- **Lo que funciona:** decirle a Android que el instalador es Play Store:
+  ```
+  adb install -r -i com.android.vending -g <archivo>.apk
+  ```
+  Con eso instala y **actualiza encima** sin desinstalar (misma firma), conservando la última IP.
+- La tablet (Cubot) **no** tiene ese problema: ahí `adb install -r` funciona normal.
+
 ## Arreglado en 0.2.1 (27/10 noche) — el QR traía bien el puerto, el campo lo cortaba
 
 - **Síntoma:** al escanear el QR, el campo de la app de cámara quedaba como `192.168.100.7:8` en vez
