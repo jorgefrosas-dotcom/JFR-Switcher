@@ -9,9 +9,12 @@
   - El cambio de pantalla a Chrome y el regreso **no cortan el audio**: `EmisionService` (servicio en
     primer plano, tipo `microphone|camera`) mantiene micrófono, cámara y sesión mientras la app está
     fuera de pantalla. Verificado en la tablet (25 s en segundo plano con audio intacto).
-- **Consecuencia:** el código de la API (`studio/stream/Facebook.kt`: `live_videos`, `me/accounts`,
-  login con SDK) **ya no se usa**, pero sigue compilado. Quitarlo ahorraría peso y quitaría el botón
-  «Entrar con Facebook y elegir página». **Pendiente de decidir con Jorge** (no se borra sin su visto bueno).
+- **Hecho en 0.2.5 (27/10, noche):** se **quitó** todo el código de la API de Meta — `stream/Facebook.kt`,
+  el login con SDK, la petición de permisos y el botón «Entrar con Facebook y elegir página» — y se sacó
+  la dependencia `com.facebook.android:facebook-login`. El APK pasó de 29,1 a **28,3 MB**.
+  El diálogo «Conectar con Facebook» quedó con tres campos: **ID de la página** (para abrir su Live
+  Producer), **servidor RTMPS** y **clave**. Las preferencias guardadas (`fb_page_id`, `fb_url`,
+  `fb_clave`) se conservan: verificado en la tablet tras instalar la 0.2.5.
 - Lo de Meta que **sí** hace falta es la **política de privacidad** pública: ya está en
   `jorgefrosas-dotcom.github.io/jfr-switcher-legal/privacidad.html` y enlazada desde la página de
   descargas.
