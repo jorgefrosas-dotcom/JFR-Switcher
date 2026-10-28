@@ -2301,6 +2301,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     // ------------------------------------------------------------- textos del programa
 
+    /**
+     * Carga el cuadro hacia la izquierda de la pantalla, con un margen para que no se pegue
+     * al borde. Así el visor de programa queda libre a la derecha.
+     */
+    private fun cuadroALaIzquierda(dialogo: android.app.Dialog) {
+        runCatching {
+            val ventana = dialogo.window ?: return
+            val attrs = ventana.attributes
+            attrs.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            attrs.x = 40.dp
+            ventana.attributes = attrs
+        }
+    }
+
     private fun etiquetaTexto(chico: String): TextView = TextView(this).apply {
         text = chico
         textSize = 10f
@@ -2555,6 +2569,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             .setNegativeButton("Cerrar", null)
             .show()
+            .also { cuadroALaIzquierda(it) }
     }
 
     /** Pone el texto en el programa con su animación de entrada. */
@@ -2776,6 +2791,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .setPositiveButton("Usar este") { _, _ -> alElegir(colorElegido) }
             .setNegativeButton("Cerrar", null)
             .show()
+            .also { cuadroALaIzquierda(it) }
     }
 
     // ---------------------------------------------------------------- biblioteca
