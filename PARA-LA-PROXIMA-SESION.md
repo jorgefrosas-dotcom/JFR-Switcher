@@ -52,8 +52,13 @@ transición en «Desvanecer», que es el valor por defecto.
 
 ## 3. Para seguir
 
-- **Lo más probable:** que Jorge pruebe las plantillas con sus escenas reales y pida ajustes (por
-  ejemplo, que la plantilla guarde también la calidad de las cámaras, el PiP o las 6 cámaras
+- **Lo primero que Jorge pidió dejar anotado (27/10, al cerrar):** la app está pensada para tablet y en
+  el POCO funciona pero apretada. **Quiere conservar la opción de una versión de pantalla chica muy
+  funcional**, aunque **no es prioridad ahora**: se ajusta después. El detalle de lo que se vio en el
+  teléfono y las ideas propuestas están en `CAMBIOS-SIN-PUBLICAR.md` (sección «Versión de pantalla
+  chica»). Cuando lo retome, empezar por ahí.
+- **Lo más probable en el corto plazo:** que Jorge pruebe las plantillas con sus escenas reales y pida
+  ajustes (por ejemplo, que la plantilla guarde también la calidad de las cámaras, el PiP o las cámaras
   conectadas). Todo eso hoy **no** viaja en la plantilla.
 - **Cómo se prueba sin gastar datos:** `adb shell uiautomator dump` para las coordenadas reales,
   `input tap/swipe` y capturas comparadas con Pillow; ojo con el teclado en pantalla, que tapa los
