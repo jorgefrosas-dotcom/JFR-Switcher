@@ -45,6 +45,9 @@ class CameraActivity : AppCompatActivity(), CamEngine.Escucha {
     /** Si el usuario pulsó Conectar sin permiso, se reintenta al concederlo. */
     private var conectarAlConceder = false
 
+    /** Momento (ms) de la última consulta de versión, para no preguntar a GitHub en cada conexión. */
+    private var ultimaConsultaVersion = 0L
+
     private val solicitudCamara =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { concedido ->
             permisoCamara = concedido
@@ -128,6 +131,7 @@ class CameraActivity : AppCompatActivity(), CamEngine.Escucha {
 
     /** Consulta GitHub; si hay una versión más nueva, avisa. [manual] = lo pidió el usuario. */
     private fun buscarActualizacion(manual: Boolean) {
+        ultimaConsultaVersion = System.currentTimeMillis()
         val instalada = versionInstalada()
         if (manual) Toast.makeText(this, "Buscando actualización…", Toast.LENGTH_SHORT).show()
         Thread {
@@ -398,6 +402,19 @@ class CameraActivity : AppCompatActivity(), CamEngine.Escucha {
         // Sin enlace no hay video: se muestran las instrucciones.
         binding.overlayInstrucciones.visibility = if (conectado) View.GONE else View.VISIBLE
         if (!conectado) mostrarVivo(false)
+
+        // Cada vez que se conecta (cada sesión) se mira si hay versión nueva.
+        if (conectado) revisarVersionCadaSesion()
+    }
+
+    /**
+     * Comprobación al conectar. El celular puede quedarse abierto horas, así que no basta con mirar
+     * al arrancar: se revisa en cada conexión, con un mínimo de 5 minutos entre consultas.
+     */
+    private fun revisarVersionCadaSesion() {
+        val ahora = System.currentTimeMillis()
+        if (ahora - ultimaConsultaVersion < 5 * 60_000L) return
+        buscarActualizacion(manual = false)
     }
 
     private fun mostrarVivo(enVivo: Boolean) {
