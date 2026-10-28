@@ -7,6 +7,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -51,6 +52,7 @@ import com.jfrmedia.switcher.studio.canvas.CamItem
 import com.jfrmedia.switcher.studio.canvas.CompositorView
 import com.jfrmedia.switcher.studio.canvas.ImageItem
 import com.jfrmedia.switcher.studio.canvas.MediaItem
+import com.jfrmedia.switcher.studio.canvas.Scene
 import com.jfrmedia.switcher.studio.canvas.TextoItem
 import com.jfrmedia.switcher.studio.databinding.ActivityStudioBinding
 import com.jfrmedia.switcher.studio.databinding.DialogPairingBinding
@@ -417,6 +419,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         recorder = Recorder(this)
         recorder.onError = { msg -> toast(msg) }
         b.canvas.listener = this
+        // El celular sigue fijo en horizontal (su diseño propio se hará después). La tablet gira:
+        // al ponerla en vertical entra el Modo Studio.
+        if (esPantallaCelular()) {
+            requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+        }
+        // Segundo compositor (programa) para el Modo Studio: se crea siempre y solo se engancha
+        // al layout cuando la tablet está en vertical.
+        monitorPrograma = CompositorView(this).apply {
+            scene = b.canvas.scene
+            editable = false
+        }
 
         buildSourcesGrid()
 
@@ -487,7 +500,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // superficie del emisor en vez de mostrar «Transmitir» con el directo en el aire.
         if (emisor.transmitiendo) {
             emisor.superficieParaCompositor()?.let { superficie ->
-                b.canvas.beginRecordingOutput(
+                vistaAlAire().beginRecordingOutput(
                     superficie,
                     emisor.anchoVideo,
                     emisor.altoVideo,
@@ -510,8 +523,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )
         }
         L.i("studio", "listo en ${Net.primaryIp()}:${server.port}")
+        // Si la tablet ya está en vertical, se abre directo en Modo Studio.
+        evaluarModoStudio()
         // Aviso de versión nueva: se consulta al abrir la app, en segundo plano, sin estorbar.
         buscarActualizacion(manual = false)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // La tablet gira: al pasar a vertical entra el Modo Studio y al volver a horizontal sale.
+        evaluarModoStudio()
     }
 
     // ------------------------------------------------------- versión y actualizaciones
@@ -598,7 +619,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         runCatching { unregisterReceiver(receptorSesion) }
         runCatching { audioVivo.detener() }
         runCatching { localCam.detener() }
-        runCatching { if (recorder.isRecording) { b.canvas.endRecordingOutput(); recorder.stop() } }
+        runCatching { if (recorder.isRecording) { vistaAlAire().endRecordingOutput(); recorder.stop() } }
         runCatching { server.stop() }
         runCatching { hub.shutdown() }
         tiles.forEach { runCatching { it.release() } }
@@ -667,7 +688,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (camA == null && camB == null) {
             assignCamera(session.slot, 'A')
         } else if (camA == session.slot || camB == session.slot) {
-            b.canvas.attachTrack(session.slot, track)
+            adjuntar(session.slot, track)
         }
         refreshUi()
     }
@@ -717,7 +738,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * «AL AIRE» o «FUERA DE AIRE», para que el operador sepa si está en pantalla.
      */
     private fun actualizarProgramaCamaras() {
-        val scene = b.canvas.scene
+        // La escena que importa es la que está AL AIRE (en Modo Studio, la del monitor de programa).
+        val scene = escenaAlAire()
         // Si hay un video o foto de MEDIOS a pantalla completa, el programa no muestra cámaras.
         val tapado = scene.items.any { it is MediaItem && it.visible }
         hub.all().forEach { session ->
@@ -850,7 +872,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             return
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(CLAVE_TABLET_CAM, true).apply()
-        b.canvas.attachTrack(LocalCam.SLOT, pista)
+        adjuntar(LocalCam.SLOT, pista)
         tiles.getOrNull(LocalCam.SLOT)?.bindLocal(pista, nombreCamaraTablet())
         refreshUi()
     }
@@ -858,7 +880,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** Apaga la cámara local y la saca del lienzo. */
     private fun apagarCamaraTablet() {
         val pista = localCam.track
-        if (pista != null) b.canvas.detachTrack(LocalCam.SLOT, pista)
+        if (pista != null) soltar(LocalCam.SLOT, pista)
         localCam.detener()
         val scene = b.canvas.scene
         scene.camAt(LocalCam.SLOT)?.let { scene.remove(it) }
@@ -908,9 +930,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     scene.camAt(viejo)?.let { item ->
                         scene.remove(item)
                         if (item.slot == LocalCam.SLOT) {
-                            b.canvas.detachTrack(item.slot, localCam.track)
+                            soltar(item.slot, localCam.track)
                         } else {
-                            b.canvas.detachTrack(item.slot, hub.session(item.slot)?.videoTrack)
+                            soltar(item.slot, hub.session(item.slot)?.videoTrack)
                         }
                     }
                     if (layer == 'A') camA = null else camB = null
@@ -932,9 +954,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 scene.bringToFront(item)
             }
             if (slot == LocalCam.SLOT) {
-                localCam.track?.let { b.canvas.attachTrack(slot, it) }
+                localCam.track?.let { adjuntar(slot, it) }
             } else {
-                hub.session(slot)?.videoTrack?.let { b.canvas.attachTrack(slot, it) }
+                hub.session(slot)?.videoTrack?.let { adjuntar(slot, it) }
             }
         } else {
             if (layer == 'A') {
@@ -1040,9 +1062,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 b.canvas.scene.camAt(slot)?.let { item ->
                     b.canvas.scene.remove(item)
                     if (slot == LocalCam.SLOT) {
-                        b.canvas.detachTrack(slot, localCam.track)
+                        soltar(slot, localCam.track)
                     } else {
-                        b.canvas.detachTrack(slot, hub.session(slot)?.videoTrack)
+                        soltar(slot, hub.session(slot)?.videoTrack)
                     }
                 }
             }
@@ -1069,9 +1091,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         scene.cams().filter { it.slot != slot }.forEach { item ->
             scene.remove(item)
             if (item.slot == LocalCam.SLOT) {
-                b.canvas.detachTrack(item.slot, localCam.track)
+                soltar(item.slot, localCam.track)
             } else {
-                b.canvas.detachTrack(item.slot, hub.session(item.slot)?.videoTrack)
+                soltar(item.slot, hub.session(item.slot)?.videoTrack)
             }
         }
         camB = null
@@ -1084,9 +1106,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         scene.sendToBack(item)
         camA = slot
         if (slot == LocalCam.SLOT) {
-            localCam.track?.let { b.canvas.attachTrack(slot, it) }
+            localCam.track?.let { adjuntar(slot, it) }
         } else {
-            hub.session(slot)?.videoTrack?.let { b.canvas.attachTrack(slot, it) }
+            hub.session(slot)?.videoTrack?.let { adjuntar(slot, it) }
         }
         scene.selectedId = item.id
         b.canvas.animarEntrada(item)
@@ -1122,17 +1144,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun quitarCamaraDelLienzo(item: CamItem) {
         b.canvas.scene.remove(item)
         if (item.slot == LocalCam.SLOT) {
-            b.canvas.detachTrack(item.slot, localCam.track)
+            soltar(item.slot, localCam.track)
         } else {
-            b.canvas.detachTrack(item.slot, hub.session(item.slot)?.videoTrack)
+            soltar(item.slot, hub.session(item.slot)?.videoTrack)
         }
     }
 
     private fun engancharFuente(slot: Int) {
         if (slot == LocalCam.SLOT) {
-            localCam.track?.let { b.canvas.attachTrack(slot, it) }
+            localCam.track?.let { adjuntar(slot, it) }
         } else {
-            hub.session(slot)?.videoTrack?.let { b.canvas.attachTrack(slot, it) }
+            hub.session(slot)?.videoTrack?.let { adjuntar(slot, it) }
         }
     }
 
@@ -1647,9 +1669,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             if (camA == item.slot) camA = null
             if (camB == item.slot) camB = null
             if (item.slot == LocalCam.SLOT) {
-                b.canvas.detachTrack(item.slot, localCam.track)
+                soltar(item.slot, localCam.track)
             } else {
-                b.canvas.detachTrack(item.slot, hub.session(item.slot)?.videoTrack)
+                soltar(item.slot, hub.session(item.slot)?.videoTrack)
             }
             // Si queda otra cámara en el lienzo, esa pasa a ser el fondo (capa A).
             val restante = b.canvas.scene.cams().firstOrNull()
@@ -1734,6 +1756,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Protege micrófono y cámara mientras la sesión sigue fuera de la pantalla. */
     private fun iniciarProteccionSesion() {
+        // Se congela la orientación: el diseño no cambia a media grabación ni a media transmisión.
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
         com.jfrmedia.switcher.studio.stream.EmisionService.iniciar(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -1745,6 +1769,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun detenerProteccionSesion() {
         com.jfrmedia.switcher.studio.stream.EmisionService.detener(this)
+        // Se vuelve a permitir que la tablet gire (en el celular queda fijo en horizontal).
+        requestedOrientation = if (esPantallaCelular()) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER
+        }
+        avaliarDisenoTrasSesion()
+    }
+
+    /** Al soltar la sesión, si la tablet quedó girada, el diseño se ajusta ahora. */
+    private fun avaliarDisenoTrasSesion() {
+        uiHandler.postDelayed({ evaluarModoStudio() }, 350)
     }
 
     private fun startRecording(withAudio: Boolean) {
@@ -1793,7 +1829,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         anchoGrabando = anchoGrabado
         altoGrabando = altoGrabado
         actualizarInfoLienzo()
-        b.canvas.beginRecordingOutput(surface, anchoGrabado, altoGrabado, recorder.baseTimeNs)
+        vistaAlAire().beginRecordingOutput(surface, anchoGrabado, altoGrabado, recorder.baseTimeNs)
         recStartMs = SystemClock.elapsedRealtime()
         iniciarProteccionSesion()
         actualizarCandadoOrientacion()
@@ -1807,7 +1843,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     private fun stopRecording() {
-        b.canvas.endRecordingOutput()
+        vistaAlAire().endRecordingOutput()
         recorder.stop()
         uiHandler.removeCallbacks(ticker)
         actualizarCandadoOrientacion()
@@ -1842,7 +1878,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * PixelCopy y la guarda en Pictures/JFR Switcher.
      */
     private fun tomarFoto() {
-        val vista = b.canvas
+        // La foto es del PROGRAMA (lo que está al aire), no del preview.
+        val vista = vistaAlAire()
         if (vista.width == 0 || vista.height == 0) {
             toast("El lienzo todavía no está listo")
             return
@@ -2220,13 +2257,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Muestra u oculta un medio en el programa. */
     private fun alternarMedio(medio: Medio) {
-        val scene = b.canvas.scene
+        // Los videos llevan el reproductor pegado al monitor, así que van **directo al aire**:
+        // en Modo Studio eso es el monitor de programa, no el preview.
+        val vistaVideo = vistaAlAire()
+        val scene = if (medio.video && modoStudio) escenaAlAire() else b.canvas.scene
         if (medio.video) {
             val actual = scene.items.filterIsInstance<MediaItem>().firstOrNull { it.uri == medio.uri }
             if (actual != null) {
-                b.canvas.detenerVideo()
+                vistaVideo.detenerVideo()
                 scene.remove(actual)
-                b.canvas.requestRender()
+                vistaVideo.requestRender()
                 refreshMediaTiles()
                 toast("Video detenido")
                 return
@@ -2234,18 +2274,22 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             val item = MediaItem(scene.nextId(), medio.uri, true, medio.nombre)
             item.rect.set(0f, 0f, 1f, 1f)
             scene.agregar(item)
-            scene.selectedId = item.id
-            b.canvas.animarEntrada(item)
-            b.canvas.requestRender()
-            b.canvas.reproducirVideo(item) {
+            if (!modoStudio) scene.selectedId = item.id
+            vistaVideo.animarEntrada(item)
+            vistaVideo.requestRender()
+            vistaVideo.reproducirVideo(item) {
                 // Al terminar se quita solo y vuelve la cámara que estaba al aire.
                 scene.remove(item)
-                b.canvas.requestRender()
-                onSelectionChanged(scene.selected())
+                vistaVideo.requestRender()
+                if (!modoStudio) onSelectionChanged(scene.selected())
+                actualizarProgramaCamaras()
                 toast("Fin del video: vuelve la cámara")
             }
             refreshMediaTiles()
-            toast("Reproduciendo ${medio.nombre}")
+            toast(
+                if (modoStudio) "Video al aire: ${medio.nombre}"
+                else "Reproduciendo ${medio.nombre}"
+            )
         } else {
             val item = scene.cams().firstOrNull()
             val existente = scene.images().firstOrNull { it.uri == medio.uri }
@@ -3196,15 +3240,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // Si el equipo bajó la resolución al grabar, se muestra la que de verdad se usa.
         val ancho = if (anchoGrabando > 0) anchoGrabando else recAncho
         val alto = if (altoGrabando > 0) altoGrabando else recAlto
-        b.txtCanvasInfo.text =
-            if (vertical) "$ancho×$alto" else "16:9 · $ancho×$alto"
-        b.btnOrientacion.text = if (vertical) "9:16" else "16:9"
+        b.txtCanvasInfo.text = when {
+            modoStudio -> "9:16 · $ancho×$alto"
+            vertical -> "$ancho×$alto"
+            else -> "16:9 · $ancho×$alto"
+        }
+        b.btnOrientacion.text = if (vertical || modoStudio) "9:16" else "16:9"
         // La cabecera del visor se acorta en vertical (el medidor la reescribe cada 2 s).
-        if (vertical) b.txtEtiquetaPrograma.text = "PROGRAMA"
+        if (vertical || modoStudio) b.txtEtiquetaPrograma.text = "PROGRAMA"
     }
 
     private fun cambiarOrientacion(nuevoVertical: Boolean) {
         if (vertical == nuevoVertical) return
+        // En Modo Studio el formato lo manda la tablet acostada: es 9:16 y no cambia con el chip.
+        if (modoStudio) {
+            toast("En Modo Studio el formato es 9:16. Pon la tablet en horizontal para cambiarlo.")
+            return
+        }
         // Candado: el formato no se puede cambiar en medio de una grabación o transmisión.
         if (sesionEnCurso()) {
             toast("Formato bloqueado mientras grabas o transmites")
@@ -3866,7 +3918,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             return
         }
         // El compositor dibuja el programa en la superficie del emisor.
-        b.canvas.beginRecordingOutput(superficie, ancho, alto, System.nanoTime())
+        vistaAlAire().beginRecordingOutput(superficie, ancho, alto, System.nanoTime())
         // La grabación va antes de transmitir: así el muxer recibe el formato de video.
         // En «Grabar y transmitir a la vez» se graba siempre, aunque el interruptor de
         // respaldo esté apagado.
@@ -3882,8 +3934,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             // creciendo en la carpeta «Emision» que la pantalla no mostraba ni podía detener
             // (pasó de verdad al probar el 27/10).
             if (emisor.grabando) emisor.detenerGrabacion()
-            b.canvas.endRecordingOutput()
-            b.canvas.salidaInvertida = false
+            vistaAlAire().endRecordingOutput()
+            vistaAlAire().salidaInvertida = false
             b.liveDot.setBackgroundResource(R.drawable.bg_dot_gray)
             return
         }
@@ -3915,8 +3967,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }, 1500)
         }
         emisor.detenerTransmision()
-        b.canvas.endRecordingOutput()
-        b.canvas.salidaInvertida = false
+        vistaAlAire().endRecordingOutput()
+        vistaAlAire().salidaInvertida = false
         actualizarBotonSesion()
         actualizarCandadoOrientacion()
         if (!recorder.isRecording) {
@@ -4278,8 +4330,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 encenderCamaraTablet()
             }
         }
-        moverControles()
-        reacomodarCuerpo()
+        // En Modo Studio el acomodo lo manda `construirLayoutStudio()`: si se reacomodara aquí se
+        // desarmaría. Solo se reafirma el 9:16 de los dos monitores.
+        if (modoStudio) {
+            aplicarAspectoEstudio()
+        } else {
+            moverControles()
+            reacomodarCuerpo()
+        }
         buildSourcesGrid()
         // La rejilla se reconstruye: hay que volver a enganchar la cámara local a su tarjeta.
         localCam.track?.let { pista ->
@@ -5407,7 +5465,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         // Limpiar escena actual
         for (slot in 0 until 6) {
-            b.canvas.detachTrack(slot, hub.session(slot)?.videoTrack)
+            soltar(slot, hub.session(slot)?.videoTrack)
         }
         b.canvas.scene.items.toList().forEach { b.canvas.scene.remove(it) }
         camA = null
@@ -5422,9 +5480,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             item.panY = c.panY
             if (c.capa == "A") camA = c.slot else camB = c.slot
             if (c.slot == LocalCam.SLOT) {
-                localCam.track?.let { b.canvas.attachTrack(c.slot, it) }
+                localCam.track?.let { adjuntar(c.slot, it) }
             } else {
-                hub.session(c.slot)?.videoTrack?.let { b.canvas.attachTrack(c.slot, it) }
+                hub.session(c.slot)?.videoTrack?.let { adjuntar(c.slot, it) }
             }
         }
 
@@ -5718,6 +5776,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun actualizarBotonSesion() {
         // Al empezar o terminar una sesión el micrófono del vúmetro se suelta o se retoma solo.
         ajustarAudioVivo()
+        // Y si la tablet se giró durante la sesión, el diseño se ajusta justo al terminar.
+        evaluarModoStudio()
         // Con el directo en el aire el botón debe poder cortarlo, aunque el texto del modo
         // sea «Transmitir» (antes se quedaba igual y parecía que no había nada corriendo).
         if (recorder.isRecording || transmitiendo) {
@@ -5778,6 +5838,420 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun toast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
+
+    // ------------------------------------------------------------------ MODO STUDIO
+    //
+    // Solo en la **tablet** y solo cuando está **en vertical**. Es el modo tipo OBS de dos
+    // monitores: preview a la izquierda, programa a la derecha, los controles en medio y las
+    // tarjetas (cámaras, overlays, medios) debajo. Todo lo que se elige abajo entra al
+    // **preview**; con «Transicionar» pasa al programa y lo que estaba al aire pasa al preview.
+    //
+    // El monitor de programa es un segundo CompositorView: la escena del programa es la que se
+    // graba, se transmite y la que dice a los celulares quién está «AL AIRE».
+
+    /** Monitor de programa. Se crea siempre y solo se engancha al layout en Modo Studio. */
+    private var monitorPrograma: CompositorView? = null
+
+    /** true cuando el Modo Studio está activo (tablet en vertical). */
+    private var modoStudio = false
+
+    /** true cuando el layout de Modo Studio ya está armado. */
+    private var layoutStudioListo = false
+
+    private var filaMonitores: LinearLayout? = null
+    private var hostPrograma: AspectFrameLayout? = null
+    private var botonTransicionar: TextView? = null
+
+    /** Vista que va **al aire**: en Modo Studio es el monitor de programa. */
+    private fun vistaAlAire(): CompositorView =
+        if (modoStudio) monitorPrograma ?: b.canvas else b.canvas
+
+    /** Escena que está al aire (la que se graba y la que va a los celulares). */
+    private fun escenaAlAire(): Scene = vistaAlAire().scene
+
+    /** Adjunta la pista a los dos monitores (preview y programa). */
+    private fun adjuntar(slot: Int, track: VideoTrack) {
+        b.canvas.attachTrack(slot, track)
+        monitorPrograma?.attachTrack(slot, track)
+    }
+
+    /** Suelta la pista de los dos monitores. */
+    private fun soltar(slot: Int, track: VideoTrack?) {
+        b.canvas.detachTrack(slot, track)
+        monitorPrograma?.detachTrack(slot, track)
+    }
+
+    /** Para no repetir el aviso de que el diseño no cambia en medio de una sesión. */
+    private var avisoStudioOcupado = false
+
+    /**
+     * Decide si toca Modo Studio: **solo tablet y solo en vertical** (en el celular nunca).
+     * Se llama al abrir, al girar la tablet y al terminar una sesión.
+     */
+    private fun evaluarModoStudio() {
+        val tablet = !esPantallaCelular()
+        val verticalFisico =
+            resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        val quiere = tablet && verticalFisico
+        if (quiere == modoStudio) {
+            avisoStudioOcupado = false
+            return
+        }
+        if (sesionEnCurso()) {
+            if (!avisoStudioOcupado) {
+                avisoStudioOcupado = true
+                toast("El diseño cambia cuando termines la grabación o el directo")
+            }
+            return
+        }
+        avisoStudioOcupado = false
+        if (quiere) entrarModoStudio() else salirModoStudio()
+    }
+
+    private fun entrarModoStudio() {
+        val monitor = monitorPrograma ?: return
+        modoStudio = true
+        // El programa arranca con una copia del lienzo actual: así la primera transición no se
+        // lleva lo que ya está puesto (cámaras, overlays, textos).
+        monitor.scene = clonarEscena(b.canvas.scene)
+        construirLayoutStudio()
+        aplicarAspectoEstudio()
+        b.canvas.requestRender()
+        monitor.requestRender()
+        refreshOverlayTiles()
+        refreshMediaTiles()
+        L.i("studio", "Modo Studio activo")
+        toast("Modo Studio · preview a la izquierda, programa a la derecha")
+    }
+
+    private fun salirModoStudio() {
+        val monitor = monitorPrograma
+        modoStudio = false
+        // Lo que estaba al aire es lo que se queda en el lienzo al volver al diseño de siempre.
+        monitor?.scene?.let { alAire ->
+            if (alAire.items.isNotEmpty()) b.canvas.scene = alAire
+        }
+        monitor?.scene = Scene()
+        restaurarLayoutNormal()
+        L.i("studio", "Modo Studio apagado")
+    }
+
+    /** Copia una escena (cámaras, imágenes y textos). Los videos no se copian. */
+    private fun clonarEscena(origen: Scene): Scene {
+        val nueva = Scene()
+        nueva.aspect = origen.aspect
+        origen.items.forEach { item ->
+            val copia: CanvasItem? = when (item) {
+                is CamItem -> CamItem(nueva.nextId(), item.slot).apply {
+                    rect.set(item.rect)
+                    visible = item.visible
+                    opacity = item.opacity
+                    radiusDp = item.radiusDp
+                    label = item.label
+                    zoom = item.zoom
+                    panX = item.panX
+                    panY = item.panY
+                    luz = item.luz
+                    contraste = item.contraste
+                    wb = item.wb
+                    color = item.color
+                    vineta = item.vineta
+                    poster = item.poster
+                }
+
+                is TextoItem -> TextoItem(
+                    nueva.nextId(), item.texto, item.fuente, item.animacion,
+                    item.guardadoId, item.bitmap, item.color, item.tamano
+                ).apply {
+                    rect.set(item.rect)
+                    visible = item.visible
+                    opacity = item.opacity
+                }
+
+                is ImageItem -> ImageItem(nueva.nextId(), item.bitmap, item.label, item.uri).apply {
+                    rect.set(item.rect)
+                    visible = item.visible
+                    opacity = item.opacity
+                    radiusDp = item.radiusDp
+                }
+
+                is MediaItem -> null // el video se reproduce en la escena donde está, no se copia
+            }
+            copia?.let { nueva.agregar(it) }
+        }
+        return nueva
+    }
+
+    /** Los dos monitores en 9:16 y los celulares avisados de que el lienzo es vertical. */
+    private fun aplicarAspectoEstudio() {
+        val aspecto = 9f / 16f
+        b.canvas.scene.aspect = aspecto
+        monitorPrograma?.scene?.aspect = aspecto
+        b.canvasHost.aspect = aspecto
+        hostPrograma?.aspect = aspecto
+        hub.vertical = true
+        actualizarInfoLienzo()
+        ajustarLienzo()
+    }
+
+    /** Columna de un monitor: rótulo arriba y el visor debajo. */
+    private fun columnaMonitor(rotulo: String): LinearLayout {
+        val columna = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        columna.addView(TextView(this).apply {
+            text = rotulo
+            textSize = 9f
+            letterSpacing = 0.14f
+            setTextColor(
+                ContextCompat.getColor(
+                    this@StudioActivity,
+                    if (rotulo == "PREVIEW") R.color.text_secondary else R.color.accent
+                )
+            )
+            setPadding(2.dp, 0, 2.dp, 3.dp)
+        })
+        return columna
+    }
+
+    /** Arma el layout de Modo Studio moviendo los bloques que ya existen. */
+    private fun construirLayoutStudio() {
+        if (layoutStudioListo) return
+        val cuerpo = b.cuerpo
+        cuerpo.removeAllViews()
+        (b.panelFuentes.parent as? ViewGroup)?.removeView(b.panelFuentes)
+        (b.panelPrograma.parent as? ViewGroup)?.removeView(b.panelPrograma)
+        (zonaControles?.parent as? ViewGroup)?.removeView(zonaControles)
+        b.slotIzquierdo.visibility = View.GONE
+        cuerpo.orientation = LinearLayout.VERTICAL
+
+        // 1) Cabecera con el estado del equipo.
+        (b.cabeceraPrograma.parent as? ViewGroup)?.removeView(b.cabeceraPrograma)
+        cuerpo.addView(
+            b.cabeceraPrograma,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        // 2) Los dos monitores, con los controles en medio.
+        val fila = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(6.dp, 0, 6.dp, 0)
+        }
+        filaMonitores = fila
+        cuerpo.addView(
+            fila,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.35f)
+        )
+
+        // Preview (es el lienzo de siempre: ahí se compone y se edita).
+        val colPreview = columnaMonitor("PREVIEW")
+        (b.canvasHost.parent as? ViewGroup)?.removeView(b.canvasHost)
+        b.canvasHost.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+        )
+        colPreview.addView(b.canvasHost)
+        fila.addView(
+            colPreview,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+        )
+
+        // Controles en medio de los dos monitores.
+        val centro = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(5.dp, 0, 5.dp, 0)
+        }
+        fila.addView(centro, LinearLayout.LayoutParams(94.dp, ViewGroup.LayoutParams.MATCH_PARENT))
+        moverBotonesAColumna(centro)
+
+        // Programa.
+        val colPrograma = columnaMonitor("PROGRAMA")
+        val host = AspectFrameLayout(this).apply {
+            aspect = 9f / 16f
+            setBackgroundResource(R.drawable.bg_canvas)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+            )
+        }
+        hostPrograma = host
+        monitorPrograma?.let { monitor ->
+            (monitor.parent as? ViewGroup)?.removeView(monitor)
+            host.addView(
+                monitor,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+        colPrograma.addView(host)
+        fila.addView(
+            colPrograma,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+        )
+
+        // 3) Tarjetas de cámaras, overlays y medios.
+        cuerpo.addView(
+            b.panelFuentes,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        )
+
+        // 4) Ajustes de imagen y monitor de audio, los dos visibles.
+        val baja = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(8.dp, 2.dp, 8.dp, 4.dp)
+        }
+        cuerpo.addView(
+            baja,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        (b.cajaVideo.parent as? ViewGroup)?.removeView(b.cajaVideo)
+        b.cajaVideo.visibility = View.VISIBLE
+        baja.addView(
+            b.cajaVideo,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        panelAudio?.let { audio ->
+            (audio.parent as? ViewGroup)?.removeView(audio)
+            audio.visibility = View.VISIBLE
+            ondaAudio?.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 54.dp
+            )
+            baja.addView(
+                audio,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+        layoutStudioListo = true
+        buildSourcesGrid()
+    }
+
+    /** Los botones de siempre más «Transicionar», apilados entre los dos monitores. */
+    private fun moverBotonesAColumna(centro: LinearLayout) {
+        val botones = listOf(
+            b.btnLayerA, b.btnLayerB, b.btnPip, b.btnSplit,
+            b.btnZoomOut, b.btnZoomIn, b.btnTabletLens
+        )
+        for (v in botones) {
+            (v.parent as? ViewGroup)?.removeView(v)
+            recordarEstilo(v)
+            v.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 32.dp
+            ).apply { topMargin = 4.dp }
+            v.gravity = Gravity.CENTER
+            v.textSize = 11f
+            centro.addView(v)
+        }
+        val transicionar = TextView(this).apply {
+            text = "⇄\nTRANSICIONAR"
+            textSize = 10f
+            gravity = Gravity.CENTER
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.bg_root))
+            setBackgroundResource(R.drawable.bg_pill_accent)
+            setPadding(2.dp, 6.dp, 2.dp, 6.dp)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 54.dp
+            ).apply { topMargin = 10.dp }
+            setOnClickListener { transicionar() }
+        }
+        botonTransicionar = transicionar
+        centro.addView(transicionar)
+    }
+
+    /** Devuelve el diseño de siempre (horizontal) y rearma todo. */
+    private fun restaurarLayoutNormal() {
+        if (!layoutStudioListo) return
+        monitorPrograma?.let { monitor -> (monitor.parent as? ViewGroup)?.removeView(monitor) }
+        (filaMonitores?.parent as? ViewGroup)?.removeView(filaMonitores)
+        b.cuerpo.removeAllViews()
+        (b.cabeceraPrograma.parent as? ViewGroup)?.removeView(b.cabeceraPrograma)
+        (b.canvasHost.parent as? ViewGroup)?.removeView(b.canvasHost)
+        b.canvasHost.aspect = if (vertical) 9f / 16f else 16f / 9f
+        b.panelPrograma.addView(
+            b.cabeceraPrograma, 0,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        b.panelPrograma.addView(
+            b.canvasHost, 1,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        )
+        filaMonitores = null
+        hostPrograma = null
+        botonTransicionar = null
+        layoutStudioListo = false
+        aplicarOrientacion()
+        refreshOverlayTiles()
+        refreshMediaTiles()
+        onSelectionChanged(null)
+    }
+
+    /**
+     * Pasa el preview al programa: se intercambian las escenas y el cuadro que estaba al aire se
+     * retira con la transición elegida (como el botón de OBS).
+     */
+    private fun transicionar() {
+        val programa = monitorPrograma ?: return
+        if (!modoStudio) return
+        if (programa.width <= 0 || programa.height <= 0) return
+        val foto = Bitmap.createBitmap(programa.width, programa.height, Bitmap.Config.ARGB_8888)
+        android.view.PixelCopy.request(
+            programa, foto,
+            { resultado ->
+                intercambiarMonitor(
+                    if (resultado == android.view.PixelCopy.SUCCESS) foto else null
+                )
+            },
+            uiHandler
+        )
+    }
+
+    private fun intercambiarMonitor(foto: Bitmap?) {
+        val programa = monitorPrograma ?: return
+        val escenaPreview = b.canvas.scene
+        val escenaPrograma = programa.scene
+        b.canvas.scene = escenaPrograma
+        programa.scene = escenaPreview
+        escenaPreview.selectedId = null
+        escenaPrograma.selectedId = null
+        aplicarAspectoEstudio()
+        b.canvas.requestRender()
+        programa.requestRender()
+        if (foto != null) {
+            programa.animarVelo(foto, b.canvas.transicion, b.canvas.transicionMs)
+            // El lienzo se dibuja bajo demanda: se le piden cuadros mientras dura la transición.
+            val paso = object : Runnable {
+                override fun run() {
+                    programa.requestRender()
+                    if (programa.veloActivo) uiHandler.postDelayed(this, 16)
+                }
+            }
+            uiHandler.post(paso)
+        }
+        // Las tarjetas ahora muestran lo que quedó en preview.
+        refreshOverlayTiles()
+        refreshMediaTiles()
+        refreshUi()
+        onSelectionChanged(b.canvas.scene.selected())
+        actualizarProgramaCamaras()
+    }
+
 
     companion object {
         private const val PREFS = "jfr_studio"

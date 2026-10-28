@@ -1,6 +1,7 @@
 package com.jfrmedia.switcher.studio.canvas
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.MediaPlayer
 import android.net.Uri
 import android.graphics.SurfaceTexture
@@ -37,7 +38,13 @@ class CompositorView @JvmOverloads constructor(
         fun onSceneChanged()
     }
 
-    val scene = Scene()
+    /**
+     * Escena que dibuja esta vista.
+     *
+     * Es `var` a propósito: en Modo Studio hay **dos** compositores (preview y programa) y al
+     * «Transicionar» se intercambian las escenas entre los dos.
+     */
+    var scene: Scene = Scene()
 
     @Volatile
     var listener: Listener? = null
@@ -326,6 +333,89 @@ class CompositorView @JvmOverloads constructor(
     private val animRect = RectF()
     private var animAlpha = 1f
 
+    // ---- velo del cambio preview → programa (MODO STUDIO) ----
+    /** Cuadro congelado del programa que se está retirando; null si no hay transición en curso. */
+    @Volatile
+    private var veloBitmap: Bitmap? = null
+    private var veloTexture: ImageTexture? = null
+    @Volatile
+    private var veloInicioNs = 0L
+    @Volatile
+    private var veloTipo: Transicion = Transicion.FUNDIDO
+    @Volatile
+    private var veloDurMs = 420
+
+    /**
+     * Muestra [bitmap] a cuadro completo (el programa que sale) y lo va retirando con la
+     * transición elegida, para que el cambio preview → programa se vea, no que salte de golpe.
+     */
+    fun animarVelo(bitmap: Bitmap, tipo: Transicion = transicion, duracionMs: Int = transicionMs) {
+        if (tipo == Transicion.CORTE || duracionMs <= 0) {
+            veloBitmap = null
+            requestRender()
+            return
+        }
+        veloBitmap = bitmap
+        veloTipo = tipo
+        veloDurMs = duracionMs.coerceAtLeast(1)
+        veloInicioNs = System.nanoTime()
+        requestRender()
+    }
+
+    /** true mientras el velo se está retirando (para pedir cuadros). */
+    val veloActivo: Boolean get() = veloBitmap != null
+
+    private fun dibujarVelo(outW: Int, outH: Int) {
+        val bmp = veloBitmap ?: return
+        val dur = veloDurMs / 1000f
+        var t = ((System.nanoTime() - veloInicioNs) / 1_000_000_000f / dur).coerceIn(0f, 1f)
+        t = t * t * (3f - 2f * t)
+        if (t >= 1f) {
+            veloBitmap = null
+            return
+        }
+        val tex = veloTexture?.takeIf { it.bitmap === bmp }
+            ?: ImageTexture(bmp).also { veloTexture = it }
+        if (!tex.ensure()) return
+
+        val r = RectF(0f, 0f, 1f, 1f)
+        var alfa = 1f
+        // Se retira por donde la entrada entra: si la transición hace entrar de un lado, el
+        // cuadro que sale se va por el lado contrario.
+        when (veloTipo) {
+            Transicion.FUNDIDO -> alfa = 1f - t
+            Transicion.DESLIZ_IZQ -> r.offset(t * 2f, 0f)
+            Transicion.DESLIZ_DER -> r.offset(-t * 2f, 0f)
+            Transicion.DESLIZ_ARRIBA -> r.offset(0f, t * 2f)
+            Transicion.DESLIZ_ABAJO -> r.offset(0f, -t * 2f)
+            Transicion.WIPE_IZQ -> r.set(0f, 0f, 1f - t, 1f)
+            Transicion.WIPE_DER -> r.set(t, 0f, 1f, 1f)
+            Transicion.WIPE_ARRIBA -> r.set(0f, 0f, 1f, 1f - t)
+            Transicion.WIPE_ABAJO -> r.set(0f, t, 1f, 1f)
+            Transicion.ZOOM_IN -> {
+                val e = 1f + 0.5f * t
+                r.set(0.5f - e / 2f, 0.5f - e / 2f, 0.5f + e / 2f, 0.5f + e / 2f)
+                alfa = 1f - t
+            }
+            Transicion.ZOOM_OUT -> {
+                val e = 1f - 0.35f * t
+                r.set(0.5f - e / 2f, 0.5f - e / 2f, 0.5f + e / 2f, 0.5f + e / 2f)
+                alfa = 1f - t
+            }
+            Transicion.CORTE -> return
+        }
+        if (alfa <= 0.01f || r.width() <= 0.002f || r.height() <= 0.002f) return
+        Mvp.forRect(mvp, r.left, r.top, r.right, r.bottom)
+        rgba?.draw(
+            mvp = mvp,
+            textureId = tex.id,
+            opacity = alfa,
+            radiusPx = 0f,
+            halfW = r.width() * outW / 2f,
+            halfH = r.height() * outH / 2f
+        )
+    }
+
     /** Arranca la animación de entrada del elemento indicado. */
     fun animarEntrada(item: CanvasItem, tipo: Transicion = transicion, duracionMs: Int = transicionMs) {
         if (tipo == Transicion.CORTE || duracionMs <= 0) {
@@ -343,8 +433,7 @@ class CompositorView @JvmOverloads constructor(
 
     /** Rectángulo a dibujar: el animado si el elemento está en transición. */
     /** Calcula el rectángulo y la opacidad del elemento para el progreso [t]. */
-    private fun aplicarTransicion(base: RectF, tipo: Transicion, t: Float) {
-        val w = base.width()
+    private fun aplicarTransicion(base: RectF, tipo: Transicion, t: Float) {        val w = base.width()
         val h = base.height()
         val cx = base.centerX()
         val cy = base.centerY()
@@ -429,6 +518,8 @@ class CompositorView @JvmOverloads constructor(
         if (withSelection) {
             scene.selected()?.let { drawOutline(it, outW, outH) }
         }
+        // El velo del cambio de programa va encima de todo (menos del marco de selección).
+        dibujarVelo(outW, outH)
     }
 
     private fun drawCam(item: CamItem, outW: Int, outH: Int) {
@@ -765,6 +856,12 @@ class CompositorView @JvmOverloads constructor(
 
     // ------------------------------------------------------------------ gestos
 
+    /**
+     * false en el monitor de PROGRAMA del Modo Studio: ahí solo se mira, se compone y se edita
+     * en el preview. Así no se mueve nada que ya está al aire.
+     */
+    var editable: Boolean = true
+
     private var touchItem: CanvasItem? = null
     private var scaleMode = false
     private var zoomMode = false
@@ -780,6 +877,7 @@ class CompositorView @JvmOverloads constructor(
     private var didMove = false
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!editable) return false
         if (width == 0 || height == 0) return false
         val x = event.x / width
         val y = event.y / height

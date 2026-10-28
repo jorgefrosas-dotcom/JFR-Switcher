@@ -37,10 +37,9 @@
 
         <activity
             android:name=".StudioActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="userLandscape"
             android:theme="@style/Theme.JfrSwitcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
