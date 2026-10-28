@@ -5056,6 +5056,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         refrescar()
         dialog.show()
+        cuadroALaIzquierda(dialog)
     }
 
     private fun dialogoGuardarPlantilla() {
@@ -5089,6 +5090,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
         }
         dialog.show()
+        cuadroALaIzquierda(dialog)
     }
 
     private fun dialogoAbrirPlantilla() {
@@ -5222,6 +5224,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         dialog.setOnDismissListener { pairingBinding = null }
         db.btnClose.setOnClickListener { dialog.dismiss() }
         dialog.show()
+        cuadroALaIzquierda(dialog)
     }
 
     private fun showSettings() {
@@ -5384,6 +5387,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             dialog.dismiss()
         }
         dialog.show()
+        cuadroALaIzquierda(dialog)
     }
 
     /** Guarda los ajustes para que se recuerden al abrir la app. */
