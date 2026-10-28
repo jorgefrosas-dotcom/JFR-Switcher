@@ -2544,6 +2544,21 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             tamano = tamano
         )
 
+        // Vista previa en el visor: se refresca sola cuando cambia algo (texto, letra, color…).
+        val ultimoVisto = arrayOfNulls<String>(1)
+        val vigilante = object : Runnable {
+            override fun run() {
+                val t = armar()
+                val clave = "${t.texto}|${t.fuente}|${t.color}|${t.animacion}|${t.tamano}"
+                if (clave != ultimoVisto[0]) {
+                    ultimoVisto[0] = clave
+                    if (t.texto.isBlank()) quitarPreviewTexto() else mostrarPreviewTexto(t)
+                }
+                handler.postDelayed(this, 300)
+            }
+        }
+        handler.post(vigilante)
+
         AlertDialog.Builder(this)
             .setTitle(if (paraEditar == null) "Nuevo texto" else "Editar texto")
             .setView(ScrollView(this).apply { addView(caja) })
@@ -2570,7 +2585,36 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .setNegativeButton("Cerrar", null)
             .show()
             .also { cuadroALaIzquierda(it) }
-            .also { cuadroALaIzquierda(it) }
+    }
+
+    /** Texto que se está viendo en el visor mientras se edita (solo fuera de sesión). */
+    private var previewTexto: TextoItem? = null
+
+    /** Muestra (o actualiza) el texto en el visor de programa. */
+    private fun mostrarPreviewTexto(t: TextoGuardado) {
+        quitarPreviewTexto()
+        val mapa = Textos.rasterizar(t)
+        val item = TextoItem(
+            b.canvas.scene.nextId(), t.texto, t.fuente, t.animacion, null, mapa
+        )
+        val aspecto = mapa.width.toFloat() / mapa.height.toFloat()
+        val ancho = 0.58f
+        val alto = (ancho * b.canvas.scene.aspect / aspecto).coerceAtMost(0.85f)
+        val x = (1f - ancho) / 2f
+        val y = if (vertical) 0.26f else 0.30f
+        item.rect.set(x, y, x + ancho, y + alto)
+        b.canvas.scene.agregar(item)
+        previewTexto = item
+        b.canvas.requestRender()
+    }
+
+    /** Quita el texto de la vista previa (no toca los que ya están puestos). */
+    private fun quitarPreviewTexto() {
+        previewTexto?.let { item ->
+            b.canvas.scene.remove(item)
+            b.canvas.requestRender()
+        }
+        previewTexto = null
     }
 
     /** Pone el texto en el programa con su animación de entrada. */
@@ -2792,7 +2836,6 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .setPositiveButton("Usar este") { _, _ -> alElegir(colorElegido) }
             .setNegativeButton("Cerrar", null)
             .show()
-            .also { cuadroALaIzquierda(it) }
             .also { cuadroALaIzquierda(it) }
     }
 
