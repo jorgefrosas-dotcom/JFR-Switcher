@@ -35,6 +35,26 @@ Si `SUBIR.cmd` se queja de **conflicto**: no borres nada, avísame y lo fusionam
 
 ---
 
+## Cambios pequeños: NO se cambia la versión
+
+Regla acordada con Jorge (27/10):
+
+- **Un cambio pequeño no lleva versión nueva.** Se hace, se prueba en los equipos y se queda así,
+  tantos como haga falta. La versión (`jfr.versionName` / `jfr.versionCode`) **no se toca**.
+- Para probar se usa **`PROBAR.cmd`** (doble clic): compila las dos apps, busca la tablet y el celular
+  conectados y las instala. **No toca GitHub ni cambia la versión.**
+  - En el celular Xiaomi la instalación por adb se hace con `-i com.android.vending` (si no, MIUI la
+    rechaza); el script ya lo hace.
+- Cada cambio probado se anota en **`CAMBIOS-SIN-PUBLICAR.md`**, una línea.
+- **Jorge avisa cuándo se publica.** En ese momento: se sube la versión, se compilan los APK, se crea el
+  Release con las notas sacadas de `CAMBIOS-SIN-PUBLICAR.md` (son las que ve el usuario en el aviso de
+  actualización) y se vacía ese archivo.
+- Ojo: mientras no se publique, el build que se prueba **se llama igual que el publicado** (misma
+  versión, contenido distinto). Por eso, al publicar, **siempre** se sube el número: así el Release es
+  reconocible y se instala encima de lo que estaban probando.
+
+---
+
 ## Publicar una versión nueva (para que la web la muestre)
 
 1. En `gradle.properties`, subir el número:
