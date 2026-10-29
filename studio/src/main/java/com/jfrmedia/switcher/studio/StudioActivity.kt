@@ -6386,14 +6386,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             centro.addView(v)
         }
         val transicionar = TextView(this).apply {
-            text = "⇄\nTRANSICIONAR"
-            textSize = 10f
+            // Solo las flechas encontradas: en la columna angosta la palabra quedaba apretada y se
+            // veía mal. Las flechas van grandes para que el botón se reconozca de un toque.
+            text = "⇄"
+            textSize = 28f
             gravity = Gravity.CENTER
+            includeFontPadding = false
+            contentDescription = "Transicionar"
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.bg_root))
             setBackgroundResource(R.drawable.bg_pill_accent)
-            setPadding(2.dp, 6.dp, 2.dp, 6.dp)
+            setPadding(0, 0, 0, 2.dp)
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 54.dp
+                ViewGroup.LayoutParams.MATCH_PARENT, 48.dp
             ).apply { topMargin = 10.dp }
             setOnClickListener { transicionar() }
         }
