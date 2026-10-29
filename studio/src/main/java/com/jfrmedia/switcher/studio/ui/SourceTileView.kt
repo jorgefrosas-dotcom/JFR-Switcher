@@ -2,7 +2,6 @@ package com.jfrmedia.switcher.studio.ui
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -36,9 +35,6 @@ class SourceTileView @JvmOverloads constructor(
     private var currentTrack: VideoTrack? = null
     private var slotIndex = 0
 
-    /** Rotación real del cuadro que reporta el celular (0/90/180/270). */
-    private var rotacionCuadro = 0
-
     init {
         aspect = 16f / 9f
         LayoutInflater.from(context).inflate(R.layout.view_source_tile, this, true)
@@ -60,39 +56,44 @@ class SourceTileView @JvmOverloads constructor(
     }
 
     /**
-     * Orienta la miniatura con la rotación que reporta el celular.
+     * Guarda la rotación que reporta el celular.
      *
-     * Los píxeles llegan **sin orientar** (igual que en el lienzo, donde el shader aplica la
-     * rotación). Si el cuadro viene acostado (90°/270°) hay que girar el visor; y para que el video
-     * **llene la tarjeta sin recortarse ni ampliarse**, el visor se acuesta (alto × ancho) antes de
-     * girarlo: así el cuadro queda del tamaño justo de la tarjeta.
+     * La miniatura **no se gira a mano**: el `SurfaceViewRenderer` de WebRTC ya orienta el cuadro
+     * (usa la rotación del `VideoFrame`) y ajusta la proporción. Girar o escalar la vista encima de
+     * eso recortaba y ampliaba la imagen, que es lo que se veía mal.
      */
     fun fijarRotacion(grados: Int) {
         rotacionCuadro = ((grados % 360) + 360) % 360
-        aplicarRotacionVisor()
+        dejarVisorEnSuSitio()
     }
 
-    private fun aplicarRotacionVisor() {
-        val w = width
-        val h = height
-        if (w <= 0 || h <= 0) return
-        video.rotation = rotacionCuadro.toFloat()
-        video.layoutParams = if (rotacionCuadro % 180 != 0) {
-            FrameLayout.LayoutParams(h, w, Gravity.CENTER)
-        } else {
-            FrameLayout.LayoutParams(
+    private fun dejarVisorEnSuSitio() {
+        if (width <= 0 || height <= 0) return
+        // Sin giro ni escala propios: mandan el renderizador y el tamaño de la tarjeta.
+        if (video.rotation != 0f) video.rotation = 0f
+        if (video.scaleX != 1f) video.scaleX = 1f
+        if (video.scaleY != 1f) video.scaleY = 1f
+        val lp = video.layoutParams
+        if (lp != null &&
+            (lp.width != ViewGroup.LayoutParams.MATCH_PARENT ||
+                lp.height != ViewGroup.LayoutParams.MATCH_PARENT)
+        ) {
+            video.layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            video.requestLayout()
         }
-        video.requestLayout()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        // Al cambiar el tamaño de la tarjeta (otra fila, otro formato) se recalcula el visor.
-        aplicarRotacionVisor()
+        // Al cambiar el tamaño de la tarjeta (otra fila, otro formato) se deja otra vez en su sitio.
+        dejarVisorEnSuSitio()
     }
+
+    /** Rotación real del cuadro que reporta el celular (0/90/180/270). */
+    private var rotacionCuadro = 0
 
     /** Tarjetas chicas (las 6 cámaras en una fila): letras más pequeñas y sin sobras. */
     fun modoCompacto(chico: Boolean) {
