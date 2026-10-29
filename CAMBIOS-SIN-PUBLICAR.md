@@ -26,7 +26,10 @@
   cubran la tarjeta.
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
-- En Modo Studio 9:16 las **6 cámaras van en una sola fila**, con tarjetas más chicas.
+- En Modo Studio 9:16 las **6 cámaras van en una sola fila**, con tarjetas más chicas y **más bajas**
+  (3:4), y los **monitores se llevan la mayor parte del alto** (peso 1.9 contra 0.8 de las tarjetas):
+  los dos monitores quedaron notablemente más grandes. Los overlays y medios quedan un poco más abajo
+  (el panel se desplaza).
 - **Miniaturas bien encuadradas**: la orientación del cuadro la aplica el renderizador de WebRTC; la
   tarjeta **no debe girarse ni escalarse a mano** (hacerlo recortaba y ampliaba la imagen: se veía con
   zoom y estirada). Ahora la miniatura queda **igual que el monitor de preview**.
