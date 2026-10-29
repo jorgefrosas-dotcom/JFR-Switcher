@@ -26,6 +26,11 @@
   cubran la tarjeta.
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
+- **El programa ya no se congela en el modo estándar**: fuera del Modo Studio el monitor de programa
+  (que está oculto) **seguía enganchado a las mismas cámaras**, duplicando el trabajo de cada pista y
+  saturando la CPU. Ahora solo se engancha en Modo Studio (al entrar se engancha y al salir se
+  suelta). Medido en la tablet: la CPU bajó de 110–220 % a **68–85 %**. Además, cuando una miniatura se
+  oculta por el scroll ahora **borra su cuadro**, para que no parezca congelada.
 - **Al girar la tablet ya no se desacomodan los botones**: los ajustes de imagen (Luz, Contraste, WB,
   Color, Viñeta y Poster) van **siempre en una sola fila** en el Modo Studio, sea 9:16 o 16:9. Antes
   se quedaba el acomodo del diseño anterior y, al girar, aparecían en dos columnas con el deslizable
