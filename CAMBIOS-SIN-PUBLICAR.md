@@ -12,15 +12,18 @@
 
 ## Pendiente de publicar
 
-- **Celular (pantalla chica), 29/10/2026:** pestañas **Cámaras / Overlays / Medios** en la columna de
-  fuentes (antes era una sola lista larga y lo de abajo quedaba fuera de la vista), columna angosta
-  (205 dp) con **2 tarjetas por fila**, **controles del programa flotando encima del visor** (dejaron de
-  robar 116 px de alto), ajustes de imagen en la **ventana «Img.»** (ya no hay banda fija) y **fila de
-  controles completa**: la lente queda como icono con estado corto («Off» / «F» / «T») y «Img.» se ve
-  sin arrastrar. Medido en el POCO X7: el visor pasó de **≈450×250 px a 1428×803** (unas 10 veces el
-  área; el 16:9 ya solo está limitado por el alto de la pantalla). Probado también que **la tablet no
-  cambia**: se instaló y se comprobó con captura (columnas de siempre, controles debajo del visor, sin
-  pestañas).
+- **Celular (pantalla chica), 29/10/2026:** pestañas **Cámaras / Overlays / Medios**, columna de **3
+  tarjetas por fila** (205 → 322 dp: el ancho que le sobraba al visor se lo quedó la columna),
+  **controles flotando encima del monitor** en una **barra translúcida** (`bg_barra_flotante`, 48 % de
+  opacidad) que deja ver el video, **colapsable con una flecha** (↓ la oculta, ↑ la muestra), con
+  **triángulos ◀ ▶** a los lados que se encienden solo si hay más botones en esa dirección, y con
+  botones **de 56×48 dp** (mínimo táctil de Android: 48). Los botones de **imagen y audio** y **PiP /
+  2 cam** van **solo con icono** (`ic_image`, `ic_audio_onda`, `ic_pip`, `ic_2cam`); PiP y 2 cam
+  conservan el naranja de «activo». El **monitor de entrada** ya no ocupa una banda: abre **ventana a
+  la izquierda**, igual que los ajustes de imagen. Medido en el POCO X7: el lienzo pasó de **≈450×250
+  px a 1428×803**.
+- **La tablet no cambia:** todo va detrás de `esPantallaCelular()` y se comprobó con captura antes de
+  estos últimos retoques.
 
 ## Pendiente de programar (no está hecho todavía)
 
