@@ -6284,6 +6284,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
             )
+            // El botón de foto dispara una captura **del programa** (lo que está al aire), así que
+            // en Modo Studio se pone sobre el monitor de programa, no en el preview.
+            (b.btnPhoto.parent as? ViewGroup)?.removeView(b.btnPhoto)
+            host.addView(b.btnPhoto)
         }
         colPrograma.addView(host)
         fila.addView(
@@ -6497,6 +6501,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             b.canvasHost, 1,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
         )
+        // El botón de foto vuelve al visor del preview, que es donde estaba siempre.
+        (b.btnPhoto.parent as? ViewGroup)?.removeView(b.btnPhoto)
+        b.canvasHost.addView(b.btnPhoto)
         filaMonitores = null
         hostPrograma = null
         botonTransicionar = null
