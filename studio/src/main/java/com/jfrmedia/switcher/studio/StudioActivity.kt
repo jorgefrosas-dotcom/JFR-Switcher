@@ -165,12 +165,19 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun tamanoGrabacion(ladoCorto: Int): Pair<Int, Int> {
         val corto = ladoCorto.coerceIn(360, 2160)
         val largo = corto * 16 / 9
-        return if (vertical) {
+        return if (lienzoVertical) {
             (corto / 2 * 2) to (largo / 2 * 2)
         } else {
             (largo / 2 * 2) to (corto / 2 * 2)
         }
     }
+
+    /**
+     * El lienzo es vertical si se eligió 9:16 **o** si está puesto el Modo Studio en 9:16.
+     * Así la grabación, la transmisión y las tarjetas salen en el mismo formato que los monitores.
+     */
+    private val lienzoVertical: Boolean
+        get() = if (modoStudio) studioVertical else vertical
 
     private val recAncho: Int get() = tamanoGrabacion(recAltoElegido).first
     private val recAlto: Int get() = tamanoGrabacion(recAltoElegido).second
@@ -1265,7 +1272,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     // ------------------------------------------------------------------ acciones de UI
 
     private fun wireClicks() {
-        b.btnOrientacion.setOnClickListener { cambiarOrientacion(!vertical) }
+        b.btnOrientacion.setOnClickListener { cambiarOrientacion(!lienzoVertical) }
         b.btnLayerA.setOnClickListener { switchActiveLayer('A') }
         b.btnLayerB.setOnClickListener { switchActiveLayer('B') }
         b.btnPip.setOnClickListener { alternarPip() }
@@ -2018,6 +2025,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      */
     /** En vertical las tarjetas son verticales (9:16) y entran más por fila. */
     private fun columnasFuentes(): Int = when {
+        // En Modo Studio las tarjetas son más chicas para que entren 4 por fila.
+        modoStudio -> 4
         // En vertical, 3 por fila: cada tarjeta conserva su tamaño y el cuarto hueco pasa a la
         // columna de controles (allí caben los botones y el monitor de audio).
         vertical -> 3
@@ -2029,8 +2038,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         grid.removeAllViews()
         tiles.clear()
         val cols = columnasFuentes()
-        // En horizontal se agrega la cámara de la propia tablet como 7ª fuente.
-        val total = if (vertical) 6 else 7
+        // En horizontal se agrega la cámara de la propia tablet como 7ª fuente. En Modo Studio
+        // también (ahí la tablet sí puede usarla), sea 9:16 o 16:9.
+        val total = if (vertical && !modoStudio) 6 else 7
 
         for (fila in 0 until (total + cols - 1) / cols) {
             val filaView = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -2048,7 +2058,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     continue
                 }
                 val tile = SourceTileView(this)
-                tile.modoVertical(vertical)
+                // Las tarjetas toman la forma del lienzo: 9:16 o 16:9 (también en Modo Studio).
+                tile.modoVertical(lienzoVertical)
                 if (index == LocalCam.SLOT) {
                     tile.setup(index) { onTileTap(LocalCam.SLOT) }
                     tile.setEstadoLocal(localCam.encendida)
@@ -2153,7 +2164,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** Tarjeta de un medio: miniatura, nombre y botón para quitarlo del grupo. */
     private fun tarjetaMedio(medio: Medio): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (vertical) 9f / 16f else 16f / 9f
+            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -2234,7 +2245,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun tarjetaAgregarMedio(): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (vertical) 9f / 16f else 16f / 9f
+            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -2444,7 +2455,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     index - 1 < imagenes.size -> {
                         val item = imagenes[index - 1]
                         val tile = OverlayTileView(this)
-                        tile.modoVertical(vertical)
+                        tile.modoVertical(lienzoVertical)
                         tile.bind(
                             item = item,
                             selected = b.canvas.scene.selectedId == item.id,
@@ -2508,7 +2519,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** Tarjeta, primera de OVERLAYS, que abre el editor de texto. */
     private fun tarjetaCrearTexto(): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (vertical) 9f / 16f else 16f / 9f
+            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -3052,7 +3063,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun tarjetaTextoBiblioteca(t: TextoGuardado): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (vertical) 9f / 16f else 16f / 9f
+            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -3099,7 +3110,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun tarjetaGrabacion(uri: String, nombre: String): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (vertical) 9f / 16f else 16f / 9f
+            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -3164,7 +3175,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun tarjetaAgregarOverlay(): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (vertical) 9f / 16f else 16f / 9f
+            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -3241,22 +3252,36 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val ancho = if (anchoGrabando > 0) anchoGrabando else recAncho
         val alto = if (altoGrabando > 0) altoGrabando else recAlto
         b.txtCanvasInfo.text = when {
-            modoStudio -> "9:16 · $ancho×$alto"
+            modoStudio -> "${if (studioVertical) "9:16" else "16:9"} · $ancho×$alto"
             vertical -> "$ancho×$alto"
             else -> "16:9 · $ancho×$alto"
         }
-        b.btnOrientacion.text = if (vertical || modoStudio) "9:16" else "16:9"
+        b.btnOrientacion.text = if (lienzoVertical) "9:16" else "16:9"
         // La cabecera del visor se acorta en vertical (el medidor la reescribe cada 2 s).
         if (vertical || modoStudio) b.txtEtiquetaPrograma.text = "PROGRAMA"
     }
 
     private fun cambiarOrientacion(nuevoVertical: Boolean) {
-        if (vertical == nuevoVertical) return
-        // En Modo Studio el formato lo manda la tablet acostada: es 9:16 y no cambia con el chip.
+        // En Modo Studio el chip cambia el formato del modo (9:16 / 16:9) sin salir de él:
+        // monitores y tarjetas cambian juntos.
         if (modoStudio) {
-            toast("En Modo Studio el formato es 9:16. Pon la tablet en horizontal para cambiarlo.")
+            if (sesionEnCurso()) {
+                toast("Formato bloqueado mientras grabas o transmites")
+                return
+            }
+            if (studioVertical == nuevoVertical) return
+            studioVertical = nuevoVertical
+            // El acomodo de los botones cambia con el formato: se rehace el layout de Modo Studio.
+            layoutStudioListo = false
+            b.cuerpo.removeAllViews()
+            construirLayoutStudio()
+            aplicarAspectoEstudio()
+            refreshOverlayTiles()
+            refreshMediaTiles()
+            toast(if (studioVertical) "Modo Studio · 9:16" else "Modo Studio · 16:9")
             return
         }
+        if (vertical == nuevoVertical) return
         // Candado: el formato no se puede cambiar en medio de una grabación o transmisión.
         if (sesionEnCurso()) {
             toast("Formato bloqueado mientras grabas o transmites")
@@ -3912,7 +3937,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val (ancho, alto) = tamanoGrabacion(ladoCorto)
         val kbps = if (bitrateAuto) bitrateEmisionAuto(ladoCorto) else streamBitrateKbps
         emisor.volteoVertical = prefs.getBoolean("stream_flip", false)
-        val superficie = emisor.preparar(ancho, alto, kbps, 30, vertical)
+        val superficie = emisor.preparar(ancho, alto, kbps, 30, lienzoVertical)
         if (superficie == null) {
             toast("No se pudo preparar la transmisión")
             return
@@ -4413,6 +4438,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun reacomodarCuerpo() {
         val cuerpo = b.cuerpo
         cuerpo.removeAllViews()
+        // Los dos diseños de siempre (horizontal y 9:16) acomodan el cuerpo en fila. El Modo
+        // Studio es el único que lo pone en columna, así que hay que devolverlo aquí.
+        cuerpo.orientation = LinearLayout.HORIZONTAL
         (b.panelPrograma.parent as? ViewGroup)?.removeView(b.panelPrograma)
         // En vertical no hay banda: los dos bloques van a la columna.
         (zonaControles?.parent as? ViewGroup)?.removeView(zonaControles)
@@ -4943,7 +4971,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val fila = b.controlesCapa
         (fila.parent as? ViewGroup)?.removeView(fila)
         val botones = listOf(
-            b.btnLayerA, b.btnLayerB, b.btnPip, b.btnSplit, b.btnZoomOut, b.btnZoomIn
+            b.btnLayerA, b.btnLayerB, b.btnPip, b.btnSplit, b.btnZoomOut, b.btnZoomIn,
+            // El de la lente también se saca: en Modo Studio vive en la fila/columna de allá y
+            // hay que soltarlo antes de volver a ponerlo en la fila de siempre.
+            b.btnTabletLens
         )
         for (v in botones) (v.parent as? ViewGroup)?.removeView(v)
 
@@ -5858,6 +5889,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** true cuando el layout de Modo Studio ya está armado. */
     private var layoutStudioListo = false
 
+    /**
+     * En Modo Studio se puede trabajar en los dos formatos: true = monitores y tarjetas en 9:16,
+     * false = 16:9. Se cambia con el chip de la barra de arriba, sin salir del modo.
+     */
+    private var studioVertical = true
+
     private var filaMonitores: LinearLayout? = null
     private var hostPrograma: AspectFrameLayout? = null
     private var botonTransicionar: TextView? = null
@@ -5982,14 +6019,42 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         return nueva
     }
 
-    /** Los dos monitores en 9:16 y los celulares avisados de que el lienzo es vertical. */
+    /** Los dos monitores en el formato elegido (9:16 o 16:9) y los celulares avisados. */
     private fun aplicarAspectoEstudio() {
-        val aspecto = 9f / 16f
+        val aspecto = if (studioVertical) 9f / 16f else 16f / 9f
         b.canvas.scene.aspect = aspecto
         monitorPrograma?.scene?.aspect = aspecto
         b.canvasHost.aspect = aspecto
         hostPrograma?.aspect = aspecto
-        hub.vertical = true
+        hub.vertical = lienzoVertical
+        // Con 9:16 los monitores ocupan todo el alto disponible; con 16:9 son bajos, así que la
+        // fila toma solo su alto y las tarjetas se quedan con el resto.
+        filaMonitores?.let { fila ->
+            val lp = fila.layoutParams as? LinearLayout.LayoutParams
+            if (lp != null) {
+                if (studioVertical) {
+                    lp.height = 0
+                    lp.weight = 1.15f
+                } else {
+                    lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    lp.weight = 0f
+                }
+                fila.layoutParams = lp
+            }
+            val paramsMonitor = if (studioVertical) {
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            } else {
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
+            b.canvasHost.layoutParams = LinearLayout.LayoutParams(paramsMonitor)
+            hostPrograma?.layoutParams = LinearLayout.LayoutParams(paramsMonitor)
+        }
+        // Los celulares tienen que capturar en el mismo formato: si no, entran recortados.
+        hub.all().forEach { runCatching { it.enviarOrientacion() } }
+        // Las tarjetas (cámaras, overlays y medios) toman la forma del lienzo.
+        buildSourcesGrid()
         actualizarInfoLienzo()
         ajustarLienzo()
     }
@@ -6026,26 +6091,69 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         b.slotIzquierdo.visibility = View.GONE
         cuerpo.orientation = LinearLayout.VERTICAL
 
-        // 1) Cabecera con el estado del equipo.
+        // 1) El grupo de la sesión (punto, estado, cronómetro y botón) ya no cabe en la barra de
+        // arriba cuando la pantalla está en vertical: se pasa a una fila propia a todo lo ancho.
+        val filaSesion = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(12.dp, 4.dp, 12.dp, 2.dp)
+        }
+        listOf<View>(b.liveDot, b.txtLive, b.txtTimer, b.btnRecord).forEach { v ->
+            (v.parent as? ViewGroup)?.removeView(v)
+        }
+        b.liveDot.layoutParams = LinearLayout.LayoutParams(8.dp, 8.dp)
+        b.txtLive.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { marginStart = 6.dp }
+        b.txtTimer.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { marginStart = 10.dp }
+        b.btnRecord.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { marginStart = 12.dp }
+        filaSesion.addView(b.liveDot)
+        filaSesion.addView(b.txtLive)
+        filaSesion.addView(b.txtTimer)
+        // La info del sistema (CPU, RAM, Mbps y temperatura) va en esta misma fila, entre el
+        // contador y el botón: así no gasta un renglón aparte.
         (b.cabeceraPrograma.parent as? ViewGroup)?.removeView(b.cabeceraPrograma)
-        cuerpo.addView(
+        filaSesion.addView(
             b.cabeceraPrograma,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = 14.dp
+            }
+        )
+        // Una sola línea: la info del sistema se recorta con puntos suspensivos si no cabe, y el
+        // formato del lienzo queda pegado a la derecha sin encimarse.
+        b.txtEtiquetaPrograma.maxLines = 1
+        b.txtEtiquetaPrograma.ellipsize = android.text.TextUtils.TruncateAt.END
+        b.txtEtiquetaPrograma.layoutParams = LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+        )
+        // El separador flexible del medio ya no hace falta: sobra y empuja el texto.
+        (b.cabeceraPrograma.getChildAt(1) as? View)?.visibility = View.GONE
+        // El formato ya se ve en el chip de la barra de arriba: aquí se quita para que la info
+        // del sistema (CPU, RAM, Mbps y temperatura) quepa completa.
+        b.txtCanvasInfo.visibility = View.GONE
+        filaSesion.addView(b.btnRecord)
+        cuerpo.addView(
+            filaSesion,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         )
 
-        // 2) Los dos monitores, con los controles en medio.
+        // 3) Los dos monitores, uno al lado del otro y a todo lo ancho.
         val fila = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(6.dp, 0, 6.dp, 0)
+            setPadding(8.dp, 0, 8.dp, 0)
         }
         filaMonitores = fila
         cuerpo.addView(
             fila,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.35f)
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.2f)
         )
 
         // Preview (es el lienzo de siempre: ahí se compone y se edita).
@@ -6060,19 +6168,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
         )
 
-        // Controles en medio de los dos monitores.
-        val centro = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(5.dp, 0, 5.dp, 0)
+        // En 9:16 los monitores quedan angostos, así que los botones van en una columna entre
+        // los dos. En 16:9 sobran monitores anchos y los botones pasan a una fila debajo.
+        if (studioVertical) {
+            val centro = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(5.dp, 0, 5.dp, 0)
+            }
+            fila.addView(
+                centro,
+                LinearLayout.LayoutParams(96.dp, ViewGroup.LayoutParams.MATCH_PARENT)
+            )
+            moverBotonesAColumna(centro)
         }
-        fila.addView(centro, LinearLayout.LayoutParams(94.dp, ViewGroup.LayoutParams.MATCH_PARENT))
-        moverBotonesAColumna(centro)
 
         // Programa.
         val colPrograma = columnaMonitor("PROGRAMA")
         val host = AspectFrameLayout(this).apply {
-            aspect = 9f / 16f
+            aspect = if (studioVertical) 9f / 16f else 16f / 9f
             setBackgroundResource(R.drawable.bg_canvas)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
@@ -6088,6 +6202,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
             )
+            // El mismo marco que tiene el visor del preview.
+            host.addView(
+                View(this).apply { setBackgroundResource(R.drawable.bg_canvas_border) },
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
         }
         colPrograma.addView(host)
         fila.addView(
@@ -6095,13 +6217,30 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
         )
 
-        // 3) Tarjetas de cámaras, overlays y medios.
+        // 4) En 16:9 los botones van debajo de los dos monitores, con «Transicionar» en el centro.
+        if (!studioVertical) {
+            val filaBotones = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(8.dp, 5.dp, 8.dp, 1.dp)
+            }
+            cuerpo.addView(
+                filaBotones,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+            moverBotonesAFila(filaBotones)
+        }
+
+        // 5) Tarjetas de cámaras, overlays y medios.
         cuerpo.addView(
             b.panelFuentes,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
         )
 
-        // 4) Ajustes de imagen y monitor de audio, los dos visibles.
+        // 6) Ajustes de imagen y monitor de audio, los dos visibles.
         val baja = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(8.dp, 2.dp, 8.dp, 4.dp)
@@ -6122,25 +6261,35 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         )
+        // El panel de audio tiene que existir: si se armó el layout antes de montarlo, se monta aquí.
+        if (panelAudio == null) montarControlesAudio()
         panelAudio?.let { audio ->
             (audio.parent as? ViewGroup)?.removeView(audio)
             audio.visibility = View.VISIBLE
             ondaAudio?.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 54.dp
+                ViewGroup.LayoutParams.MATCH_PARENT, 46.dp
             )
             baja.addView(
                 audio,
                 LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
+                    ViewGroup.LayoutParams.MATCH_PARENT, 92.dp
                 )
             )
+            L.i("studio", "studio: panel de audio en la zona de abajo")
         }
+        L.i(
+            "studio",
+            "studio: cajaVideo=${b.cajaVideo.parent != null} audio=${panelAudio?.parent != null} " +
+                "monitores=${monitorPrograma?.parent != null}"
+        )
         layoutStudioListo = true
         buildSourcesGrid()
     }
 
-    /** Los botones de siempre más «Transicionar», apilados entre los dos monitores. */
+    /**
+     * Los botones de siempre más «Transicionar», apilados en una columna entre los dos monitores
+     * (es el acomodo del 9:16, donde los monitores quedan angostos).
+     */
     private fun moverBotonesAColumna(centro: LinearLayout) {
         val botones = listOf(
             b.btnLayerA, b.btnLayerB, b.btnPip, b.btnSplit,
@@ -6153,7 +6302,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 ViewGroup.LayoutParams.MATCH_PARENT, 32.dp
             ).apply { topMargin = 4.dp }
             v.gravity = Gravity.CENTER
-            v.textSize = 11f
+            v.textSize = 10f
+            // Sin icono en la columna: con el icono, «Frontal» no cabe y sale «Fron…».
+            if (v.id == R.id.btnTabletLens) v.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
             centro.addView(v)
         }
         val transicionar = TextView(this).apply {
@@ -6172,12 +6323,92 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         centro.addView(transicionar)
     }
 
+    /**
+     * Los botones de siempre en una fila debajo de los dos monitores, con «Transicionar» justo
+     * en el centro (debajo de donde se juntan el preview y el programa).
+     */
+    private fun moverBotonesAFila(filaBotones: LinearLayout) {
+        val izquierda = listOf(b.btnLayerA, b.btnLayerB, b.btnPip, b.btnSplit)
+        val derecha = listOf(b.btnZoomOut, b.btnZoomIn, b.btnTabletLens)
+
+        fun grupo(alineacion: Int): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = alineacion
+        }
+
+        fun colocar(contenedor: LinearLayout, v: TextView) {
+            (v.parent as? ViewGroup)?.removeView(v)
+            recordarEstilo(v)
+            // Ancho natural: así se lee «PiP», «2 cam» y «Frontal» completos, y el bloque se
+            // pega hacia el centro donde está «Transicionar».
+            v.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, 36.dp
+            ).apply { marginStart = 5.dp }
+            v.gravity = Gravity.CENTER
+            v.textSize = 11f
+            contenedor.addView(v)
+        }
+
+        val izq = grupo(Gravity.END or Gravity.CENTER_VERTICAL)
+        izquierda.forEach { colocar(izq, it) }
+        val der = grupo(Gravity.START or Gravity.CENTER_VERTICAL)
+        derecha.forEach { colocar(der, it) }
+
+        val transicionar = TextView(this).apply {
+            text = "⇄  TRANSICIONAR"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.bg_root))
+            setBackgroundResource(R.drawable.bg_pill_accent)
+            setPadding(14.dp, 6.dp, 14.dp, 6.dp)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, 44.dp
+            ).apply { marginStart = 8.dp; marginEnd = 8.dp }
+            setOnClickListener { transicionar() }
+        }
+        botonTransicionar = transicionar
+
+        filaBotones.addView(
+            izq,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        filaBotones.addView(transicionar)
+        filaBotones.addView(
+            der,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+    }
+
     /** Devuelve el diseño de siempre (horizontal) y rearma todo. */
     private fun restaurarLayoutNormal() {
         if (!layoutStudioListo) return
         monitorPrograma?.let { monitor -> (monitor.parent as? ViewGroup)?.removeView(monitor) }
         (filaMonitores?.parent as? ViewGroup)?.removeView(filaMonitores)
+        // El grupo de la sesión vuelve a la barra de arriba, en su orden original.
+        val barra = b.btnFacebook.parent as? LinearLayout
+        if (barra != null) {
+            // Hay que sacarlos de la fila del Modo Studio antes de moverlos.
+            listOf<View>(b.liveDot, b.txtLive, b.txtTimer, b.btnRecord).forEach { v ->
+                (v.parent as? ViewGroup)?.removeView(v)
+            }
+            b.liveDot.layoutParams = LinearLayout.LayoutParams(8.dp, 8.dp)
+            b.txtLive.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = 6.dp }
+            b.txtTimer.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = 8.dp }
+            b.btnRecord.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = 12.dp }
+            barra.addView(b.liveDot)
+            barra.addView(b.txtLive)
+            barra.addView(b.txtTimer)
+            barra.addView(b.btnRecord)
+        }
         b.cuerpo.removeAllViews()
+        // La info del lienzo vuelve a mostrarse en el diseño de siempre.
+        b.txtCanvasInfo.visibility = View.VISIBLE
         (b.cabeceraPrograma.parent as? ViewGroup)?.removeView(b.cabeceraPrograma)
         (b.canvasHost.parent as? ViewGroup)?.removeView(b.canvasHost)
         b.canvasHost.aspect = if (vertical) 9f / 16f else 16f / 9f

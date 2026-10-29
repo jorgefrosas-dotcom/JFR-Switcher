@@ -12,7 +12,27 @@
 
 ## Pendiente de publicar
 
-- (vacío: la 0.2.6 se publicó con todo lo acumulado)
+### Modo Studio: dos monitores en la tablet (28/10)
+
+- **Al girar la tablet a vertical entra el «Modo Studio»** (en horizontal queda el diseño de
+  siempre; el celular nunca entra a este modo). Es tipo OBS: **preview a la izquierda y programa a la
+  derecha**, con los botones de siempre en una columna en medio (en 9:16) o en una fila debajo con
+  «Transicionar» al centro (en 16:9). Las tarjetas de cámaras, overlays y medios van debajo,
+  **4 por fila** para que quepan más.
+- **Botón «⇄ TRANSICIONAR»**: pasa lo del preview al programa y lo que estaba al aire al preview,
+  **con la transición elegida** (el cuadro que sale se retira encima del nuevo: no salta de golpe).
+- **Todo entra primero al preview**: cámaras, overlays y fotos. El programa **no se puede tocar con
+  el dedo** (se compone en el preview). Los **videos de MEDIOS van directo al aire**, porque su
+  reproductor vive en el monitor.
+- **Se trabaja en los dos formatos**: el chip de la barra alterna **9:16 y 16:9** sin salir del Modo
+  Studio, y los monitores, las tarjetas y la grabación cambian juntos (grabación verificada en
+  1080×1920).
+- **La grabación y el directo salen del monitor de programa**, y el aviso de «AL AIRE» a los
+  celulares también. Al volver a horizontal, **lo que estaba al aire es lo que queda**.
+- La información del sistema (CPU, RAM, Mbps y temperatura) va ahora en la fila de estado, junto a
+  «Sin grabación», el contador y el botón de grabar, en su tamaño normal.
+- Mientras grabas o transmites la orientación queda **congelada**, para que el diseño no se mueva a
+  media sesión.
 
 ## Pendiente de programar (no está hecho todavía)
 

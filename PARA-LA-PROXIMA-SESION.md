@@ -64,7 +64,42 @@ transición en «Desvanecer», que es el valor por defecto.
   `input tap/swipe` y capturas comparadas con Pillow; ojo con el teclado en pantalla, que tapa los
   botones del cuadro (cerrarlo con `input keyevent 4` antes de tocar «Guardar»).
 
-## 4. Lo anterior: el grupo MEDIOS recuerda los últimos 10
+## 4. Modo Studio (28/10, probado en la tablet)
+
+**Qué es:** al girar la tablet a **vertical** entra un diseño tipo OBS con **preview (izquierda) y
+programa (derecha)**; en horizontal queda el diseño de siempre y **el celular nunca entra a este
+modo** (su diseño se verá aparte).
+
+**Cómo está hecho (lo importante, para no romperlo):**
+
+- **Dos compositores.** `b.canvas` es el de siempre y en Modo Studio pasa a ser el **PREVIEW**;
+  `monitorPrograma` es un segundo `CompositorView` que va **al aire**. Así **todo el código de
+  edición sigue actuando sobre `b.canvas` sin tocarlo** (tarjetas, overlays, zoom, PiP, sliders), y lo
+  que se graba/transmite se toma con `vistaAlAire()` / `escenaAlAire()`.
+- `CompositorView.scene` ahora es `var` (se intercambian las escenas al transicionar) y tiene
+  `editable = false` en el programa para que no se pueda mover nada al aire.
+- **`transicionar()`**: captura el cuadro del programa (PixelCopy), intercambia las escenas y el
+  cuadro viejo se retira encima con `animarVelo()` (la misma transición elegida, invertida).
+- **`evaluarModoStudio()`** decide según `resources.configuration.orientation == PORTRAIT` y
+  `!esPantallaCelular()`. Se llama en `onCreate`, en `onConfigurationChanged` y al terminar una
+  sesión. Mientras hay sesión la orientación se **congela** (`SCREEN_ORIENTATION_LOCKED`).
+- El manifiesto **ya no fuerza horizontal**; el celular se fija por código en
+  `SCREEN_ORIENTATION_USER_LANDSCAPE`.
+- `lienzoVertical` es el formato del lienzo (en Modo Studio manda `studioVertical`, que el chip
+  alterna entre 9:16 y 16:9). Lo usan `tamanoGrabacion`, `emisor.preparar`, las tarjetas y
+  `hub.vertical`.
+- **`columnasFuentes()` devuelve 4 en Modo Studio** (tarjetas más chicas) y 3 en los demás.
+- Al salir (`restaurarLayoutNormal`) se devuelven la cabecera, el visor, las tarjetas, los ajustes, el
+  audio y el grupo de sesión a la barra de arriba, y se llama a `aplicarOrientacion()`. **Ojo:** hay
+  que **soltar cada vista de su padre antes de `addView`** (Android truena con «child already has a
+  parent») y `reacomodarCuerpo()` debe devolver `cuerpo.orientation = HORIZONTAL`. Los dos fallos
+  salieron al probar en la tablet; no volver a introducirlos.
+
+**Para cuando Jorge lo use con sus cámaras reales:** preguntarle si quiere ajustar el tamaño de los
+monitores, ver el nombre de la cámara en el preview, o atajos (por ejemplo, doble toque en una tarjeta
+para mandarla directo al aire).
+
+## 5. Lo anterior: el grupo MEDIOS recuerda los últimos 10
 
 **Qué hace ahora:** al cerrar la app y volverla a abrir, en `MEDIOS · VIDEOS Y FOTOS` siguen los
 últimos 10 videos y fotos que se usaron, **ya con su miniatura**, sin ir a la galería del equipo.
