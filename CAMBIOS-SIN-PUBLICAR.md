@@ -26,6 +26,12 @@
   cubran la tarjeta.
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
+- En Modo Studio, el **botón de foto está sobre el monitor de programa** (la foto sale de lo que
+  está al aire). Al volver al diseño de siempre regresa al visor.
+- El **estado de grabación y el cronómetro** quedan pegados al botón de grabar, en los dos formatos
+  (9:16 y 16:9), con la info del sistema a la izquierda.
+- Al **deslizar el panel de tarjetas** ya no se enciman al monitor de preview (el video se oculta en
+  las tarjetas que dejan de verse completas).
 - En Modo Studio 9:16 las **6 cámaras van en una sola fila**, con tarjetas más chicas y **más bajas**
   (3:4), y los **monitores se llevan la mayor parte del alto** (peso 1.9 contra 0.8 de las tarjetas):
   los dos monitores quedaron notablemente más grandes. Los overlays y medios quedan un poco más abajo
