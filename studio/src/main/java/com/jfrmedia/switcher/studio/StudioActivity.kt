@@ -6042,6 +6042,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun entrarModoStudio() {
         val monitor = monitorPrograma ?: return
         modoStudio = true
+        // El formato del lienzo se conserva: si venías produciendo en 16:9, el Modo Studio sigue en
+        // 16:9 (antes se colaba el último formato usado y cambiaba solo al girar la tablet).
+        studioVertical = !vertical
         // El programa arranca con una copia del lienzo actual: así la primera transición no se
         // lleva lo que ya está puesto (cámaras, overlays, textos).
         monitor.scene = clonarEscena(b.canvas.scene)
@@ -6063,10 +6066,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun salirModoStudio() {
         val monitor = monitorPrograma
         modoStudio = false
-        // En horizontal se vuelve al diseño ancho de siempre: si se conservara el 9:16, el acomodo
-        // de las tarjetas y los botones quedaba apretado y desacomodado al girar la tablet. El
-        // 9:16 se puede volver a elegir con el chip.
-        vertical = false
+        // El formato con el que estabas produciendo en el Modo Studio se conserva al volver al
+        // diseño de siempre: 16:9 sigue en 16:9 y 9:16 sigue en 9:16.
+        vertical = studioVertical
         // Lo que estaba al aire es lo que se queda en el lienzo al volver al diseño de siempre.
         monitor?.scene?.let { alAire ->
             if (alAire.items.isNotEmpty()) b.canvas.scene = alAire
