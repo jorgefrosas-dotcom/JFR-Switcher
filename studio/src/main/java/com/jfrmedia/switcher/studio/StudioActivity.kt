@@ -5991,6 +5991,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private var hostPrograma: AspectFrameLayout? = null
     private var botonTransicionar: TextView? = null
 
+    /**
+     * Lo que había en el **preview** al salir del Modo Studio. Se guarda para devolvérselo al volver:
+     * sin esto, el programa (que queda al aire en el lienzo) se copiaba en el preview cada vez que se
+     * giraba la tablet.
+     */
+    private var escenaPreviewGuardada: Scene? = null
+
     /** Vista que va **al aire**: en Modo Studio es el monitor de programa. */
     private fun vistaAlAire(): CompositorView =
         if (modoStudio) monitorPrograma ?: b.canvas else b.canvas
@@ -6046,9 +6053,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // significan lo mismo, así que se copia, NO se invierte (invertirlo hacía que el formato
         // fuera y viniera en cada giro de la tablet).
         studioVertical = vertical
-        // El programa arranca con una copia del lienzo actual: así la primera transición no se
-        // lleva lo que ya está puesto (cámaras, overlays, textos).
+        // Lo que está en el lienzo (lo que quedó al aire en el modo de siempre) pasa a PROGRAMA, y
+        // el preview recupera lo que tenía antes de salir: así, al girar varias veces, no se copia
+        // el programa en el preview.
         monitor.scene = clonarEscena(b.canvas.scene)
+        escenaPreviewGuardada?.let { previa ->
+            b.canvas.scene = previa
+            escenaPreviewGuardada = null
+        }
         // Ahora el monitor sí se usa: se le enganchan las cámaras que ya estaban conectadas.
         hub.all().forEach { session ->
             session.videoTrack?.let { pista -> monitor.attachTrack(session.slot, pista) }
@@ -6072,6 +6084,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         vertical = studioVertical
         // Lo que estaba al aire es lo que se queda en el lienzo al volver al diseño de siempre.
         monitor?.scene?.let { alAire ->
+            // Se guarda lo que había en el preview para devolvérselo al volver al Modo Studio.
+            escenaPreviewGuardada = b.canvas.scene
             if (alAire.items.isNotEmpty()) b.canvas.scene = alAire
         }
         monitor?.scene = Scene()
