@@ -21,6 +21,7 @@ import android.provider.MediaStore
 import android.graphics.RectF
 import android.widget.EditText
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.PopupMenu
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -1347,14 +1348,147 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun esPantallaCelular(): Boolean =
         resources.configuration.smallestScreenWidthDp < 600
 
+    // ---------------------------------------------------------------- celular: pestañas
+    /** Ancho de la columna de fuentes en el celular: lo justo para las tarjetas. */
+    private val ANCHO_FUENTES_CELULAR = 205
+
+    /** Pestañas Cámaras / Overlays / Medios (solo celular). */
+    private var tabsFuentes: LinearLayout? = null
+    private var seccionFuentes = 0
+    /** Cuántas filas de la parrilla ocupan las cámaras; el resto del grid es overlays y medios. */
+    private var filasCamaras = 0
+    private var etiquetaOverlays: TextView? = null
+    private var etiquetaMedios: TextView? = null
+    /** «Img.» en celular: los ajustes de imagen abren su ventana en vez de una banda fija. */
+    private var chipImagenCelular: TextView? = null
+
+    /**
+     * En el celular la lista de fuentes es larguísima (6 cámaras + tablet + overlays + medios) y
+     * las de abajo quedaban fuera de la vista. Con estas pestañas se ve un grupo a la vez y la
+     * columna puede ser angosta, que es lo que agranda el visor.
+     */
+    private fun montarTabsFuentes() {
+        if (tabsFuentes != null) return
+        val fila = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(4.dp, 4.dp, 4.dp, 2.dp)
+        }
+        listOf("Cámaras", "Overlays", "Medios").forEachIndexed { i, nombre ->
+            val t = TextView(this).apply {
+                text = nombre
+                textSize = 9f
+                gravity = Gravity.CENTER
+                isClickable = true
+                layoutParams = LinearLayout.LayoutParams(0, 28.dp, 1f).apply {
+                    if (i > 0) marginStart = 3.dp
+                }
+                setOnClickListener {
+                    seccionFuentes = i
+                    aplicarSeccionFuentes()
+                }
+            }
+            fila.addView(t)
+        }
+        tabsFuentes = fila
+        // Va debajo de la cabecera «CÁMARAS 0/6» y arriba de la parrilla.
+        b.panelFuentes.addView(
+            fila, 1,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+    }
+
+    /** Muestra solo el grupo elegido en las pestañas (cámaras, overlays o medios). */
+    private fun aplicarSeccionFuentes() {
+        if (!esPantallaCelular()) return
+        runCatching {
+            tabsFuentes?.let { fila ->
+                for (i in 0 until fila.childCount) {
+                    val t = fila.getChildAt(i) as? TextView ?: continue
+                    val activo = i == seccionFuentes
+                    t.setBackgroundResource(
+                        if (activo) R.drawable.bg_pill_accent else R.drawable.bg_pill_ghost
+                    )
+                    t.setTextColor(if (activo) 0xFF111318.toInt() else colorSecundario())
+                }
+            }
+            val grid = b.llGrid
+            for (i in 0 until grid.childCount) {
+                val v = grid.getChildAt(i)
+                val seccion = when {
+                    i < filasCamaras -> 0
+                    v === etiquetaOverlays || (::overlayContainer.isInitialized && v === overlayContainer) -> 1
+                    v === etiquetaMedios || (::mediosContainer.isInitialized && v === mediosContainer) -> 2
+                    else -> -1
+                }
+                v.visibility = if (seccion == -1 || seccion == seccionFuentes) View.VISIBLE else View.GONE
+            }
+            b.scrollFuentes.post { ocultarTarjetasFueraDeVista() }
+        }
+    }
+
+    private fun colorSecundario(): Int =
+        ContextCompat.getColor(this, R.color.text_secondary)
+
+    /** «Img.» en la fila de controles: solo en celular, donde no hay banda de ajustes. */
+    private fun asegurarChipImagen() {
+        if (!esPantallaCelular() || vertical) return
+        val chip = chipImagenCelular ?: TextView(this).apply {
+            text = "Img."
+            textSize = 10f
+            gravity = Gravity.CENTER
+            isClickable = true
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+            setBackgroundResource(R.drawable.bg_pill_ghost)
+            setPadding(7.dp, 3.dp, 7.dp, 3.dp)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = 6.dp }
+            setOnClickListener { dialogoAjustesImagen() }
+        }.also { chipImagenCelular = it }
+        if (chip.parent == null) b.controlesCapa.addView(chip)
+    }
+
+    /**
+     * El aviso «Sin cámaras todavía» venía para tablet: en un visor de celular se salía del cuadro.
+     * Se achica y se cambia el texto, que hablaba de «esta tablet».
+     */
+    private fun achicarAvisoCanvas() {
+        runCatching {
+            val hint = b.canvasHint
+            hint.setPadding(12.dp, 8.dp, 12.dp, 8.dp)
+            for (i in 0 until hint.childCount) {
+                when (val v = hint.getChildAt(i)) {
+                    is TextView -> {
+                        v.textSize = 9f
+                        v.maxWidth = 400.dp
+                        v.text = "Sin cámaras todavía\nToca «Conectar cámaras» y usa\nla IP de este equipo en JFR Camera"
+                    }
+                    is ImageView -> (v.layoutParams as? FrameLayout.LayoutParams)?.let {
+                        it.height = 20.dp
+                        v.layoutParams = it
+                    }
+                }
+            }
+        }
+    }
+
     /** Ajusta el diseño para celular: más visor, controles pequeños y ajustes en ventana. */
     private fun aplicarModoCelular() {
+        if (vertical) return
         runCatching {
-            // 1) Más espacio para el visor (solo en horizontal: en vertical el ancho del
-            // visor lo fija la relación 9:16, no un peso).
-            if (!vertical) {
-                (b.panelFuentes.layoutParams as? LinearLayout.LayoutParams)?.let { it.weight = 0.50f }
-                (b.panelPrograma.layoutParams as? LinearLayout.LayoutParams)?.let { it.weight = 0.50f }
+            // 1) Columna de fuentes angosta (con pestañas) y visor con todo el ancho libre.
+            //    En vertical no aplica: ahí el ancho del visor lo fija la relación 9:16.
+            (b.panelFuentes.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.width = ANCHO_FUENTES_CELULAR.dp
+                it.weight = 0f
+            }
+            (b.panelPrograma.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.width = 0
+                it.weight = 1f
             }
             // El visor se pega a la derecha para aprovechar el hueco libre.
             (b.canvasHost.layoutParams as? LinearLayout.LayoutParams)?.let { it.gravity = Gravity.END }
@@ -1384,54 +1518,47 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 v.setPadding(4.dp, 2.dp, 4.dp, 2.dp)
             }
 
-            // 4) Los ajustes de imagen se van a una ventana aparte.
+            // 4) Los ajustes de imagen se van a una ventana aparte (no caben en una banda).
             b.cajaVideo.visibility = View.GONE
-            val botonImagen = TextView(this).apply {
-                text = "Img."
-                textSize = 10f
-                gravity = Gravity.CENTER
-                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
-                setBackgroundResource(R.drawable.bg_pill_ghost)
-                setPadding(5.dp, 2.dp, 5.dp, 2.dp)
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { marginStart = 6.dp }
-                setOnClickListener { dialogoAjustesImagen() }
-            }
+            zonaControles?.visibility =
+                if (vistaControles == "audio") View.VISIBLE else View.GONE
             // El medidor de audio ya vive en la barra superior (junto a Facebook): en el celular
             // solo se hace más chico, sin moverlo de sitio.
             b.audioMeter.layoutParams = LinearLayout.LayoutParams(56.dp, 16.dp)
             // El botón de la cámara de la tablet ya lleva su estado (Apagada / Frontal / Trasera):
             // no se renombra aquí para no perder esa información.
             b.btnSplit.text = "2cam"
-            b.controlesCapa.addView(botonImagen, 0)
-            b.controlesCapa.requestLayout()
+            // 5) Pestañas de la columna de fuentes, aviso del visor a la medida y «Img.» en la fila.
+            montarTabsFuentes()
+            achicarAvisoCanvas()
+            aplicarSeccionFuentes()
         }
     }
 
     /** Ventana con los seis ajustes de imagen de la cámara activa. */
     private fun dialogoAjustesImagen() {
+        // En el celular hay poco alto: filas apretadas para que entren los seis sin desplazar.
+        val apretado = esPantallaCelular()
         val contenedor = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(20.dp, 8.dp, 20.dp, 8.dp)
+            setPadding(20.dp, if (apretado) 2.dp else 8.dp, 20.dp, if (apretado) 2.dp else 8.dp)
         }
         val cam = camaraParaAjustes()
         paramsVideo.forEach { (clave, nombre, pista) ->
             val fila = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, 5.dp, 0, 5.dp)
+                setPadding(0, if (apretado) 1.dp else 5.dp, 0, if (apretado) 1.dp else 5.dp)
             }
             fila.addView(TextView(this).apply {
                 text = nombre
-                textSize = 11f
+                textSize = if (apretado) 9f else 11f
                 setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
                 width = 64.dp
             })
             val valor = TextView(this).apply {
                 text = etiquetaAjuste(clave, cam?.let { valorVideo(it, clave) } ?: 0f)
-                textSize = 11f
+                textSize = if (apretado) 9f else 11f
                 gravity = Gravity.END
                 setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
                 width = 42.dp
@@ -1490,7 +1617,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         dialogo.window?.let { ventana ->
             val anchoPantalla = resources.displayMetrics.widthPixels
             ventana.setGravity(Gravity.CENTER_VERTICAL or Gravity.START)
-            ventana.setLayout((anchoPantalla * 0.46f).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            if (esPantallaCelular()) {
+                // En el celular el alto es poco: la ventana se acota y los seis ajustes se
+                // alcanzan desplazando (antes los últimos quedaban cortados sin poder llegar).
+                val altoPantalla = resources.displayMetrics.heightPixels
+                ventana.setLayout((anchoPantalla * 0.42f).toInt(), (altoPantalla * 0.86f).toInt())
+            } else {
+                ventana.setLayout(
+                    (anchoPantalla * 0.46f).toInt(),
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
             val attrs = ventana.attributes
             attrs.x = 10.dp
             ventana.attributes = attrs
@@ -2078,6 +2215,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      */
     /** En vertical las tarjetas son verticales (9:16) y entran más por fila. */
     private fun columnasFuentes(): Int = when {
+        // En celular la columna es angosta (176-190 dp): con 3 por fila las tarjetas quedaban
+        // del tamaño de un botón y no se leía ni el nombre de la cámara.
+        esPantallaCelular() && !vertical -> 2
         // Modo Studio en 9:16: las 6 cámaras en una sola fila, con tarjetas chicas.
         modoStudio && studioVertical -> 6
         // Modo Studio en 16:9: 4 por fila.
@@ -2120,6 +2260,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // En horizontal se agrega la cámara de la propia tablet como 7ª fuente. En Modo Studio
         // también (ahí la tablet sí puede usarla), sea 9:16 o 16:9.
         val total = if (vertical && !modoStudio) 6 else 7
+        // En celular las pestañas necesitan saber dónde terminan las cámaras y empiezan los grupos.
+        filasCamaras = (total + cols - 1) / cols
 
         for (fila in 0 until (total + cols - 1) / cols) {
             val filaView = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -2139,8 +2281,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 val tile = SourceTileView(this)
                 // Las tarjetas siguen la forma del lienzo (en Modo Studio vertical van a 3:4).
                 tile.modoAspecto(aspectoFuente)
-                // Con 6 cámaras en una fila hacen falta letras más chicas.
-                tile.modoCompacto(modoStudio && studioVertical)
+                // Con 6 cámaras en una fila hacen falta letras más chicas, y en el celular la
+                // tarjeta es chica siempre.
+                tile.modoCompacto((modoStudio && studioVertical) || esPantallaCelular())
                 if (index == LocalCam.SLOT) {
                     tile.setup(index) { onTileTap(LocalCam.SLOT) }
                     tile.setEstadoLocal(localCam.encendida)
@@ -2168,14 +2311,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // Al rehacer la parrilla hay que volver a decidir qué miniaturas se ven completas (las que
         // quedan fuera se ocultan para que no se encimen al monitor).
         b.scrollFuentes.post { ocultarTarjetasFueraDeVista() }
-        val etiqueta = TextView(this).apply {
+        val rotuloOverlays = TextView(this).apply {
             text = "OVERLAYS"
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
             setPadding(6.dp, 12.dp, 6.dp, 4.dp)
         }
-        grid.addView(etiqueta)
+        grid.addView(rotuloOverlays)
+        etiquetaOverlays = rotuloOverlays
 
         overlayContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         grid.addView(
@@ -2187,14 +2331,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         )
         refreshOverlayTiles()
 
-        val etiquetaMedios = TextView(this).apply {
+        val rotuloMedios = TextView(this).apply {
             text = "MEDIOS · VIDEOS Y FOTOS"
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
             setPadding(6.dp, 12.dp, 6.dp, 4.dp)
         }
-        grid.addView(etiquetaMedios)
+        grid.addView(rotuloMedios)
+        etiquetaMedios = rotuloMedios
 
         mediosContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         grid.addView(
@@ -2205,6 +2350,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )
         )
         refreshMediaTiles()
+        // Si es un celular, la parrilla recién hecha vuelve a mostrar solo el grupo de la pestaña.
+        aplicarSeccionFuentes()
     }
 
     // ------------------------------------------------------------------ medios (videos y fotos)
@@ -4679,6 +4826,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply { topMargin = 6.dp }
             )
+        } else if (esPantallaCelular()) {
+            // En el celular no cabe una banda fija de ajustes: se quedan en la ventana «Img.» y
+            // la banda se usa solo para el monitor de audio (se enciende con «♪ Audio»).
+            ajustesEnUnaFila()
+            montarZonaControles()
+            b.cajaVideo.visibility = View.GONE
+            asegurarZonaControles().visibility =
+                if (vistaControles == "audio") View.VISIBLE else View.GONE
         } else {
             ajustesEnUnaFila()
             // Los ajustes de imagen viven en la banda fija, debajo de la fila de controles.
@@ -5052,6 +5207,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             b.cajaVideo.visibility =
                 if (!audio && !esPantallaCelular()) View.VISIBLE else View.GONE
             panelAudio?.visibility = if (audio) View.VISIBLE else View.GONE
+            if (esPantallaCelular()) {
+                zonaControles?.visibility = if (audio) View.VISIBLE else View.GONE
+            }
         } else {
             b.cajaVideo.visibility = View.VISIBLE
             panelAudio?.visibility = View.VISIBLE
@@ -5206,6 +5364,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { marginStart = 6.dp }
             fila.addView(b.btnTabletLens)
+            // En el celular la banda de ajustes de imagen no existe: «Img.» abre su ventana.
+            asegurarChipImagen()
             // El medidor de audio ya no va aquí: vive en la barra superior, junto a Facebook.
             b.scrollControles.addView(
                 fila,

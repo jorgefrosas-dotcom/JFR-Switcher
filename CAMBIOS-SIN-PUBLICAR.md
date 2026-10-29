@@ -12,11 +12,19 @@
 
 ## Pendiente de publicar
 
-- (vacío: la 0.2.7 se publicó con todo lo acumulado)
+- **Celular (pantalla chica), 29/10/2026:** pestañas **Cámaras / Overlays / Medios** en la columna de
+  fuentes (antes era una sola lista larga y lo de abajo quedaba fuera de la vista), columna angosta
+  (205 dp) con **2 tarjetas por fila**, **visor ~2,4× más grande** (el programa pasa de 1221×687 a
+  ocupar todo el alto disponible), ajustes de imagen en la **ventana «Img.»** (ya no hay banda fija que
+  robe alto) y **fila de controles completa**: la lente («Apagada») e «Img.» se ven sin arrastrar.
+  Probado en el **POCO X7**. La tablet no se tocó: todo va detrás de `esPantallaCelular()`.
 
 ## Pendiente de programar (no está hecho todavía)
 
-- Nada anotado por ahora.
+- **Celular, siguiente ronda:** pasar la columna de fuentes a una **tira deslizable de miniaturas**
+  debajo del visor (así el visor usaría también el ancho que hoy sobra a la derecha: 1221 → ~1600 px),
+  y la ventana «Img.» en **dos columnas** para que los seis ajustes entren sin desplazar.
+- Nada más anotado por ahora.
 
 ### Versión de pantalla chica, muy funcional (idea de Jorge, 27/10)
 
@@ -26,15 +34,18 @@ vio al abrirla en el POCO el 27/10:
 
 - La columna de fuentes ocupa media pantalla: las 6 cámaras + la cámara del equipo + OVERLAYS + MEDIOS
   quedan **debajo del pliegue** y hay que desplazarse mucho para llegar a los overlays y a los medios.
+  → **Hecho el 29/10** con las pestañas.
 - La fila de controles se desliza en horizontal y **el botón de la lente queda fuera de la vista**
   (hay que arrastrar la fila para encontrarlo).
+  → **Hecho el 29/10**: con la columna angosta la fila cabe completa.
 - El visor de programa queda chico comparado con la tablet; Img. / ♪ Audio / A / B quedan apretados y
   A y B casi no se usan con una sola cámara de celular.
+  → **Mejorado el 29/10** (2,4× más grande); falta la tira de miniaturas para aprovechar el ancho.
 - La barra superior sí cabe, pero con el medidor de audio ya no sobra nada.
+  → **Hecho el 29/10**: barra compacta («Plant.» / «Trans.»), medidor chico y logo reducido.
 
-Ideas para cuando se retome (ninguna está hecha): pestañas **Cámaras / Overlays / Medios** en vez de
-una sola lista larga; controles del programa encima del visor y no en otra fila; lente, zoom y foto en
-un menú compacto; visor más grande con las cámaras en una tira deslizable de miniaturas.
+Ideas que quedan: **tira deslizable de miniaturas** en vez de columna, controles del programa encima
+del visor y lente/zoom/foto en un menú compacto.
 
 > **Decisiones cerradas:**
 > - Las **capturas** (botón de foto del visor) **no** se meten al grupo MEDIOS: Jorge decidió que no
