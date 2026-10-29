@@ -127,6 +127,18 @@ class SourceTileView @JvmOverloads constructor(
         rendererReady = true
     }
 
+    /**
+     * Muestra u oculta el video de la tarjeta.
+     *
+     * Se usa al desplazar el panel de fuentes: la capa del `SurfaceView` no se recorta con el
+     * scroll y se dibujaba encima del monitor. Si la tarjeta no se ve completa, se oculta el video.
+     */
+    fun mostrarVideoSiSeVe(seVe: Boolean) {
+        if (currentTrack == null) return
+        val nuevo = if (seVe) View.VISIBLE else View.INVISIBLE
+        if (video.visibility != nuevo) video.visibility = nuevo
+    }
+
     fun bind(session: CameraSession, track: VideoTrack) {
         ensureRenderer()
         currentTrack?.removeSink(video)

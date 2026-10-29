@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -452,6 +453,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
 
         buildSourcesGrid()
+        vigilarScrollFuentes()
 
         vertical = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_VERTICAL, false)
         // Ajustes guardados de sesión (modo, resoluciones, bitrates).
@@ -2063,6 +2065,27 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // columna de controles (allí caben los botones y el monitor de audio).
         vertical -> 3
         else -> 3
+    }
+
+    /**
+     * Las miniaturas son `SurfaceView` y su capa **no se recorta con el scroll**: al deslizar las
+     * tarjetas hacia arriba, el video se dibujaba encima del monitor de preview. Aquí se oculta el
+     * video de las tarjetas que dejan de estar completas dentro del panel.
+     */
+    private fun vigilarScrollFuentes() {
+        b.scrollFuentes.setOnScrollChangeListener { _, _, _, _, _ -> ocultarTarjetasFueraDeVista() }
+        b.scrollFuentes.post { ocultarTarjetasFueraDeVista() }
+    }
+
+    private fun ocultarTarjetasFueraDeVista() {
+        val rect = Rect()
+        tiles.forEach { tile ->
+            // `getLocalVisibleRect` sí toma en cuenta el recorte de los padres (aunque el
+            // SurfaceView no lo respete al dibujar): sirve para saber si la tarjeta se ve completa.
+            val visible = tile.getLocalVisibleRect(rect) &&
+                rect.width() >= tile.width && rect.height() >= tile.height
+            tile.mostrarVideoSiSeVe(visible)
+        }
     }
 
     private fun buildSourcesGrid() {
@@ -6157,20 +6180,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         ).apply { marginStart = 6.dp }
         b.txtTimer.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { marginStart = 10.dp }
+        ).apply { marginStart = 8.dp }
         b.btnRecord.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { marginStart = 12.dp }
-        filaSesion.addView(b.liveDot)
-        filaSesion.addView(b.txtLive)
-        filaSesion.addView(b.txtTimer)
-        // La info del sistema (CPU, RAM, Mbps y temperatura) va en esta misma fila, entre el
-        // contador y el botón: así no gasta un renglón aparte.
+        ).apply { marginStart = 10.dp }
+        // De izquierda a derecha: la info del sistema (se lleva el espacio libre), y **pegados a la
+        // derecha** el estado de grabación, el cronómetro y el botón, como en el diseño horizontal.
         (b.cabeceraPrograma.parent as? ViewGroup)?.removeView(b.cabeceraPrograma)
         filaSesion.addView(
             b.cabeceraPrograma,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = 14.dp
+                marginEnd = 12.dp
             }
         )
         // Una sola línea: la info del sistema se recorta con puntos suspensivos si no cabe, y el
@@ -6185,6 +6205,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // El formato ya se ve en el chip de la barra de arriba: aquí se quita para que la info
         // del sistema (CPU, RAM, Mbps y temperatura) quepa completa.
         b.txtCanvasInfo.visibility = View.GONE
+        filaSesion.addView(b.liveDot)
+        filaSesion.addView(b.txtLive)
+        filaSesion.addView(b.txtTimer)
         filaSesion.addView(b.btnRecord)
         cuerpo.addView(
             filaSesion,
