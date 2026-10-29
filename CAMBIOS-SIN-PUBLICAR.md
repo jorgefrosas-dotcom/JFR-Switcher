@@ -26,6 +26,9 @@
   cubran la tarjeta.
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
+- **Si minimizas el switcher, la grabación ya no se queda con el video congelado**: mientras hay
+  sesión, cada segundo se comprueba que el video al aire siga corriendo y **se reanuda solo** si el
+  equipo lo pausó. Antes, en el Modo Studio, el video se grababa congelado al pasar a segundo plano.
 - **Al girar varias veces ya no se copia el programa en el preview**: al salir del Modo Studio se
   **guarda el escenario del preview** y al volver se **restaura**, mientras lo que quedó al aire pasa
   al programa. Antes el programa se clonaba del lienzo en cada entrada, así que el preview terminaba
