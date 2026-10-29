@@ -58,9 +58,11 @@ class CompositorView @JvmOverloads constructor(
 
     /** La ventana no está visible (app en segundo plano): se dibuja solo en la salida. */
     @Volatile private var pantallaOculta = false
-
     /** Hay que rehacer la superficie de pantalla (el sistema le dio una nueva a la ventana). */
     @Volatile private var necesitaSuperficie = false
+
+    /** Contador de cuadros dibujados, solo para el diagnóstico cada ~2 segundos. */
+    private var drawCuenta = 0
 
     private val bridges = arrayOfNulls<FrameBridge>(7)
     private val textures = arrayOfNulls<SourceTexture>(7)
@@ -474,6 +476,13 @@ class CompositorView @JvmOverloads constructor(
         // Si el video que estaba al aire ya no está en la escena (se quitó del programa, se eliminó
         // de MEDIOS o se cambió de escenario), se corta: su audio no puede seguir sonando.
         videoItem?.let { item -> if (!scene.items.contains(item)) terminarVideo() }
+
+        // Diagnóstico: cada ~2 segundos se anota qué está dibujando este monitor.
+        drawCuenta++
+        if (drawCuenta % 60 == 0) {
+            val conVideo = runCatching { scene.cams().count { hasVideo(it.slot) } }.getOrDefault(-1)
+            L.i("gl", "monitor ${hashCode()}: ${scene.items.size} ítems, cámaras con cuadro $conVideo")
+        }
 
         GLES20.glClearColor(0.047f, 0.055f, 0.067f, 1f) // #0C0E11
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)

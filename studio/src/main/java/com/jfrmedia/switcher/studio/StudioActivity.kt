@@ -6146,6 +6146,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             session.videoTrack?.let { pista -> monitor?.detachTrack(session.slot, pista) }
         }
         localCam.track?.let { pista -> monitor?.detachTrack(LocalCam.SLOT, pista) }
+        // Y al visor se le vuelven a enganchar todas las cámaras: si alguna pista se había soltado
+        // al cambiar de escenario, el programa salía negro al volver al diseño de siempre.
+        hub.all().forEach { session ->
+            session.videoTrack?.let { pista -> b.canvas.attachTrack(session.slot, pista) }
+        }
+        localCam.track?.let { pista -> b.canvas.attachTrack(LocalCam.SLOT, pista) }
         restaurarLayoutNormal()
         L.i("studio", "Modo Studio apagado")
     }
