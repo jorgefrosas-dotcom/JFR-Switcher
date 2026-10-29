@@ -26,6 +26,10 @@
   cubran la tarjeta.
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
+- **El audio de un video de MEDIOS ya se corta al quitarlo**: cuando se quitaba del programa o se
+  eliminaba del grupo con la **✕**, el reproductor seguía sonando (incluso con el video ya fuera). Ahora
+  se corta y se libera en el momento, y el vigilante de la sesión ya no reanuda un video que salió de
+  la escena.
 - **Si minimizas el switcher, la grabación ya no se queda con el video congelado**: mientras hay
   sesión, cada segundo se comprueba que el video al aire siga corriendo y **se reanuda solo** si el
   equipo lo pausó. Antes, en el Modo Studio, el video se grababa congelado al pasar a segundo plano.
