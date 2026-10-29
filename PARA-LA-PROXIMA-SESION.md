@@ -1,24 +1,31 @@
 # Para la próxima sesión — JFR Switcher
 
-> Actualizado el **27/10/2026, 22:45** al cerrar la sesión. **Lee esto primero: tiene todo lo necesario
+> Actualizado el **28/10/2026, 22:10** al cerrar la sesión. **Lee esto primero: tiene todo lo necesario
 > para seguir sin que Jorge vuelva a explicar nada.**
-> Canal de memoria de la otra PC: `%USERPROFILE%\.dsh\memoria\CAMBIOS.md` (entradas del 27/10 noche).
+> Canal de memoria de la otra PC: `%USERPROFILE%\.dsh\memoria\CAMBIOS.md` (entradas del 28/10).
 > Repo: `github.com/jorgefrosas-dotcom/JFR-Switcher` · Proyecto local:
 > `C:\Users\noman\AndroidStudioProjects\JFR-Switcher`
 
 ## 1. Dónde estamos
 
-- **Última versión publicada: 0.2.6** (27/10/2026) — «Plantillas de escena y audio en vivo». Las notas
-  de esa versión están en `docs/NOTAS-0.2.6.md`, y el Release tiene los dos APK con los nombres
-  `JFR-Switcher.apk` y `JFR-Camera.apk`.
-- **Tablet y POCO están actualizados a la 0.2.6** (`PROBAR.cmd` / instalación por adb).
+- **Última versión publicada: 0.2.7** (28/10/2026) — «Modo Studio: preview y programa». Las notas están
+  en `docs/NOTAS-0.2.7.md` y el Release tiene los dos APK (`JFR-Switcher.apk` y `JFR-Camera.apk`).
+- **Tablet y POCO actualizados a la 0.2.7** (el **Samsung** también tenía la cámara nueva de prueba:
+  hay que reinstalarle `JFR-Camera.apk` de este Release si se quedó con el build anterior).
 - **Regla de Jorge:** un cambio pequeño **no** lleva versión nueva. Se prueba en los equipos y se
   acumula en `CAMBIOS-SIN-PUBLICAR.md`. **Él avisa cuándo se publica**; ahí se sube el número en
   `gradle.properties` (`jfr.versionName` y `jfr.versionCode`, un solo lugar para las dos apps), se crea
   el Release con las notas de `CAMBIOS-SIN-PUBLICAR.md` y se vacía ese archivo.
-- **Nada pendiente de programar** al cerrar: `CAMBIOS-SIN-PUBLICAR.md` quedó vacío.
+- **Nada pendiente de programar** al cerrar, salvo la **versión de pantalla chica** (sección al final de
+  `CAMBIOS-SIN-PUBLICAR.md`, sin fecha).
 
-## 2. Lo último hecho: plantillas de escena (27/10, 22:00–22:45)
+## 1.b Lo último hecho: Modo Studio (28/10, todo el día)
+
+Ver el **punto 4** de este documento. Resumen: al girar la tablet a vertical entra un diseño tipo OBS
+con **preview** y **programa**, botón **Transicionar (⇄)** con la transición elegida, 9:16 y 16:9,
+y todo lo que se elige entra primero al preview (los videos de medios van directo al aire).
+
+## 2. Lo anterior: plantillas de escena (27/10, 22:00–22:45)
 
 **Lo que pedía Jorge:** que guardar una plantilla no cerrara la app, y que la plantilla guarde
 orientación, resolución de grabación y emisión, overlays con su posición y tamaño, la transición, y que
@@ -88,12 +95,36 @@ modo** (su diseño se verá aparte).
 - `lienzoVertical` es el formato del lienzo (en Modo Studio manda `studioVertical`, que el chip
   alterna entre 9:16 y 16:9). Lo usan `tamanoGrabacion`, `emisor.preparar`, las tarjetas y
   `hub.vertical`.
-- **`columnasFuentes()` devuelve 4 en Modo Studio** (tarjetas más chicas) y 3 en los demás.
+- **`columnasFuentes()` devuelve 6 en Modo Studio 9:16** (las 6 cámaras en una fila) y 4 en 16:9.
+  Las tarjetas usan `aspectoFuente`: 3:4 en Modo Studio vertical (más bajas, para dejar crecer los
+  monitores), 9:16 en el resto de vertical y 16:9 en horizontal.
+- **El estado de grabación y el cronómetro** van en la fila de sesión **pegados al botón de grabar**
+  (la info del sistema a la izquierda). El **botón de foto** se mueve al monitor de **programa**.
+- **Transicionar** en 9:16 es solo el icono **⇄** (28sp); en 16:9 sigue «⇄ TRANSICIONAR».
+- **Al entrar al Modo Studio** se conserva el formato (`studioVertical = vertical`) y **se guarda el
+  escenario del preview** (`escenaPreviewGuardada`) para devolvérselo al volver; al salir,
+  `vertical = studioVertical` y el programa pasa al lienzo.
+- **Al salir se re-enganchan todas las pistas al visor** (`b.canvas.attachTrack` de `hub.all()` + cámara
+  local). Sin eso el programa salía **negro** al volver a horizontal.
+- **El monitor de programa solo se engancha en Modo Studio** (`adjuntar()` comprueba `modoStudio`):
+  fuera de él duplicaba el trabajo y saturaba la CPU (110–220 % → 68–85 %).
+- **`Gfx.Mvp` es por hilo** (`ThreadLocal`): la matriz temporal y `invertirY`. Con dos compositores
+  dibujando a la vez se pisaban y los monitores **parpadeaban**.
 - Al salir (`restaurarLayoutNormal`) se devuelven la cabecera, el visor, las tarjetas, los ajustes, el
   audio y el grupo de sesión a la barra de arriba, y se llama a `aplicarOrientacion()`. **Ojo:** hay
   que **soltar cada vista de su padre antes de `addView`** (Android truena con «child already has a
   parent») y `reacomodarCuerpo()` debe devolver `cuerpo.orientation = HORIZONTAL`. Los dos fallos
   salieron al probar en la tablet; no volver a introducirlos.
+- **Ajustes de imagen**: `ajustesEnUnaFila()` los deja siempre en una fila de 6 con su deslizable; el
+  Modo Studio lo llama siempre (antes heredaba el acomodo de 2 columnas del otro diseño y se veía mal).
+- **Videos de MEDIOS**: van **directo al aire** (el reproductor vive en el monitor). Al quitar el video
+  del programa o eliminarlo de MEDIOS hay que cortar el reproductor
+  (`quitarMedioDePrograma()` + la comprobación en `drawScene`); si no, el audio seguía sonando.
+- **Grabación con la app minimizada**: `vigilarVideo` comprueba cada segundo que el video al aire siga
+  corriendo (`reanudarMediosSiHaceFalta`); algunos equipos lo pausan en segundo plano y la grabación
+  quedaba congelada.
+- **Diagnóstico útil:** el compositor apunta cada ~2 s `monitor <hash>: N ítems, cámaras con cuadro M`.
+  Con eso se detectó el programa negro; sirve para el siguiente reporte.
 
 **Para cuando Jorge lo use con sus cámaras reales:** preguntarle si quiere ajustar el tamaño de los
 monitores, ver el nombre de la cámara en el preview, o atajos (por ejemplo, doble toque en una tarjeta
@@ -129,7 +160,7 @@ se puede abrir (archivo borrado o permiso perdido) **se descarta solo, sin reven
 video, y volver a hacer force-stop + abrir → la tarjeta sigue ahí con su miniatura (captura revisada).
 Quitar con la ✕ y repetir el force-stop → ya no está y no vuelve.
 
-## 2b. Arreglos de la misma noche: barras de audio y cámara de la tablet
+## 8. Arreglos del 27/10: barras de audio y cámara de la tablet
 
 - **Las barras de audio subieron a la barra de arriba**, justo después del chip de Facebook (ahí sobra
   espacio). En `activity_studio.xml` el `AudioMeterView` ya vive en la barra superior; se quitó del
@@ -145,7 +176,7 @@ Quitar con la ✕ y repetir el force-stop → ya no está y no vuelve.
   «Tablet: frontal» empujaba el medidor de audio fuera del borde derecho. Ahora que el medidor vive
   arriba, la etiqueta corta se queda por gusto: se ve ordenada.
 
-## 2c. El nivel de audio se ve desde que abres la app
+## 9. El nivel de audio se ve desde que abres la app
 
 **Qué hace:** el vúmetro de arriba (y el monitor de onda del botón «♪ Audio», y el nivel del cuadro de
 Audio) se mueven **sin grabar ni transmitir**, para ver cómo entra el sonido antes de arrancar. Mide
@@ -167,12 +198,12 @@ igual que se va a grabar: misma entrada, mismo mudo, misma ganancia, mismo ecual
 - Verificado en la tablet: el micrófono abre al arrancar, las barras se mueven, y una grabación de
   prueba de 7 s salió con **pista de audio AAC y video H.264** (el MP4 se revisó por dentro).
 
-## 3. La tarea pendiente
+## 10. La tarea pendiente
 
 **Nada pendiente de programar.** Jorge decidió que **las capturas NO se meten al grupo MEDIOS**, así
 que ese pendiente se cerró el 27/10.
 
-## 4. Cómo se trabaja (no repetir errores)
+## 6. Cómo se trabaja (no repetir errores)
 
 - **Compilar y probar:** doble clic en **`PROBAR.cmd`** (compila las dos apps, busca los equipos y las
   instala; en el POCO usa `-i com.android.vending` porque MIUI rechaza el install normal).
@@ -189,7 +220,7 @@ que ese pendiente se cerró el 27/10.
 - **Publicar un Release:** credenciales por `git credential fill` (cuenta `jorgefrosas-dotcom`), subir
   los APK con nombres exactos `JFR-Switcher.apk` y `JFR-Camera.apk`.
 
-## 5. Lo que ya está hecho (no rehacer)
+## 7. Lo que ya está hecho (no rehacer)
 
 **Medios:** los últimos 10 se recuerdan entre sesiones (punto 2).
 
