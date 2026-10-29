@@ -4625,40 +4625,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 ).apply { topMargin = 6.dp }
             )
         } else {
-            caja.orientation = LinearLayout.VERTICAL
-            b.filaVideo.removeAllViews()
-            b.filaVideo.orientation = LinearLayout.HORIZONTAL
-            botones.forEachIndexed { i, v ->
-                restaurarEstilo(v)
-                v.layoutParams = LinearLayout.LayoutParams(
-                    0,
-                    34.dp,
-                    1f
-                ).apply { setMargins(if (i == 0) 0 else 5.dp, 0, 0, 0) }
-                v.gravity = Gravity.CENTER
-                b.filaVideo.addView(v)
-            }
-            b.panelAjuste.visibility = View.VISIBLE
-            b.panelAjuste.orientation = LinearLayout.HORIZONTAL
-            (b.sbAjuste.parent as? ViewGroup)?.removeView(b.sbAjuste)
-            b.sbAjuste.rotation = 0f
-            b.txtAjusteNombre.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            b.sbAjuste.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                .apply { marginStart = 8.dp }
-            b.txtAjusteValor.layoutParams =
-                LinearLayout.LayoutParams(52.dp, ViewGroup.LayoutParams.WRAP_CONTENT)
-            b.btnAjusteReset.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { marginStart = 8.dp }
-            b.panelAjuste.addView(b.sbAjuste, 1)
-            if (b.panelAjuste.parent !== caja) {
-                (b.panelAjuste.parent as? ViewGroup)?.removeView(b.panelAjuste)
-                caja.addView(b.panelAjuste)
-            }
+            ajustesEnUnaFila()
             // Los ajustes de imagen viven en la banda fija, debajo de la fila de controles.
             montarZonaControles()
             asegurarZonaControles().addView(
@@ -4670,6 +4637,55 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )
         }
         refrescarPanelAjuste()
+    }
+
+    /**
+     * Los ajustes de imagen (Luz, Contraste, WB, Color, Viñeta y Poster) en **una sola fila** de
+     * seis botones, con el deslizable debajo.
+     *
+     * En Modo Studio se usa siempre así: antes el acomodo dependía del diseño anterior y al girar
+     * la tablet quedaba a medias (dos columnas con el deslizable encima), que se veía mal.
+     */
+    private fun ajustesEnUnaFila() {
+        val caja = b.cajaVideo
+        val botones = listOf(
+            b.btnLuz, b.btnContraste, b.btnWb, b.btnColor, b.btnVineta, b.btnPoster
+        )
+        for (v in botones) (v.parent as? ViewGroup)?.removeView(v)
+        caja.orientation = LinearLayout.VERTICAL
+        b.filaVideo.removeAllViews()
+        b.filaVideo.orientation = LinearLayout.HORIZONTAL
+        botones.forEachIndexed { i, v ->
+            restaurarEstilo(v)
+            v.layoutParams = LinearLayout.LayoutParams(
+                0,
+                34.dp,
+                1f
+            ).apply { setMargins(if (i == 0) 0 else 5.dp, 0, 0, 0) }
+            v.gravity = Gravity.CENTER
+            b.filaVideo.addView(v)
+        }
+        b.panelAjuste.visibility = View.VISIBLE
+        b.panelAjuste.orientation = LinearLayout.HORIZONTAL
+        (b.sbAjuste.parent as? ViewGroup)?.removeView(b.sbAjuste)
+        b.sbAjuste.rotation = 0f
+        b.txtAjusteNombre.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        b.sbAjuste.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            .apply { marginStart = 8.dp }
+        b.txtAjusteValor.layoutParams =
+            LinearLayout.LayoutParams(52.dp, ViewGroup.LayoutParams.WRAP_CONTENT)
+        b.btnAjusteReset.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { marginStart = 8.dp }
+        b.panelAjuste.addView(b.sbAjuste, 1)
+        if (b.panelAjuste.parent !== caja) {
+            (b.panelAjuste.parent as? ViewGroup)?.removeView(b.panelAjuste)
+            caja.addView(b.panelAjuste)
+        }
     }
 
     // ------------------------------------------------------- controles imagen / audio
@@ -6037,6 +6053,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun salirModoStudio() {
         val monitor = monitorPrograma
         modoStudio = false
+        // En horizontal se vuelve al diseño ancho de siempre: si se conservara el 9:16, el acomodo
+        // de las tarjetas y los botones quedaba apretado y desacomodado al girar la tablet. El
+        // 9:16 se puede volver a elegir con el chip.
+        vertical = false
         // Lo que estaba al aire es lo que se queda en el lienzo al volver al diseño de siempre.
         monitor?.scene?.let { alAire ->
             if (alAire.items.isNotEmpty()) b.canvas.scene = alAire
@@ -6332,6 +6352,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         )
         (b.cajaVideo.parent as? ViewGroup)?.removeView(b.cajaVideo)
         b.cajaVideo.visibility = View.VISIBLE
+        // En Modo Studio los ajustes de imagen van siempre en una fila, en 9:16 y en 16:9: antes
+        // se quedaba el acomodo que traía del otro diseño y al girar la tablet salía a medias.
+        ajustesEnUnaFila()
         baja.addView(
             b.cajaVideo,
             LinearLayout.LayoutParams(
