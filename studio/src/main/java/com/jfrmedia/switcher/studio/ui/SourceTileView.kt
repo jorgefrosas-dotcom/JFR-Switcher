@@ -55,16 +55,40 @@ class SourceTileView @JvmOverloads constructor(
     }
 
     /**
-     * Gira la miniatura según la rotación que reporta el celular. Si el cuadro llega
-     * acostado (90/270) se rota la vista y se escala para que llene la tarjeta.
+     * Orienta la miniatura con la rotación que reporta el celular.
+     *
+     * Los píxeles llegan **sin orientar** (igual que en el lienzo, donde el shader aplica la
+     * rotación), así que hay que girar el visor. Al girar 90° el visor cambia de ancho por alto,
+     * por eso además se escala para que cubra la tarjeta sin dejar huecos ni salirse.
      */
     fun fijarRotacion(grados: Int) {
-        video.rotation = 0f // los píxeles ya llegan orientados
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val escala = if ((grados % 180) != 0 && w > 0f && h > 0f) maxOf(w / h, h / w) else 1f
-        video.scaleX = escala
-        video.scaleY = escala
+        // Sin medidas todavía no se puede calcular la escala: se reintenta al terminar el acomodo.
+        if (width == 0 || height == 0) {
+            post { fijarRotacion(grados) }
+            return
+        }
+        val g = ((grados % 360) + 360) % 360
+        video.rotation = g.toFloat()
+        video.scaleX = 1f
+        video.scaleY = 1f
+        if (g % 180 != 0) {
+            val w = width.toFloat()
+            val h = height.toFloat()
+            if (w > 0f && h > 0f) {
+                val escala = maxOf(w / h, h / w)
+                video.scaleX = escala
+                video.scaleY = escala
+            }
+        }
+        video.requestLayout()
+    }
+
+    /** Tarjetas chicas (las 6 cámaras en una fila): letras más pequeñas y sin sobras. */
+    fun modoCompacto(chico: Boolean) {
+        txtName.textSize = if (chico) 9f else 11f
+        txtStatus.textSize = if (chico) 8f else 10f
+        txtNumber.textSize = if (chico) 9f else 12f
+        txtBadge.textSize = if (chico) 9f else 11f
     }
 
     fun setup(index: Int, onClick: () -> Unit) {

@@ -720,6 +720,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 tile.clearSession()
             } else {
                 tile.refreshInfo(session)
+                // La rotación se vuelve a aplicar aquí: al rehacer la parrilla (cambio de
+                // formato) las tarjetas nuevas nacen sin girar y el celular no la reporta otra vez.
+                tile.fijarRotacion(session.rotacion)
             }
             tile.setLayerMark(
                 when (index) {
@@ -2025,7 +2028,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      */
     /** En vertical las tarjetas son verticales (9:16) y entran más por fila. */
     private fun columnasFuentes(): Int = when {
-        // En Modo Studio las tarjetas son más chicas para que entren 4 por fila.
+        // Modo Studio en 9:16: las 6 cámaras en una sola fila, con tarjetas chicas.
+        modoStudio && studioVertical -> 6
+        // Modo Studio en 16:9: 4 por fila.
         modoStudio -> 4
         // En vertical, 3 por fila: cada tarjeta conserva su tamaño y el cuarto hueco pasa a la
         // columna de controles (allí caben los botones y el monitor de audio).
@@ -2060,6 +2065,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 val tile = SourceTileView(this)
                 // Las tarjetas toman la forma del lienzo: 9:16 o 16:9 (también en Modo Studio).
                 tile.modoVertical(lienzoVertical)
+                // Con 6 cámaras en una fila hacen falta letras más chicas.
+                tile.modoCompacto(modoStudio && studioVertical)
                 if (index == LocalCam.SLOT) {
                     tile.setup(index) { onTileTap(LocalCam.SLOT) }
                     tile.setEstadoLocal(localCam.encendida)
