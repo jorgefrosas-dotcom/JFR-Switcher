@@ -26,6 +26,9 @@
   cubran la tarjeta.
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
+- **El formato del lienzo se conserva al cambiar de modo**: si vienes produciendo en 16:9, el Modo
+  Studio entra en **16:9** (antes se colaba el último formato usado y cambiaba solo al girar la
+  tablet); y al volver a horizontal se conserva el que tenías en el Modo Studio.
 - **El programa ya no se congela en el modo estándar**: fuera del Modo Studio el monitor de programa
   (que está oculto) **seguía enganchado a las mismas cámaras**, duplicando el trabajo de cada pista y
   saturando la CPU. Ahora solo se engancha en Modo Studio (al entrar se engancha y al salir se
