@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icono del monitor de audio: barras de nivel dentro de un marco, mismo estilo que ic_image. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M3,10h2v4H3z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M7,7h2v10H7z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M11,4h2v16h-2z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M15,8h2v8h-2z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M19,10h2v4h-2z" />
+</vector>

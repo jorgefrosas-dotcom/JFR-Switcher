@@ -1358,8 +1358,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         resources.configuration.smallestScreenWidthDp < 600
 
     // ---------------------------------------------------------------- celular: pestañas
-    /** Ancho de la columna de fuentes en el celular: lo justo para las tarjetas. */
-    private val ANCHO_FUENTES_CELULAR = 205
+    /**
+     * Ancho de la columna de fuentes en el celular.
+     *
+     * Medido el 29/10 en el POCO: el visor 16:9 está limitado por el **alto** y le sobraban ~320 px
+     * de ancho a la derecha. Se le dan a la columna, así vuelven a entrar **3 tarjetas por fila**
+     * sin que el monitor se achique (queda pegado a la derecha).
+     */
+    private val ANCHO_FUENTES_CELULAR = 322
 
     /** Pestañas Cámaras / Overlays / Medios (solo celular). */
     private var tabsFuentes: LinearLayout? = null
@@ -1370,6 +1376,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private var etiquetaMedios: TextView? = null
     /** «Img.» en celular: los ajustes de imagen abren su ventana en vez de una banda fija. */
     private var chipImagenCelular: TextView? = null
+    /** Botones de solo icono de la barra flotante (audio y ajustes de imagen). */
+    private var chipAudioIcono: ImageView? = null
+    private var chipImagenIcono: ImageView? = null
+    /** Flecha que muestra u oculta la barra flotante de controles (solo celular). */
+    private var btnColapsarBarra: TextView? = null
+    private var barraVisible = true
+    /** Triángulos que avisan de que la barra se desliza (izquierda / derecha). */
+    private var flechaIzq: TextView? = null
+    private var flechaDer: TextView? = null
 
     /**
      * En el celular la lista de fuentes es larguísima (6 cámaras + tablet + overlays + medios) y
@@ -1442,9 +1457,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         ContextCompat.getColor(this, R.color.text_secondary)
 
     /**
-     * En el celular la fila de controles va flotando sobre el visor y tiene que **caber entera**:
-     * si no, la lente vuelve a quedar fuera de la vista (era el reporte del POCO). Se achican los
-     * textos y los márgenes, y A/B se quedan angostos.
+     * En el celular la fila de controles va flotando sobre el visor y tiene que **caber entera**
+     * con botones del **mismo tamaño y cómodos para un dedo grande** (50×48 dp; el mínimo táctil de
+     * Android son 48). Pedido de Jorge del 29/10.
+     *
+     * Con 9 botones no caben a ese tamaño (el visor mide ~376 dp de ancho), así que «Audio» e
+     * «Img.» se suben a la barra superior —donde viven los demás ajustes— y en la barra flotante
+     * quedan los 7 controles de emisión, todos iguales.
      */
     private fun compactarControlesCelular() {
         if (!esPantallaCelular()) return
@@ -1452,47 +1471,230 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             val fila = b.controlesCapa
             for (i in 0 until fila.childCount) {
                 val v = fila.getChildAt(i) as? TextView ?: continue
-                val esCapa = v.id == R.id.btnLayerA || v.id == R.id.btnLayerB
-                v.textSize = 9f
+                v.textSize = 12f
+                v.gravity = Gravity.CENTER
                 v.minWidth = 0
-                if (esCapa) {
-                    v.setPadding(0, v.paddingTop, 0, v.paddingBottom)
-                    (v.layoutParams as? LinearLayout.LayoutParams)?.let {
-                        it.width = 32.dp
-                        it.marginStart = if (i == 0) 0 else 3.dp
-                        v.layoutParams = it
-                    }
-                } else {
-                    v.setPadding(5.dp, 2.dp, 5.dp, 2.dp)
-                    (v.layoutParams as? LinearLayout.LayoutParams)?.let {
-                        it.marginStart = 4.dp
-                        v.layoutParams = it
-                    }
+                v.setPadding(0, 0, 0, 0)
+                v.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
+                v.layoutParams = LinearLayout.LayoutParams(56.dp, 48.dp).apply {
+                    if (i > 0) marginStart = 3.dp
                 }
             }
-            // El icono de PiP y el de la lente se quedan sin texto largo cuando no hace falta.
-            b.btnPip.compoundDrawablePadding = 3.dp
+            b.scrollControles.isHorizontalScrollBarEnabled = false
+            // Aire a los lados para que los triángulos no tapen el primer y el último botón.
+            b.controlesCapa.setPadding(20.dp, 0, 20.dp, 0)
         }
     }
 
-    /** «Img.» en la fila de controles: solo en celular, donde no hay banda de ajustes. */
-    private fun asegurarChipImagen() {
+    /**
+     * Botón de la flecha: muestra u oculta la barra flotante de controles.
+     *
+     * Arriba = la barra está oculta (tocas y aparece). Abajo = está a la vista (tocas y se va).
+     * El botón vive en el visor, así que sigue a la mano con la barra escondida.
+     */
+    private fun montarBotonColapsar() {
         if (!esPantallaCelular() || vertical) return
-        val chip = chipImagenCelular ?: TextView(this).apply {
-            text = "Img."
-            textSize = 10f
+        val boton = btnColapsarBarra ?: TextView(this).apply {
+            textSize = 20f
             gravity = Gravity.CENTER
             isClickable = true
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
-            setBackgroundResource(R.drawable.bg_pill_ghost)
-            setPadding(7.dp, 3.dp, 7.dp, 3.dp)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+            setBackgroundResource(R.drawable.bg_pill)
+        }.also { btnColapsarBarra = it }
+        if (boton.parent == null) {
+            b.canvasHost.addView(
+                boton,
+                FrameLayout.LayoutParams(42.dp, 42.dp).apply {
+                    gravity = Gravity.BOTTOM or Gravity.END
+                }
+            )
+        }
+        boton.setOnClickListener { ponerBarraVisible(!barraVisible) }
+        ponerBarraVisible(barraVisible)
+    }
+
+    /**
+     * En el celular el monitor de entrada **no** ocupa una banda fija (le robaba la mitad del alto
+     * al visor): abre una **ventana a la izquierda**, igual que los ajustes de imagen.
+     */
+    private fun dialogoMonitorAudio() {
+        if (vertical) return
+        val caja = panelAudio ?: return
+        (caja.parent as? ViewGroup)?.removeView(caja)
+        caja.visibility = View.VISIBLE
+        val cont = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(14.dp, 4.dp, 14.dp, 4.dp)
+        }
+        cont.addView(
+            caja,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { marginStart = 6.dp }
-            setOnClickListener { dialogoAjustesImagen() }
-        }.also { chipImagenCelular = it }
-        if (chip.parent == null) b.controlesCapa.addView(chip)
+            )
+        )
+        ondaAudio?.layoutParams =
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 120.dp)
+        txtFormatoAudio?.visibility = View.VISIBLE
+
+        val dialogo = AlertDialog.Builder(this)
+            .setTitle("Monitor de entrada")
+            .setView(ScrollView(this).apply { addView(cont) })
+            .setPositiveButton("Listo", null)
+            .create()
+        dialogo.setOnDismissListener {
+            uiHandler.removeCallbacks(refrescoEntrada)
+            (caja.parent as? ViewGroup)?.removeView(caja)
+            zonaControles?.addView(
+                caja,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+            ponerBarraVisible(barraVisible)
+        }
+        dialogo.show()
+        // A la izquierda y angosta, como la ventana de imagen: el visor sigue a la vista.
+        dialogo.window?.let { ventana ->
+            val ancho = resources.displayMetrics.widthPixels
+            val alto = resources.displayMetrics.heightPixels
+            ventana.setGravity(Gravity.CENTER_VERTICAL or Gravity.START)
+            ventana.setLayout((ancho * 0.42f).toInt(), (alto * 0.78f).toInt())
+            val attrs = ventana.attributes
+            attrs.x = 10.dp
+            ventana.attributes = attrs
+        }
+        actualizarEntradaAudio()
+        uiHandler.post(refrescoEntrada)
+    }
+
+    /** Pone la barra flotante a la vista o la esconde, y cambia la flecha del botón. */
+    private fun ponerBarraVisible(visible: Boolean) {
+        if (!esPantallaCelular()) return
+        barraVisible = visible
+        b.slotControles.visibility = if (visible) View.VISIBLE else View.GONE
+        btnColapsarBarra?.let { boton ->
+            // Abajo = «ocúltala»; arriba = «muéstrala».
+            boton.text = if (visible) "↓" else "↑"
+            boton.contentDescription =
+                if (visible) "Ocultar la barra de controles" else "Mostrar la barra de controles"
+            (boton.layoutParams as? FrameLayout.LayoutParams)?.let {
+                it.marginEnd = 12.dp
+                // Con la barra a la vista, la flecha se sube para no encimarse con ella.
+                it.bottomMargin = if (visible) 72.dp else 12.dp
+                boton.layoutParams = it
+            }
+            boton.alpha = if (visible) 0.75f else 1f
+        }
+        // La foto flota más arriba para no quedar debajo de la flecha.
+        (b.btnPhoto.layoutParams as? FrameLayout.LayoutParams)?.let {
+            it.bottomMargin = if (visible) 124.dp else 64.dp
+            b.btnPhoto.layoutParams = it
+        }
+        // Los triángulos de la barra viajan con ella.
+        actualizarFlechasBarra()
+    }
+
+    /**
+     * Triángulos a los lados de la barra flotante: avisan de que se puede **deslizar** y que hay
+     * más botones a la derecha (o a la izquierda, si ya se deslizó). Se apagan cuando ya no queda
+     * nada en esa dirección, así el aviso nunca miente. Tocar un triángulo también desliza.
+     */
+    private fun montarFlechasBarra() {
+        if (!esPantallaCelular() || vertical) return
+        fun flecha(texto: String): TextView = TextView(this).apply {
+            this.text = texto
+            textSize = 13f
+            gravity = Gravity.CENTER
+            isClickable = true
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+        }
+        val izq = flechaIzq ?: flecha("◀").also { flechaIzq = it }
+        val der = flechaDer ?: flecha("▶").also { flechaDer = it }
+        val alto = 48.dp
+        val abajo = 14.dp
+        if (izq.parent == null) {
+            b.canvasHost.addView(izq, FrameLayout.LayoutParams(22.dp, alto).apply {
+                gravity = Gravity.BOTTOM or Gravity.START
+                marginStart = 12.dp
+                bottomMargin = abajo
+            })
+        }
+        if (der.parent == null) {
+            b.canvasHost.addView(der, FrameLayout.LayoutParams(22.dp, alto).apply {
+                gravity = Gravity.BOTTOM or Gravity.END
+                marginEnd = 12.dp
+                bottomMargin = abajo
+            })
+        }
+        izq.setOnClickListener { b.scrollControles.smoothScrollBy(-3 * 54.dp, 0) }
+        der.setOnClickListener { b.scrollControles.smoothScrollBy(3 * 54.dp, 0) }
+        b.scrollControles.setOnScrollChangeListener { _, _, _, _, _ -> actualizarFlechasBarra() }
+        b.scrollControles.post { actualizarFlechasBarra() }
+        actualizarFlechasBarra()
+    }
+
+    /** Prende el triángulo solo si de ese lado hay botones fuera de la vista. */
+    private fun actualizarFlechasBarra() {
+        val sc = b.scrollControles
+        val hayIzq = sc.canScrollHorizontally(-1)
+        val hayDer = sc.canScrollHorizontally(1)
+        flechaIzq?.let { it.alpha = if (hayIzq) 0.9f else 0.2f }
+        flechaDer?.let { it.alpha = if (hayDer) 0.9f else 0.2f }
+        flechaIzq?.visibility = if (barraVisible) View.VISIBLE else View.GONE
+        flechaDer?.visibility = if (barraVisible) View.VISIBLE else View.GONE
+    }
+
+    /** «Audio» e «Img.» se mudan a la barra superior en el celular: ahí hay hueco y se tocan mejor.
+     * Se vuelve a llamar cada vez que se rehace la fila de controles.
+     */
+    /**
+     * Los dos botones de icono de la barra flotante: monitor de audio y ajustes de imagen.
+     *
+     * Van **sin texto**, con un icono cada uno, y al principio de la barra (que es deslizable)
+     * para que siempre se vean.
+     */
+    private fun montarChipsIconoCelular() {
+        if (!esPantallaCelular() || vertical) return
+        // El chip de texto «♪ Audio» de la tablet se oculta aquí: lo reemplaza el icono.
+        btnVistaControles?.visibility = View.GONE
+        chipImagenCelular?.visibility = View.GONE
+        val audio = chipAudioIcono ?: iconoChip(R.drawable.ic_audio_onda, "Monitor de entrada") {
+            dialogoMonitorAudio()
+        }.also { chipAudioIcono = it }
+        val imagen = chipImagenIcono ?: iconoChip(R.drawable.ic_image, "Ajustes de imagen") {
+            dialogoAjustesImagen()
+        }.also { chipImagenIcono = it }
+        // Se agregan al principio, en este orden para que queden [imagen][audio].
+        for (chip in listOf(audio, imagen)) {
+            if (chip.parent == null) b.controlesCapa.addView(chip, 0)
+        }
+    }
+
+    /** Botón cuadrado de solo icono, del mismo tamaño que los demás de la barra. */
+    private fun iconoChip(icono: Int, descripcion: String, alTocar: () -> Unit): ImageView =
+        ImageView(this).apply {
+            setImageResource(icono)
+            contentDescription = descripcion
+            isClickable = true
+            setBackgroundResource(R.drawable.bg_pill_ghost)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setPadding(14.dp, 12.dp, 14.dp, 12.dp)
+            setColorFilter(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+            layoutParams = LinearLayout.LayoutParams(56.dp, 48.dp).apply { marginStart = 3.dp }
+            setOnClickListener { alTocar() }
+        }
+
+    private fun acomodarChipsCelular() {
+        if (!esPantallaCelular() || vertical) return
+        montarChipsIconoCelular()
+    }
+
+    /** Pone los dos botones de icono en la barra (antes eran un chip de texto «Img.»). */
+    private fun asegurarChipImagen() {
+        if (!esPantallaCelular() || vertical) return
+        montarChipsIconoCelular()
     }
 
     /**
@@ -1523,7 +1725,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun aplicarModoCelular() {
         if (vertical) return
         runCatching {
-            // 1) Columna de fuentes angosta (con pestañas) y visor con todo el ancho libre.
+            // 1) Columna de fuentes más ancha (3 tarjetas por fila) y visor pegado a la derecha con
+            //    su tamaño intacto: el ancho que le sobraba al lienzo se lo queda la columna.
             //    En vertical no aplica: ahí el ancho del visor lo fija la relación 9:16.
             (b.panelFuentes.layoutParams as? LinearLayout.LayoutParams)?.let {
                 it.width = ANCHO_FUENTES_CELULAR.dp
@@ -1533,12 +1736,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 it.width = 0
                 it.weight = 1f
             }
-            // El visor se pega a la derecha para aprovechar el hueco libre.
-            (b.canvasHost.layoutParams as? LinearLayout.LayoutParams)?.let { it.gravity = Gravity.END }
+            // WRAP_CONTENT + END: el visor conserva la medida que le da el 16:9 y se pega al borde
+            // derecho del panel (antes quedaba un hueco negro de ~320 px a su derecha).
+            (b.canvasHost.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.width = ViewGroup.LayoutParams.WRAP_CONTENT
+                it.gravity = Gravity.END
+            }
 
             // 2) Barra superior compacta.
             b.btnPlantillas.text = "Plant."
             b.btnTransiciones.text = "Trans."
+            // Con «Img.» y «Monitor» en la barra, «Rec + Broadcast» se salía de la pantalla.
+            b.btnRecord.text = "Rec"
             b.txtLive.visibility = View.GONE
             (b.imgLogo.layoutParams as? LinearLayout.LayoutParams)?.let {
                 it.width = 34.dp
@@ -1595,7 +1804,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     }
                 )
             }
-            b.slotControles.setBackgroundResource(R.drawable.bg_banner)
+            b.slotControles.setBackgroundResource(R.drawable.bg_barra_flotante)
             b.slotControles.setPadding(6.dp, 4.dp, 6.dp, 4.dp)
             // El botón de foto flota por encima de la fila de controles, no debajo de ella.
             (b.btnPhoto.layoutParams as? FrameLayout.LayoutParams)?.let {
@@ -1604,6 +1813,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             // Y la fila tiene que caber entera sobre el visor.
             compactarControlesCelular()
+            // «Audio» e «Img.» se van a la barra superior (en la flotante no caben a buen tamaño).
+            asegurarChipImagen()
+            acomodarChipsCelular()
+            // Flecha para mostrar u ocultar la barra flotante.
+            montarBotonColapsar()
+            // Triángulos de «se desliza» a los dos lados de la barra.
+            montarFlechasBarra()
         }
     }
 
@@ -2287,9 +2503,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      */
     /** En vertical las tarjetas son verticales (9:16) y entran más por fila. */
     private fun columnasFuentes(): Int = when {
-        // En celular la columna es angosta (176-190 dp): con 3 por fila las tarjetas quedaban
-        // del tamaño de un botón y no se leía ni el nombre de la cámara.
-        esPantallaCelular() && !vertical -> 2
+        // En celular la columna es más ancha (3 tarjetas) y el visor sigue limitado por el alto.
+        esPantallaCelular() && !vertical -> 3
         // Modo Studio en 9:16: las 6 cámaras en una sola fila, con tarjetas chicas.
         modoStudio && studioVertical -> 6
         // Modo Studio en 16:9: 4 por fila.
@@ -5273,15 +5488,21 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun mostrarVistaControles(vista: String) {
         val audio = vista == "audio" && !vertical
+        if (esPantallaCelular()) {
+            // En el celular no hay banda fija: el monitor abre su ventana desde el chip «Monitor».
+            vistaControles = "imagen"
+            zonaControles?.visibility = View.GONE
+            b.cajaVideo.visibility = View.GONE
+            btnVistaControles?.text = "Monitor"
+            ponerBarraVisible(barraVisible)
+            return
+        }
         vistaControles = if (audio) "audio" else "imagen"
         if (!vertical) {
             // Los dos viven en la misma banda de altura fija: el visor no se mueve al cambiar.
             b.cajaVideo.visibility =
                 if (!audio && !esPantallaCelular()) View.VISIBLE else View.GONE
             panelAudio?.visibility = if (audio) View.VISIBLE else View.GONE
-            if (esPantallaCelular()) {
-                zonaControles?.visibility = if (audio) View.VISIBLE else View.GONE
-            }
         } else {
             b.cajaVideo.visibility = View.VISIBLE
             panelAudio?.visibility = View.VISIBLE
@@ -5399,7 +5620,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             b.scrollControles.removeAllViews()
             fila.removeAllViews()
             fila.orientation = LinearLayout.HORIZONTAL
-            btnVistaControles?.let { fila.addView(it) }
+            // En el celular «Audio» e «Img.» viven en la barra superior: no entran aquí.
+            if (!esPantallaCelular()) btnVistaControles?.let { fila.addView(it) }
             b.btnLayerA.layoutParams =
                 LinearLayout.LayoutParams(40.dp, ViewGroup.LayoutParams.WRAP_CONTENT)
             b.btnLayerB.layoutParams =
@@ -6958,3 +7180,4 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         private const val CLAVE_TRANSICION_MS = "transicion_ms"
     }
 }
+
