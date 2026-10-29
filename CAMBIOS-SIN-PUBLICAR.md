@@ -26,6 +26,10 @@
   cubran la tarjeta.
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
+- **Al volver del Modo Studio el programa ya no sale negro**: al salir se **vuelven a enganchar todas
+  las cámaras al visor** (por si alguna pista se había soltado al cambiar de escenario). Verificado
+  con dos vueltas seguidas: el programa conserva la imagen (93% de imagen, no negro) y al regresar al
+  Modo Studio siguen las dos vistas.
 - **El audio de un video de MEDIOS ya se corta al quitarlo**: cuando se quitaba del programa o se
   eliminaba del grupo con la **✕**, el reproductor seguía sonando (incluso con el video ya fuera). Ahora
   se corta y se libera en el momento, y el vigilante de la sesión ya no reanuda un video que salió de
