@@ -26,6 +26,11 @@
   cubran la tarjeta.
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
+- **Al girar la tablet ya no se desacomodan los botones**: los ajustes de imagen (Luz, Contraste, WB,
+  Color, Viñeta y Poster) van **siempre en una sola fila** en el Modo Studio, sea 9:16 o 16:9. Antes
+  se quedaba el acomodo del diseño anterior y, al girar, aparecían en dos columnas con el deslizable
+  encima. Además, **al volver a horizontal se entra al diseño ancho de siempre** (antes se quedaba el
+  9:16 y se veía apretado).
 - En Modo Studio 9:16 el botón de **Transicionar** quedó **solo con las flechas encontradas (⇄), más
   grandes** (antes decía «TRANSICIONAR» en letra chica y se veía apretado).
 - En Modo Studio, el **botón de foto está sobre el monitor de programa** (la foto sale de lo que
