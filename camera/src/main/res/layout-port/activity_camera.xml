@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pantalla de JFR Camera en VERTICAL (celular de pie).
+
+  La app ahora sigue la posición del teléfono, así que estar de pie es un caso normal. En vertical no
+  cabe la barra de una sola fila del diseño horizontal: se parte en dos renglones y los botones de
+  abajo se reparten el ancho, con los mismos ids para no tocar el código.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_root">
+
+    <org.webrtc.SurfaceViewRenderer
+        android:id="@+id/preview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Barra superior: marca y estado arriba; IP, QR y Conectar abajo. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_margin="8dp"
+        android:background="@drawable/bg_glass"
+        android:orientation="vertical"
+        android:paddingStart="10dp"
+        android:paddingTop="7dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/txtMarca"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/app_name"
+                android:textColor="@color/accent"
+                android:textSize="12sp" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/chipEstado"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_chip"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:paddingHorizontal="9dp"
+                android:paddingVertical="4dp"
+                android:text="@string/estado_sin_conectar"
+                android:textColor="@color/on_chip"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                tools:text="Cámara 3" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/campoIp"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_glass_campo"
+                android:digits="0123456789.:"
+                android:hint="@string/hint_ip"
+                android:imeOptions="actionGo"
+                android:importantForAutofill="no"
+                android:inputType="text"
+                android:maxLength="64"
+                android:maxLines="1"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:singleLine="true"
+                android:textColor="@color/texto_principal"
+                android:textColorHint="@color/texto_tenue"
+                android:textSize="13sp"
+                tools:ignore="LabelFor" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnQr"
+                style="@style/Widget.JfrCam.BotonMini"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="6dp"
+                android:contentDescription="Escanear el QR de la tablet"
+                android:text="@string/qr"
+                app:icon="@android:drawable/ic_menu_camera"
+                app:iconGravity="textStart"
+                app:iconPadding="4dp"
+                app:iconSize="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnConectar"
+                style="@style/Widget.JfrCam.BotonMini.Primario"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="6dp"
+                android:text="@string/conectar" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Controles de abajo: estado en un renglón y los botones repartidos en el otro. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_margin="8dp"
+        android:background="@drawable/bg_glass"
+        android:orientation="vertical"
+        android:paddingStart="8dp"
+        android:paddingTop="7dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="7dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:id="@+id/panelVivo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:id="@+id/puntoVivo"
+                    android:layout_width="9dp"
+                    android:layout_height="9dp"
+                    android:background="@drawable/bg_punto" />
+
+                <TextView
+                    android:id="@+id/txtVivo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="@string/sin_senal"
+                    android:textColor="@color/texto_tenue"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    tools:text="En vivo" />
+            </LinearLayout>
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/chipAlAire"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_chip"
+                android:paddingStart="9dp"
+                android:paddingTop="5dp"
+                android:paddingEnd="9dp"
+                android:paddingBottom="5dp"
+                android:text="FUERA DE AIRE"
+                android:textColor="@color/texto_tenue"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                tools:text="AL AIRE" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnVoltear"
+                style="@style/Widget.JfrCam.BotonMini"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:contentDescription="@string/voltear_desc"
+                android:enabled="false"
+                android:text="@string/voltear"
+                app:icon="@drawable/ic_voltear" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnLinterna"
+                style="@style/Widget.JfrCam.BotonMini"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:text="@string/linterna"
+                app:icon="@drawable/ic_linterna" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCalidad"
+                style="@style/Widget.JfrCam.BotonMini"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:text="@string/calidad"
+                app:icon="@drawable/ic_calidad" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Instrucciones cuando todavía no hay enlace (tarjeta compacta, no tapa todo). -->
+    <LinearLayout
+        android:id="@+id/overlayInstrucciones"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/bg_glass"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingStart="18dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="18dp"
+        android:paddingBottom="14dp">
+
+        <TextView
+            android:id="@+id/txtInstrucciones"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:text="@string/instrucciones"
+            android:textColor="@color/texto_principal"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:text="@string/nota_audio"
+            android:textColor="@color/texto_tenue"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+</FrameLayout>

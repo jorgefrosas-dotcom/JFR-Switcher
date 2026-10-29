@@ -2,8 +2,10 @@ package com.jfrmedia.switcher.studio.ui
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.jfrmedia.switcher.studio.R
@@ -34,6 +36,9 @@ class SourceTileView @JvmOverloads constructor(
     private var currentTrack: VideoTrack? = null
     private var slotIndex = 0
 
+    /** Rotación real del cuadro que reporta el celular (0/90/180/270). */
+    private var rotacionCuadro = 0
+
     init {
         aspect = 16f / 9f
         LayoutInflater.from(context).inflate(R.layout.view_source_tile, this, true)
@@ -58,29 +63,35 @@ class SourceTileView @JvmOverloads constructor(
      * Orienta la miniatura con la rotación que reporta el celular.
      *
      * Los píxeles llegan **sin orientar** (igual que en el lienzo, donde el shader aplica la
-     * rotación), así que hay que girar el visor. Al girar 90° el visor cambia de ancho por alto,
-     * por eso además se escala para que cubra la tarjeta sin dejar huecos ni salirse.
+     * rotación). Si el cuadro viene acostado (90°/270°) hay que girar el visor; y para que el video
+     * **llene la tarjeta sin recortarse ni ampliarse**, el visor se acuesta (alto × ancho) antes de
+     * girarlo: así el cuadro queda del tamaño justo de la tarjeta.
      */
     fun fijarRotacion(grados: Int) {
-        // Sin medidas todavía no se puede calcular la escala: se reintenta al terminar el acomodo.
-        if (width == 0 || height == 0) {
-            post { fijarRotacion(grados) }
-            return
-        }
-        val g = ((grados % 360) + 360) % 360
-        video.rotation = g.toFloat()
-        video.scaleX = 1f
-        video.scaleY = 1f
-        if (g % 180 != 0) {
-            val w = width.toFloat()
-            val h = height.toFloat()
-            if (w > 0f && h > 0f) {
-                val escala = maxOf(w / h, h / w)
-                video.scaleX = escala
-                video.scaleY = escala
-            }
+        rotacionCuadro = ((grados % 360) + 360) % 360
+        aplicarRotacionVisor()
+    }
+
+    private fun aplicarRotacionVisor() {
+        val w = width
+        val h = height
+        if (w <= 0 || h <= 0) return
+        video.rotation = rotacionCuadro.toFloat()
+        video.layoutParams = if (rotacionCuadro % 180 != 0) {
+            FrameLayout.LayoutParams(h, w, Gravity.CENTER)
+        } else {
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
         }
         video.requestLayout()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        // Al cambiar el tamaño de la tarjeta (otra fila, otro formato) se recalcula el visor.
+        aplicarRotacionVisor()
     }
 
     /** Tarjetas chicas (las 6 cámaras en una fila): letras más pequeñas y sin sobras. */
