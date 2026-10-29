@@ -55,6 +55,12 @@ class SourceTileView @JvmOverloads constructor(
         requestLayout()
     }
 
+    /** Forma exacta de la tarjeta (en Modo Studio vertical se aplana a 3:4 para bajar el alto). */
+    fun modoAspecto(valor: Float) {
+        aspect = valor
+        requestLayout()
+    }
+
     /**
      * Guarda la rotación que reporta el celular.
      *

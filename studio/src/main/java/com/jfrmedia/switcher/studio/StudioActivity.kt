@@ -179,6 +179,19 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private val lienzoVertical: Boolean
         get() = if (modoStudio) studioVertical else vertical
 
+    /**
+     * Forma de las tarjetas de fuente (cámaras, overlays y medios).
+     *
+     * Siguen el formato del lienzo, pero en el Modo Studio vertical se aplanan un poco (3:4 en vez
+     * de 9:16): así las 6 cámaras quedan más bajas y los monitores se llevan más alto.
+     */
+    private val aspectoFuente: Float
+        get() = when {
+            !lienzoVertical -> 16f / 9f
+            modoStudio -> 3f / 4f
+            else -> 9f / 16f
+        }
+
     private val recAncho: Int get() = tamanoGrabacion(recAltoElegido).first
     private val recAlto: Int get() = tamanoGrabacion(recAltoElegido).second
 
@@ -2080,8 +2093,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     continue
                 }
                 val tile = SourceTileView(this)
-                // Las tarjetas toman la forma del lienzo: 9:16 o 16:9 (también en Modo Studio).
-                tile.modoVertical(lienzoVertical)
+                // Las tarjetas siguen la forma del lienzo (en Modo Studio vertical van a 3:4).
+                tile.modoAspecto(aspectoFuente)
                 // Con 6 cámaras en una fila hacen falta letras más chicas.
                 tile.modoCompacto(modoStudio && studioVertical)
                 if (index == LocalCam.SLOT) {
@@ -2201,7 +2214,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** Tarjeta de un medio: miniatura, nombre y botón para quitarlo del grupo. */
     private fun tarjetaMedio(medio: Medio): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
+            aspect = aspectoFuente
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -2282,7 +2295,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun tarjetaAgregarMedio(): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
+            aspect = aspectoFuente
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -2556,7 +2569,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** Tarjeta, primera de OVERLAYS, que abre el editor de texto. */
     private fun tarjetaCrearTexto(): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
+            aspect = aspectoFuente
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -3100,7 +3113,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun tarjetaTextoBiblioteca(t: TextoGuardado): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
+            aspect = aspectoFuente
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -3147,7 +3160,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun tarjetaGrabacion(uri: String, nombre: String): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
+            aspect = aspectoFuente
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -3212,7 +3225,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun tarjetaAgregarOverlay(): View {
         val frame = AspectFrameLayout(this).apply {
-            aspect = if (lienzoVertical) 9f / 16f else 16f / 9f
+            aspect = aspectoFuente
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
@@ -6188,9 +6201,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             setPadding(8.dp, 0, 8.dp, 0)
         }
         filaMonitores = fila
+        // Los monitores se llevan la mayor parte del alto (era 1.2 contra 1 de las tarjetas).
         cuerpo.addView(
             fila,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.2f)
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.9f)
         )
 
         // Preview (es el lienzo de siempre: ahí se compone y se edita).
@@ -6271,10 +6285,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             moverBotonesAFila(filaBotones)
         }
 
-        // 5) Tarjetas de cámaras, overlays y medios.
+        // 5) Tarjetas de cámaras, overlays y medios (bajan un poco para dejar crecer los monitores).
         cuerpo.addView(
             b.panelFuentes,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 0.8f)
         )
 
         // 6) Ajustes de imagen y monitor de audio, los dos visibles.
