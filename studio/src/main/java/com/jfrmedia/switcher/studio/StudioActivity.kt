@@ -1059,14 +1059,36 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )
         )
         // Marcar los botones de modo cuando están activos.
-        b.btnPip.setBackgroundResource(if (pipActivo) R.drawable.bg_pill_accent else R.drawable.bg_pill)
+        // En el celular PiP y «2 cam» van sin texto, con icono dentro del mismo botón.
+        b.btnPip.text = if (esPantallaCelular()) "" else "PiP"
+        b.btnSplit.text = if (esPantallaCelular()) "" else "2cam"
+        b.btnPip.background = fondoPillConIcono(pipActivo, R.drawable.ic_pip)
         b.btnPip.setTextColor(
             ContextCompat.getColor(this, if (pipActivo) R.color.bg_root else R.color.text_primary)
         )
-        b.btnSplit.setBackgroundResource(if (splitActivo) R.drawable.bg_pill_accent else R.drawable.bg_pill)
+        b.btnSplit.background = fondoPillConIcono(splitActivo, R.drawable.ic_2cam)
         b.btnSplit.setTextColor(
             ContextCompat.getColor(this, if (splitActivo) R.color.bg_root else R.color.text_primary)
         )
+    }
+
+    /**
+     * Fondo de píldora con el icono centrado, para los botones que en el celular no llevan texto.
+     * Mantiene el color de «activo» (naranja) porque se apoya en la misma píldora de siempre.
+     */
+    private fun fondoPillConIcono(activo: Boolean, icono: Int): android.graphics.drawable.Drawable? {
+        val pildora = ContextCompat.getDrawable(
+            this,
+            if (activo) R.drawable.bg_pill_accent else R.drawable.bg_pill
+        ) ?: return null
+        if (!esPantallaCelular()) return pildora
+        val dibujo = ContextCompat.getDrawable(this, icono) ?: return pildora
+        // El icono toma el color del texto (oscuro sobre naranja, claro sobre gris).
+        val color = ContextCompat.getColor(this, if (activo) R.color.bg_root else R.color.text_primary)
+        dibujo.setTint(color)
+        val capas = android.graphics.drawable.LayerDrawable(arrayOf(pildora, dibujo))
+        capas.setLayerInset(1, 15.dp, 13.dp, 15.dp, 13.dp)
+        return capas
     }
 
     /**
@@ -1469,6 +1491,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (!esPantallaCelular()) return
         runCatching {
             val fila = b.controlesCapa
+            // PiP y «2 cam» van con icono: el texto se limpia aquí (es lo último que corre al
+            // armar la barra, así no queda el «2cam» encima del dibujo).
+            b.btnPip.text = ""
+            b.btnSplit.text = ""
             for (i in 0 until fila.childCount) {
                 val v = fila.getChildAt(i) as? TextView ?: continue
                 v.textSize = 12f
