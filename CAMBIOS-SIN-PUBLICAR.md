@@ -26,6 +26,8 @@
   cubran la tarjeta.
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
+- En Modo Studio 9:16 el botón de **Transicionar** quedó **solo con las flechas encontradas (⇄), más
+  grandes** (antes decía «TRANSICIONAR» en letra chica y se veía apretado).
 - En Modo Studio, el **botón de foto está sobre el monitor de programa** (la foto sale de lo que
   está al aire). Al volver al diseño de siempre regresa al visor.
 - El **estado de grabación y el cronómetro** quedan pegados al botón de grabar, en los dos formatos
