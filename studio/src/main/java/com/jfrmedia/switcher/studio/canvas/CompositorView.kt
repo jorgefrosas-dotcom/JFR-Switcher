@@ -621,6 +621,23 @@ class CompositorView @JvmOverloads constructor(
 
     val hayVideo: Boolean get() = videoItem != null
 
+    /**
+     * Si el sistema pausó el video (algunos equipos lo hacen al minimizar la app), lo reanuda.
+     *
+     * Se llama cada segundo mientras hay grabación o transmisión: así el video no se queda
+     * congelado cuando el switcher pasa a segundo plano.
+     */
+    fun reanudarMediosSiHaceFalta() {
+        val mp = videoReproductor ?: return
+        if (!videoListo || videoItem?.reproduciendo != true) return
+        runCatching {
+            if (!mp.isPlaying) {
+                mp.start()
+                L.i("gl", "video reanudado (estaba pausado en segundo plano)")
+            }
+        }
+    }
+
     /** Prepara textura y MediaPlayer. Debe correr en el hilo de GL. */
     private fun prepararVideo() {
         pedirVideo = false

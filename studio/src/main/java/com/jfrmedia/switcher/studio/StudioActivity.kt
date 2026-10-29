@@ -1785,6 +1785,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
         // Y las cámaras también: su formato queda fijo hasta que termine la sesión.
         bloquearRotacionCamaras(true)
+        // Si el equipo pausa el video al minimizar la app, se reanuda solo: así no se graba congelado.
+        vigilarVideoEnSegundoPlano()
         com.jfrmedia.switcher.studio.stream.EmisionService.iniciar(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -1796,6 +1798,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun detenerProteccionSesion() {
         com.jfrmedia.switcher.studio.stream.EmisionService.detener(this)
+        uiHandler.removeCallbacks(vigilarVideo)
         // Las cámaras vuelven a seguir la posición del teléfono.
         bloquearRotacionCamaras(false)
         // Se vuelve a permitir que la tablet gire (en el celular queda fijo en horizontal).
@@ -1815,6 +1818,24 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         hub.rotacionBloqueada = bloqueado
         hub.all().forEach { runCatching { it.enviarBloqueoRotacion() } }
         L.i("studio", if (bloqueado) "rotación de cámaras bloqueada" else "rotación de cámaras libre")
+    }
+
+    /**
+     * Mientras dura la sesión, cada segundo se comprueba que el video al aire siga corriendo.
+     * Algunos equipos lo pausan al minimizar la app y la grabación quedaba congelada.
+     */
+    private val vigilarVideo = object : Runnable {
+        override fun run() {
+            if (sesionEnCurso()) {
+                runCatching { vistaAlAire().reanudarMediosSiHaceFalta() }
+                uiHandler.postDelayed(this, 1000)
+            }
+        }
+    }
+
+    private fun vigilarVideoEnSegundoPlano() {
+        uiHandler.removeCallbacks(vigilarVideo)
+        uiHandler.postDelayed(vigilarVideo, 1000)
     }
 
     /** Al soltar la sesión, si la tablet quedó girada, el diseño se ajusta ahora. */
