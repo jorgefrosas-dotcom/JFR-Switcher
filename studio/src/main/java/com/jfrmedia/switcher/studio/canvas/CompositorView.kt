@@ -471,6 +471,10 @@ class CompositorView @JvmOverloads constructor(
         if (item === animItem) animRect else item.rect
 
     private fun drawScene(outW: Int, outH: Int, withSelection: Boolean) {
+        // Si el video que estaba al aire ya no está en la escena (se quitó del programa, se eliminó
+        // de MEDIOS o se cambió de escenario), se corta: su audio no puede seguir sonando.
+        videoItem?.let { item -> if (!scene.items.contains(item)) terminarVideo() }
+
         GLES20.glClearColor(0.047f, 0.055f, 0.067f, 1f) // #0C0E11
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
@@ -629,7 +633,14 @@ class CompositorView @JvmOverloads constructor(
      */
     fun reanudarMediosSiHaceFalta() {
         val mp = videoReproductor ?: return
-        if (!videoListo || videoItem?.reproduciendo != true) return
+        val item = videoItem ?: return
+        // Si el video ya no está en la escena (se quitó del programa o se eliminó de MEDIOS), se
+        // corta aquí mismo: si no, seguiría sonando aunque ya no se vea.
+        if (!scene.items.contains(item)) {
+            terminarVideo()
+            return
+        }
+        if (!videoListo || !item.reproduciendo) return
         runCatching {
             if (!mp.isPlaying) {
                 mp.start()

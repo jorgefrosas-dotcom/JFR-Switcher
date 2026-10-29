@@ -2310,6 +2310,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
                 setBackgroundResource(R.drawable.bg_delete)
                 setOnClickListener {
+                    // Si ese medio está al aire hay que cortarlo y quitarlo del programa antes de
+                    // sacarlo del grupo: si no, el video seguía sonando aunque ya no estuviera.
+                    quitarMedioDePrograma(medio)
                     medios.remove(medio)
                     refreshMediaTiles()
                 }
@@ -2321,6 +2324,34 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         )
         frame.setOnClickListener { alternarMedio(medio) }
         return frame
+    }
+
+    /**
+     * Saca un medio del programa: corta su video (y su audio) y quita su ítem de los dos escenarios.
+     *
+     * Se usa al eliminar un medio del grupo y al quitar cosas del aire: el reproductor de video vive
+     * pegado al monitor, así que si solo se quitaba el ítem, el audio seguía sonando.
+     */
+    private fun quitarMedioDePrograma(medio: Medio) {
+        val escenas = listOfNotNull(b.canvas.scene, monitorPrograma?.scene).distinct()
+        var habiaVideo = false
+        escenas.forEach { escena ->
+            escena.items.filterIsInstance<MediaItem>()
+                .filter { it.uri == medio.uri }
+                .forEach { item ->
+                    if (escena.items.contains(item)) {
+                        habiaVideo = true
+                        escena.remove(item)
+                    }
+                }
+            escena.images().filter { it.uri == medio.uri }.forEach { escena.remove(it) }
+        }
+        if (habiaVideo) {
+            if (b.canvas.hayVideo) b.canvas.detenerVideo()
+            monitorPrograma?.let { if (it.hayVideo) it.detenerVideo() }
+        }
+        b.canvas.requestRender()
+        monitorPrograma?.requestRender()
     }
 
     /** Agrega al grupo un archivo elegido del dispositivo. */
