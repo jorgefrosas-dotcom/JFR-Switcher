@@ -42,6 +42,15 @@ class CameraActivity : AppCompatActivity(), CamEngine.Escucha {
 
     private var permisoCamara = false
 
+    /** Último lienzo que avisó el switcher (true = vertical). Manda la orientación de la app. */
+    private var lienzoVertical = false
+
+    /** true mientras el switcher graba o transmite: la rotación no se toca. */
+    private var rotacionBloqueada = false
+
+    /** true cuando hay enlace con el switcher: él decide la orientación. */
+    private var conectada = false
+
     /** Si el usuario pulsó Conectar sin permiso, se reintenta al concederlo. */
     private var conectarAlConceder = false
 
@@ -311,12 +320,10 @@ class CameraActivity : AppCompatActivity(), CamEngine.Escucha {
     override fun onEstado(estado: EstadoEnlace, mensaje: String) {
         runOnUiThread {
             mostrarEstado(estado, mensaje)
-            // Al terminar la conexión se libera la orientación (vuelve a horizontal libre).
-            if (estado == EstadoEnlace.SIN_CONECTAR || estado == EstadoEnlace.ERROR) {
-                if (requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE) {
-                    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                }
-            }
+            // Con o sin enlace cambia quién manda la orientación (el switcher o el teléfono).
+            val antes = conectada
+            conectada = estado == EstadoEnlace.CONECTADA
+            if (antes != conectada) aplicarOrientacion()
         }
     }
 
@@ -343,19 +350,13 @@ class CameraActivity : AppCompatActivity(), CamEngine.Escucha {
     }
 
     /**
-     * El switcher indica la orientación del lienzo. Se bloquea la app en esa orientación
-     * mientras dure la conexión (el aviso se manda al emparejar y si el lienzo cambia).
+     * El switcher manda el formato con el que se está produciendo (lienzo 9:16 o 16:9). Mientras
+     * hay conexión, **la orientación la decide el switcher**, no el teléfono.
      */
     override fun onOrientacion(vertical: Boolean) {
         runOnUiThread {
-            val objetivo = if (vertical) {
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-            } else {
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            }
-            if (requestedOrientation != objetivo) {
-                requestedOrientation = objetivo
-            }
+            lienzoVertical = vertical
+            aplicarOrientacion()
             Toast.makeText(
                 this,
                 if (vertical) "Lienzo vertical: cámara en vertical"
@@ -363,6 +364,43 @@ class CameraActivity : AppCompatActivity(), CamEngine.Escucha {
                 Toast.LENGTH_SHORT
             ).show()
         }
+    }
+
+    /**
+     * El switcher está grabando o transmitiendo: se congela la rotación del teléfono para que la
+     * cámara no cambie de formato a media sesión. Al terminar vuelve a obedecer al switcher.
+     */
+    override fun onBloqueoRotacion(bloqueado: Boolean) {
+        runOnUiThread {
+            rotacionBloqueada = bloqueado
+            aplicarOrientacion()
+            Toast.makeText(
+                this,
+                if (bloqueado) "Grabando: rotación bloqueada"
+                else "Sesión terminada: rotación liberada",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    /**
+     * Una sola regla para la orientación de la app de cámara:
+     *
+     * 1. **Sesión en curso** (el switcher graba o transmite) → congelada donde está.
+     * 2. **Conectada** → manda el switcher: vertical u horizontal según su lienzo.
+     * 3. **Suelta** (sin conexión) → sigue la posición del teléfono, para poder montarlo como sea.
+     */
+    private fun aplicarOrientacion() {
+        val objetivo = when {
+            rotacionBloqueada -> ActivityInfo.SCREEN_ORIENTATION_LOCKED
+            conectada -> if (lienzoVertical) {
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+            else -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        }
+        if (requestedOrientation != objetivo) requestedOrientation = objetivo
     }
 
     // =====================================================================

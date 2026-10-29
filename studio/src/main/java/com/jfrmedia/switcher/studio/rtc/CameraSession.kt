@@ -91,6 +91,8 @@ class CameraSession(
 
         // Decirle al celular cómo debe orientar el video según el lienzo actual
         enviarOrientacion()
+        // Y si ya hay una grabación o directo en curso, que congele su rotación.
+        if (hub.rotacionBloqueada) enviarBloqueoRotacion()
 
         // Pedir arranque de video con el preset por defecto
         sendCmd(
@@ -235,6 +237,16 @@ class CameraSession(
             Msg.builder(Proto.CMD)
                 .put(Proto.K_ACTION, Proto.A_ORIENTATION)
                 .put(Proto.K_ORIENTATION, if (hub.vertical) "portrait" else "landscape")
+                .build()
+        )
+    }
+
+    /** Congela (o suelta) la rotación del celular: se usa al empezar y terminar una sesión. */
+    fun enviarBloqueoRotacion() {
+        sendCmd(
+            Msg.builder(Proto.CMD)
+                .put(Proto.K_ACTION, Proto.A_BLOQUEO)
+                .put(Proto.K_BLOQUEO, hub.rotacionBloqueada)
                 .build()
         )
     }

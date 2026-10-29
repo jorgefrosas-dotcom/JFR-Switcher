@@ -52,6 +52,7 @@ object Proto {
     const val K_ON_AIR = "onAir"       // la cámara está en el visor del switcher
     const val K_MESSAGE = "message"
     const val K_ORIENTATION = "orientation"
+    const val K_BLOQUEO = "bloqueo"    // true = la cámara no puede girar (sesión en curso)
 
     // ---- Acciones de CMD ----
     const val A_START = "start"
@@ -62,6 +63,9 @@ object Proto {
     const val A_TORCH = "torch"
     const val A_MIRROR = "mirror"
     const val A_ORIENTATION = "orientation"
+
+    /** Congela la rotación del celular mientras el switcher graba o transmite. */
+    const val A_BLOQUEO = "bloqueo"
     const val A_PROGRAM = "program"
 }
 

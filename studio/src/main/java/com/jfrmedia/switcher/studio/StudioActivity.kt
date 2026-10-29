@@ -1768,6 +1768,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun iniciarProteccionSesion() {
         // Se congela la orientación: el diseño no cambia a media grabación ni a media transmisión.
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        // Y las cámaras también: su formato queda fijo hasta que termine la sesión.
+        bloquearRotacionCamaras(true)
         com.jfrmedia.switcher.studio.stream.EmisionService.iniciar(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -1779,6 +1781,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun detenerProteccionSesion() {
         com.jfrmedia.switcher.studio.stream.EmisionService.detener(this)
+        // Las cámaras vuelven a seguir la posición del teléfono.
+        bloquearRotacionCamaras(false)
         // Se vuelve a permitir que la tablet gire (en el celular queda fijo en horizontal).
         requestedOrientation = if (esPantallaCelular()) {
             android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
@@ -1786,6 +1790,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER
         }
         avaliarDisenoTrasSesion()
+    }
+
+    /**
+     * Congela (o suelta) la rotación de los celulares. Mientras el switcher graba o transmite el
+     * formato queda fijo: si alguien mueve un teléfono, la cámara no se voltea a media sesión.
+     */
+    private fun bloquearRotacionCamaras(bloqueado: Boolean) {
+        hub.rotacionBloqueada = bloqueado
+        hub.all().forEach { runCatching { it.enviarBloqueoRotacion() } }
+        L.i("studio", if (bloqueado) "rotación de cámaras bloqueada" else "rotación de cámaras libre")
     }
 
     /** Al soltar la sesión, si la tablet quedó girada, el diseño se ajusta ahora. */
@@ -2041,6 +2055,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun buildSourcesGrid() {
         val grid = b.llGrid
         grid.removeAllViews()
+        // Las tarjetas viejas hay que soltarlas: si no, sus visores siguen enganchados a la pista
+        // y se quedan recibiendo cuadros en una superficie ya muerta.
+        tiles.forEach { runCatching { it.release() } }
         tiles.clear()
         val cols = columnasFuentes()
         // En horizontal se agrega la cámara de la propia tablet como 7ª fuente. En Modo Studio
@@ -2078,6 +2095,19 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
         }
 
+        // Volver a enganchar los videos: las tarjetas son nuevas y sin esto se quedaban en negro
+        // aunque la cámara estuviera conectada (pasaba al cambiar de formato o entrar al Modo
+        // Studio, porque ahí se rehace la parrilla).
+        hub.all().forEach { session ->
+            val pista = session.videoTrack ?: return@forEach
+            tiles.getOrNull(session.slot)?.let { tile ->
+                tile.bind(session, pista)
+                tile.fijarRotacion(session.rotacion)
+            }
+        }
+        localCam.track?.let { pista ->
+            tiles.getOrNull(LocalCam.SLOT)?.bindLocal(pista, nombreCamaraTablet())
+        }
         val etiqueta = TextView(this).apply {
             text = "OVERLAYS"
             textSize = 10f

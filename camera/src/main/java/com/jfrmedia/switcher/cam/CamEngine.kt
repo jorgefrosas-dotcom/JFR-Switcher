@@ -85,6 +85,12 @@ class CamEngine(contexto: Context, private val escucha: Escucha) {
         /** El switcher pide orientación vertical u horizontal según el lienzo actual. */
         fun onOrientacion(vertical: Boolean)
 
+        /**
+         * El switcher está grabando o transmitiendo: la cámara **congela su rotación** para que
+         * el formato no cambie a media sesión. Se suelta al terminar.
+         */
+        fun onBloqueoRotacion(bloqueado: Boolean)
+
         /** El switcher avisa si esta cámara está o no en el visor (al aire). */
         fun onAlAire(enAire: Boolean)
     }
@@ -405,6 +411,12 @@ class CamEngine(contexto: Context, private val escucha: Escucha) {
             Proto.A_ORIENTATION -> aplicarOrientacionLienzo(
                 msg.str(Proto.K_ORIENTATION).equals("portrait", ignoreCase = true)
             )
+
+            Proto.A_BLOQUEO -> {
+                val bloqueado = msg.bool(Proto.K_BLOQUEO, false)
+                L.i(TAG, if (bloqueado) "rotación congelada (sesión en curso)" else "rotación libre")
+                hiloPrincipal.post { escucha.onBloqueoRotacion(bloqueado) }
+            }
 
             Proto.A_PROGRAM -> {
                 val enAire = msg.bool(Proto.K_ON_AIR, false)

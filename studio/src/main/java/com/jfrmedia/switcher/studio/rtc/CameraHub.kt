@@ -20,6 +20,13 @@ class CameraHub {
     @Volatile
     var vertical: Boolean = false
 
+    /**
+     * Hay grabación o transmisión en curso: las cámaras **congelan su rotación** para que el
+     * formato no cambie a media sesión. Se manda al empezar y al terminar.
+     */
+    @Volatile
+    var rotacionBloqueada: Boolean = false
+
     /** Se dispara cuando una cámara se va. */
     @Volatile var onTrackGone: ((CameraSession) -> Unit)? = null
 
