@@ -27,6 +27,9 @@
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
 - En Modo Studio 9:16 las **6 cámaras van en una sola fila**, con tarjetas más chicas.
+- **Las tres apps quedaron con este build** (tablet, POCO y Samsung). En el Samsung había una cámara
+  0.1.0 con firma vieja: se desinstaló (solo guardaba la IP del switcher, ya respaldada) y se puso la
+  nueva.
 
 ### Modo Studio: dos monitores en la tablet (28/10)
 
