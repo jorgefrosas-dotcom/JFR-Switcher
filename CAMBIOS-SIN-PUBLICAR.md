@@ -14,16 +14,20 @@
 
 - **Celular (pantalla chica), 29/10/2026:** pestañas **Cámaras / Overlays / Medios** en la columna de
   fuentes (antes era una sola lista larga y lo de abajo quedaba fuera de la vista), columna angosta
-  (205 dp) con **2 tarjetas por fila**, **visor ~2,4× más grande** (el programa pasa de 1221×687 a
-  ocupar todo el alto disponible), ajustes de imagen en la **ventana «Img.»** (ya no hay banda fija que
-  robe alto) y **fila de controles completa**: la lente («Apagada») e «Img.» se ven sin arrastrar.
-  Probado en el **POCO X7**. La tablet no se tocó: todo va detrás de `esPantallaCelular()`.
+  (205 dp) con **2 tarjetas por fila**, **controles del programa flotando encima del visor** (dejaron de
+  robar 116 px de alto), ajustes de imagen en la **ventana «Img.»** (ya no hay banda fija) y **fila de
+  controles completa**: la lente queda como icono con estado corto («Off» / «F» / «T») y «Img.» se ve
+  sin arrastrar. Medido en el POCO X7: el visor pasó de **≈450×250 px a 1428×803** (unas 10 veces el
+  área; el 16:9 ya solo está limitado por el alto de la pantalla). Probado también que **la tablet no
+  cambia**: se instaló y se comprobó con captura (columnas de siempre, controles debajo del visor, sin
+  pestañas).
 
 ## Pendiente de programar (no está hecho todavía)
 
-- **Celular, siguiente ronda:** pasar la columna de fuentes a una **tira deslizable de miniaturas**
-  debajo del visor (así el visor usaría también el ancho que hoy sobra a la derecha: 1221 → ~1600 px),
-  y la ventana «Img.» en **dos columnas** para que los seis ajustes entren sin desplazar.
+- **Celular:** la ventana «Img.» en **dos columnas**, para que los seis ajustes entren sin desplazar.
+- **Descartado con medición (29/10):** pasar la columna de fuentes a una tira de miniaturas debajo del
+  visor. No habría ganado nada: en horizontal el lienzo 16:9 está limitado por el **alto**, y una tira
+  abajo solo le quitaría alto. Lo que sí funcionó fue flotar los controles (eso liberó 116 px de alto).
 - Nada más anotado por ahora.
 
 ### Versión de pantalla chica, muy funcional (idea de Jorge, 27/10)

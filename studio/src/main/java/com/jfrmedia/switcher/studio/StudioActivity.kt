@@ -858,11 +858,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun actualizarBotonTablet() {
         // Etiqueta corta a propósito: con «Tablet: frontal» el botón empujaba el medidor de audio
         // fuera del borde derecho. El icono de cámara ya dice de qué cámara se trata.
-        b.btnTabletLens.text = when {
+        val estadoCamara = when {
             !localCam.encendida -> "Apagada"
             localCam.frontal -> "Frontal"
             else -> "Trasera"
         }
+        // En el celular la fila de controles flota sobre el visor y tiene que caber entera: ahí
+        // la palabra completa empujaba «Img.» fuera de la vista. Icono + estado corto.
+        b.btnTabletLens.text = if (esPantallaCelular()) {
+            when (estadoCamara) {
+                "Frontal" -> "F"
+                "Trasera" -> "T"
+                else -> "Off"
+            }
+        } else estadoCamara
         b.btnTabletLens.alpha = if (localCam.encendida) 1f else 0.6f
     }
 
@@ -1432,6 +1441,40 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun colorSecundario(): Int =
         ContextCompat.getColor(this, R.color.text_secondary)
 
+    /**
+     * En el celular la fila de controles va flotando sobre el visor y tiene que **caber entera**:
+     * si no, la lente vuelve a quedar fuera de la vista (era el reporte del POCO). Se achican los
+     * textos y los márgenes, y A/B se quedan angostos.
+     */
+    private fun compactarControlesCelular() {
+        if (!esPantallaCelular()) return
+        runCatching {
+            val fila = b.controlesCapa
+            for (i in 0 until fila.childCount) {
+                val v = fila.getChildAt(i) as? TextView ?: continue
+                val esCapa = v.id == R.id.btnLayerA || v.id == R.id.btnLayerB
+                v.textSize = 9f
+                v.minWidth = 0
+                if (esCapa) {
+                    v.setPadding(0, v.paddingTop, 0, v.paddingBottom)
+                    (v.layoutParams as? LinearLayout.LayoutParams)?.let {
+                        it.width = 32.dp
+                        it.marginStart = if (i == 0) 0 else 3.dp
+                        v.layoutParams = it
+                    }
+                } else {
+                    v.setPadding(5.dp, 2.dp, 5.dp, 2.dp)
+                    (v.layoutParams as? LinearLayout.LayoutParams)?.let {
+                        it.marginStart = 4.dp
+                        v.layoutParams = it
+                    }
+                }
+            }
+            // El icono de PiP y el de la lente se quedan sin texto largo cuando no hace falta.
+            b.btnPip.compoundDrawablePadding = 3.dp
+        }
+    }
+
     /** «Img.» en la fila de controles: solo en celular, donde no hay banda de ajustes. */
     private fun asegurarChipImagen() {
         if (!esPantallaCelular() || vertical) return
@@ -1532,6 +1575,35 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             montarTabsFuentes()
             achicarAvisoCanvas()
             aplicarSeccionFuentes()
+
+            // 6) Los controles del programa se pasan ENCIMA del visor. Antes vivían en una fila
+            //    debajo del lienzo que costaba 116 px de alto: al flotarlos, ese alto es del
+            //    programa (el visor pasa de 687 a ~800 px de alto en el POCO).
+            val host = b.canvasHost
+            (b.slotControles.parent as? ViewGroup)?.let { padre ->
+                if (padre !== host) padre.removeView(b.slotControles)
+            }
+            if (b.slotControles.parent == null) {
+                host.addView(
+                    b.slotControles,
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        gravity = Gravity.BOTTOM
+                        setMargins(10.dp, 0, 10.dp, 8.dp)
+                    }
+                )
+            }
+            b.slotControles.setBackgroundResource(R.drawable.bg_banner)
+            b.slotControles.setPadding(6.dp, 4.dp, 6.dp, 4.dp)
+            // El botón de foto flota por encima de la fila de controles, no debajo de ella.
+            (b.btnPhoto.layoutParams as? FrameLayout.LayoutParams)?.let {
+                it.bottomMargin = 62.dp
+                b.btnPhoto.layoutParams = it
+            }
+            // Y la fila tiene que caber entera sobre el visor.
+            compactarControlesCelular()
         }
     }
 
@@ -5366,6 +5438,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             fila.addView(b.btnTabletLens)
             // En el celular la banda de ajustes de imagen no existe: «Img.» abre su ventana.
             asegurarChipImagen()
+            compactarControlesCelular()
             // El medidor de audio ya no va aquí: vive en la barra superior, junto a Facebook.
             b.scrollControles.addView(
                 fila,
