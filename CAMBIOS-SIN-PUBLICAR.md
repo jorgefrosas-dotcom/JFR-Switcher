@@ -27,8 +27,9 @@
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
 - En Modo Studio 9:16 las **6 cámaras van en una sola fila**, con tarjetas más chicas.
-- **Miniaturas sin zoom**: el visor se **acuesta** (alto × ancho) y luego se gira, así el cuadro llena
-  la tarjeta exactamente, sin recortes ni estirones (antes se estiraba 1.8× y se veía con zoom).
+- **Miniaturas bien encuadradas**: la orientación del cuadro la aplica el renderizador de WebRTC; la
+  tarjeta **no debe girarse ni escalarse a mano** (hacerlo recortaba y ampliaba la imagen: se veía con
+  zoom y estirada). Ahora la miniatura queda **igual que el monitor de preview**.
 - **La app de cámara tiene diseño propio en vertical**: la barra se parte en dos renglones (marca y
   estado arriba; IP, QR y Conectar abajo) y los botones de abajo se reparten el ancho, así **caben y
   la información queda acomodada** cuando el teléfono está de pie.
