@@ -26,6 +26,10 @@
   cubran la tarjeta.
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
+- **Al girar varias veces ya no se copia el programa en el preview**: al salir del Modo Studio se
+  **guarda el escenario del preview** y al volver se **restaura**, mientras lo que quedó al aire pasa
+  al programa. Antes el programa se clonaba del lienzo en cada entrada, así que el preview terminaba
+  mostrando lo mismo que el programa.
 - **El formato del lienzo se conserva al girar la tablet, sin importar cuántas veces**: 16:9 entra en
   16:9 y 9:16 en 9:16, en los dos sentidos (estándar ⇄ Modo Studio). Solo cambia cuando se elige con
   el chip. Antes se **invertía** en cada giro y el formato iba y venía.
