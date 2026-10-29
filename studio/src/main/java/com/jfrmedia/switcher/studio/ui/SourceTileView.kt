@@ -131,12 +131,17 @@ class SourceTileView @JvmOverloads constructor(
      * Muestra u oculta el video de la tarjeta.
      *
      * Se usa al desplazar el panel de fuentes: la capa del `SurfaceView` no se recorta con el
-     * scroll y se dibujaba encima del monitor. Si la tarjeta no se ve completa, se oculta el video.
+     * scroll y se dibujaba encima del monitor. Al ocultarla hay que **borrar el cuadro**, porque si
+     * no la última imagen se queda pintada y parece que la cámara está congelada.
      */
     fun mostrarVideoSiSeVe(seVe: Boolean) {
         if (currentTrack == null) return
-        val nuevo = if (seVe) View.VISIBLE else View.INVISIBLE
-        if (video.visibility != nuevo) video.visibility = nuevo
+        if (seVe) {
+            if (video.visibility != View.VISIBLE) video.visibility = View.VISIBLE
+        } else {
+            runCatching { video.clearImage() }
+            if (video.visibility != View.INVISIBLE) video.visibility = View.INVISIBLE
+        }
     }
 
     fun bind(session: CameraSession, track: VideoTrack) {

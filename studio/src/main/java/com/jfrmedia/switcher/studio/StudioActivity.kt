@@ -2144,6 +2144,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         localCam.track?.let { pista ->
             tiles.getOrNull(LocalCam.SLOT)?.bindLocal(pista, nombreCamaraTablet())
         }
+        // Al rehacer la parrilla hay que volver a decidir qué miniaturas se ven completas (las que
+        // quedan fuera se ocultan para que no se encimen al monitor).
+        b.scrollFuentes.post { ocultarTarjetasFueraDeVista() }
         val etiqueta = TextView(this).apply {
             text = "OVERLAYS"
             textSize = 10f
@@ -5998,7 +6001,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** Adjunta la pista a los dos monitores (preview y programa). */
     private fun adjuntar(slot: Int, track: VideoTrack) {
         b.canvas.attachTrack(slot, track)
-        monitorPrograma?.attachTrack(slot, track)
+        // El monitor de programa solo se usa en Modo Studio. Fuera de él, engancharle la pista
+        // duplicaba el trabajo por cada cámara (CPU altísima y, con ella, el programa se trababa).
+        if (modoStudio) monitorPrograma?.attachTrack(slot, track)
     }
 
     /** Suelta la pista de los dos monitores. */
@@ -6040,6 +6045,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // El programa arranca con una copia del lienzo actual: así la primera transición no se
         // lleva lo que ya está puesto (cámaras, overlays, textos).
         monitor.scene = clonarEscena(b.canvas.scene)
+        // Ahora el monitor sí se usa: se le enganchan las cámaras que ya estaban conectadas.
+        hub.all().forEach { session ->
+            session.videoTrack?.let { pista -> monitor.attachTrack(session.slot, pista) }
+        }
+        localCam.track?.let { pista -> monitor.attachTrack(LocalCam.SLOT, pista) }
         construirLayoutStudio()
         aplicarAspectoEstudio()
         b.canvas.requestRender()
@@ -6062,6 +6072,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             if (alAire.items.isNotEmpty()) b.canvas.scene = alAire
         }
         monitor?.scene = Scene()
+        // El monitor de programa deja de usarse: se le sueltan las pistas para no gastar CPU.
+        hub.all().forEach { session ->
+            session.videoTrack?.let { pista -> monitor?.detachTrack(session.slot, pista) }
+        }
+        localCam.track?.let { pista -> monitor?.detachTrack(LocalCam.SLOT, pista) }
         restaurarLayoutNormal()
         L.i("studio", "Modo Studio apagado")
     }
