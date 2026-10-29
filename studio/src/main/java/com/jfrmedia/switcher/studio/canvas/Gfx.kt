@@ -423,18 +423,27 @@ class ImageTexture(val bitmap: Bitmap) {
     }
 }
 
-/** Matriz que lleva el cuadro unidad (0..1) al rectángulo normalizado del lienzo. */
+/**
+ * Matriz que lleva el cuadro unidad (0..1) al rectángulo normalizado del lienzo.
+ *
+ * En Modo Studio dibujan **dos** compositores a la vez (preview y programa), cada uno en su hilo,
+ * así que la matriz temporal y la bandera de inversión van **por hilo**: si se comparten, un hilo
+ * cambia los valores del otro a media pasada y la imagen parpadea o se voltea.
+ */
 object Mvp {
-    private val tmp = FloatArray(16)
+    private val tmpPorHilo = ThreadLocal.withInitial { FloatArray(16) }
+    private val invertirPorHilo = ThreadLocal.withInitial { false }
 
     /**
      * Al dibujar en la salida del emisor (SurfaceTexture de RootEncoder) hay que invertir
      * la Y: esa superficie trabaja con Y hacia arriba y el cuadro saldría volteado.
      */
-    @Volatile
-    var invertirY = false
+    var invertirY: Boolean
+        get() = invertirPorHilo.get() == true
+        set(value) = invertirPorHilo.set(value)
 
     fun forRect(out: FloatArray, x0: Float, y0: Float, x1: Float, y1: Float) {
+        val tmp = tmpPorHilo.get() ?: FloatArray(16)
         Matrix.setIdentityM(tmp, 0)
         val ty = 1f - y0 * 2f
         val sy = -(y1 - y0) * 2f
