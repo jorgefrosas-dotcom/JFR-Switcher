@@ -27,6 +27,11 @@
 - **Al rehacer la parrilla** (cambio de formato o entrar al Modo Studio) las tarjetas vuelven a
   enganchar el video solas: antes quedaban en negro aunque la cámara estuviera conectada.
 - En Modo Studio 9:16 las **6 cámaras van en una sola fila**, con tarjetas más chicas.
+- **Miniaturas sin zoom**: el visor se **acuesta** (alto × ancho) y luego se gira, así el cuadro llena
+  la tarjeta exactamente, sin recortes ni estirones (antes se estiraba 1.8× y se veía con zoom).
+- **La app de cámara tiene diseño propio en vertical**: la barra se parte en dos renglones (marca y
+  estado arriba; IP, QR y Conectar abajo) y los botones de abajo se reparten el ancho, así **caben y
+  la información queda acomodada** cuando el teléfono está de pie.
 - **Las tres apps quedaron con este build** (tablet, POCO y Samsung). En el Samsung había una cámara
   0.1.0 con firma vieja: se desinstaló (solo guardaba la IP del switcher, ya respaldada) y se puso la
   nueva.
