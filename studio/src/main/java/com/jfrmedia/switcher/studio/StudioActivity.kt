@@ -2171,7 +2171,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 width = 42.dp
             }
             val barra = android.widget.SeekBar(this).apply {
-                estilizarFader(this)
+                // En vertical de celular los deslizadores van finos (línea) para que la ventana
+                // sea baja y deje ver el monitor mientras se ajusta (Jorge, 29/10).
+                if (!(esPantallaCelular() && vertical)) estilizarFader(this)
                 max = 200
                 progress = (if (escalaVideo(clave)) {
                     100f + (cam?.let { valorVideo(it, clave) } ?: 0f) * 100f
@@ -2223,7 +2225,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // A la izquierda y angosto: el visor sigue visible mientras se ajusta.
         dialogo.window?.let { ventana ->
             val anchoPantalla = resources.displayMetrics.widthPixels
-            ventana.setGravity(Gravity.CENTER_VERTICAL or Gravity.START)
+            ventana.setGravity(if (vertical) Gravity.BOTTOM or Gravity.START else Gravity.CENTER_VERTICAL or Gravity.START)
             if (esPantallaCelular()) {
                 // En el celular el alto es poco: la ventana se acota y los seis ajustes se
                 // alcanzan desplazando (antes los últimos quedaban cortados sin poder llegar).
@@ -2231,7 +2233,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 // En vertical (9:16) la pantalla es angosta: se le da casi todo el ancho, si no la
                 // ventana abría de 155 dp y no servía para nada (Jorge, 29/10).
                 val ancho = if (vertical) (anchoPantalla * 0.92f).toInt() else (anchoPantalla * 0.42f).toInt()
-                ventana.setLayout(ancho, (altoPantalla * 0.86f).toInt())
+                // En vertical la ventana es BAJA y va abajo: así el monitor sigue a la vista.
+                val alto = if (vertical) (altoPantalla * 0.38f).toInt() else (altoPantalla * 0.86f).toInt()
+                ventana.setLayout(ancho, alto)
             } else {
                 ventana.setLayout(
                     (anchoPantalla * 0.46f).toInt(),
