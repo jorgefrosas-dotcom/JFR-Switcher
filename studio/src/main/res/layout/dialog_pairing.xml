@@ -1,130 +1,129 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Ventana de emparejamiento.
+     Compacta a propósito (pedido de Jorge, 29/10): la IP salía cortada y el QR no entraba.
+     El QR manda: va en una columna propia, el texto de IP es chico y el logo ya no está. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="22dp">
-
-    <ImageView
-        android:layout_width="wrap_content"
-        android:layout_height="40dp"
-        android:layout_marginBottom="14dp"
-        android:adjustViewBounds="true"
-        android:contentDescription="JFR Media Lab"
-        android:src="@drawable/brand_logo" />
-
-    <TextView
-        style="@style/Txt.Title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Conectar cámaras"
-        android:textSize="18sp" />
-
-    <TextView
-        style="@style/DialogText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="Los celulares y la tablet deben estar en la misma red WiFi."
-        android:textColor="@color/text_dim" />
+    android:padding="18dp"
+    android:scrollbars="none">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:background="@drawable/bg_chip"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:padding="14dp">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                style="@style/Txt.Micro"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="IP DE ESTA TABLET" />
-
-            <TextView
-                android:id="@+id/txtIp"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:fontFamily="monospace"
-                android:text="192.168.1.0"
-                android:textColor="@color/accent"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/btnCopyIp"
-            style="@style/PillButton.Ghost"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Copiar" />
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/txtPort"
-        style="@style/DialogText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Puerto 8787" />
-
-    <!-- Emparejamiento por QR: el celular apunta aquí y no hay que teclear nada. -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:gravity="center_horizontal"
         android:orientation="vertical">
 
         <TextView
-            style="@style/Txt.Micro"
+            style="@style/Txt.Title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="O ESCANEA ESTE CÓDIGO" />
+            android:text="Conectar cámaras"
+            android:textSize="15sp" />
 
-        <ImageView
-            android:id="@+id/imgQr"
-            android:layout_width="170dp"
-            android:layout_height="170dp"
-            android:layout_marginTop="6dp"
-            android:background="@android:color/white"
-            android:contentDescription="Código QR con la dirección de esta tablet"
-            android:padding="8dp"
-            android:scaleType="fitCenter" />
+        <TextView
+            android:id="@+id/txtSteps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Misma red WiFi. Abre JFR Camera, toca «QR» y apunta al código."
+            android:textColor="@color/text_dim"
+            android:textSize="10sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <!-- El QR primero y con su propio espacio: es lo que más se usa. -->
+            <LinearLayout
+                android:layout_width="150dp"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Txt.Micro"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ESCANEA ESTE CÓDIGO"
+                    android:textSize="9sp" />
+
+                <ImageView
+                    android:id="@+id/imgQr"
+                    android:layout_width="148dp"
+                    android:layout_height="148dp"
+                    android:layout_marginTop="4dp"
+                    android:background="@android:color/white"
+                    android:contentDescription="Código QR con la dirección de este equipo"
+                    android:padding="7dp"
+                    android:scaleType="fitCenter" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingStart="14dp">
+
+                <TextView
+                    style="@style/Txt.Micro"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="O ESCRIBE ESTA IP"
+                    android:textSize="9sp" />
+
+                <TextView
+                    android:id="@+id/txtIp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="monospace"
+                    android:maxLines="1"
+                    android:text="192.168.1.0"
+                    android:textColor="@color/accent"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtPort"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Puerto 8787"
+                    android:textColor="@color/text_dim"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:id="@+id/btnCopyIp"
+                    style="@style/PillButton.Ghost"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:paddingTop="5dp"
+                    android:paddingBottom="5dp"
+                    android:text="Copiar IP"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:id="@+id/txtConnCount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Conectadas: 0 / 6"
+                    android:textColor="@color/text_primary"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btnClose"
+            style="@style/PillButton.Accent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Listo"
+            android:textSize="12sp" />
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/txtSteps"
-        style="@style/DialogText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="1. Abre JFR Camera en el celular.\n2. Toca «QR» y apunta a este código (o escribe la IP).\n3. Repite con cada celular (máximo 6)." />
-
-    <TextView
-        android:id="@+id/txtConnCount"
-        style="@style/DialogText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:text="Cámaras conectadas: 0"
-        android:textColor="@color/text_primary" />
-
-    <TextView
-        android:id="@+id/btnClose"
-        style="@style/PillButton.Accent"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="18dp"
-        android:text="Listo" />
-
-</LinearLayout>
+</ScrollView>

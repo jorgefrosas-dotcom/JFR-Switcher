@@ -6302,6 +6302,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         db.btnClose.setOnClickListener { dialog.dismiss() }
         dialog.show()
         cuadroALaIzquierda(dialog)
+        // Ancho suficiente para que la IP quepa en una línea y el QR se vea grande. El alto se
+        // deja al contenido: la ventana ya es compacta (si algún día no cabe, el ScrollView corre).
+        dialog.window?.let { ventana ->
+            val ancho = resources.displayMetrics.widthPixels
+            val anchoVentana = minOf((ancho * 0.62f).toInt(), 560.dp)
+            ventana.setLayout(anchoVentana, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
     }
 
     private fun showSettings() {
