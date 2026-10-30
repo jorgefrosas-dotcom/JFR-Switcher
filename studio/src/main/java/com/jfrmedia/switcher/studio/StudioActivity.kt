@@ -1909,6 +1909,27 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             // Al volver del 9:16 el audio quedó dentro del panel de programa: se devuelve a la
             // banda de controles, que es su sitio en horizontal.
             if (panelAudio?.parent === b.panelPrograma) ubicarPanelAudio()
+            // Y se devuelve todo lo que el modo vertical esconde o encoge (Jorge, 29/10): si no,
+            // la info del sistema salía dos veces y faltaba la flecha para ocultar la barra.
+            b.separadorBarra.visibility = View.VISIBLE
+            b.espacioBarra.visibility = View.VISIBLE
+            b.btnFacebook.text = "Conectar"
+            cajaInfo?.visibility = View.GONE
+            txtMonitoreo?.visibility = View.GONE
+            btnColapsarBarra?.visibility = View.VISIBLE
+            chipAudioIcono?.visibility = View.VISIBLE
+            (b.btnRecord.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.width = ViewGroup.LayoutParams.WRAP_CONTENT
+                it.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                b.btnRecord.layoutParams = it
+            }
+            (b.txtTimer.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.width = ViewGroup.LayoutParams.WRAP_CONTENT
+                it.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                it.marginStart = 8.dp
+                b.txtTimer.layoutParams = it
+            }
+            b.txtTimer.textSize = 12f
             // 1) Columna de fuentes más ancha (3 tarjetas por fila) y visor pegado a la derecha con
             //    su tamaño intacto: el ancho que le sobraba al lienzo se lo queda la columna.
             //    En vertical no aplica: ahí el ancho del visor lo fija la relación 9:16.
