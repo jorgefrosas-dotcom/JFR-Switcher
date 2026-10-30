@@ -2146,6 +2146,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun dialogoAjustesImagen() {
         // En el celular hay poco alto: filas apretadas para que entren los seis sin desplazar.
         val apretado = esPantallaCelular()
+        // En vertical hay espacio: riel grueso, filas separadas y letra un poco más grande.
+        val fino = esPantallaCelular() && vertical
         val contenedor = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20.dp, if (apretado) 2.dp else 8.dp, 20.dp, if (apretado) 2.dp else 8.dp)
@@ -2155,17 +2157,22 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             val fila = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, if (apretado) 1.dp else 5.dp, 0, if (apretado) 1.dp else 5.dp)
+                setPadding(
+                    0,
+                    if (fino) 8.dp else if (apretado) 1.dp else 5.dp,
+                    0,
+                    if (fino) 8.dp else if (apretado) 1.dp else 5.dp
+                )
             }
             fila.addView(TextView(this).apply {
                 text = nombre
-                textSize = if (apretado) 9f else 11f
+                textSize = if (fino) 12f else if (apretado) 9f else 11f
                 setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
                 width = 64.dp
             })
             val valor = TextView(this).apply {
                 text = etiquetaAjuste(clave, cam?.let { valorVideo(it, clave) } ?: 0f)
-                textSize = if (apretado) 9f else 11f
+                textSize = if (fino) 12f else if (apretado) 9f else 11f
                 gravity = Gravity.END
                 setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
                 width = 42.dp
@@ -2173,7 +2180,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             val barra = android.widget.SeekBar(this).apply {
                 // En vertical de celular los deslizadores van finos (línea) para que la ventana
                 // sea baja y deje ver el monitor mientras se ajusta (Jorge, 29/10).
-                if (!(esPantallaCelular() && vertical)) estilizarFader(this)
+                if (fino) {
+                    progressDrawable = ContextCompat.getDrawable(this@StudioActivity, R.drawable.fader_riel)
+                    thumb = ContextCompat.getDrawable(this@StudioActivity, R.drawable.fader_perilla)
+                    thumbOffset = 0
+                    splitTrack = false
+                } else {
+                    estilizarFader(this)
+                }
                 max = 200
                 progress = (if (escalaVideo(clave)) {
                     100f + (cam?.let { valorVideo(it, clave) } ?: 0f) * 100f
@@ -2234,7 +2248,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 // ventana abría de 155 dp y no servía para nada (Jorge, 29/10).
                 val ancho = if (vertical) (anchoPantalla * 0.92f).toInt() else (anchoPantalla * 0.42f).toInt()
                 // En vertical la ventana es BAJA y va abajo: así el monitor sigue a la vista.
-                val alto = if (vertical) (altoPantalla * 0.38f).toInt() else (altoPantalla * 0.86f).toInt()
+                val alto = if (vertical) (altoPantalla * 0.47f).toInt() else (altoPantalla * 0.86f).toInt()
                 ventana.setLayout(ancho, alto)
             } else {
                 ventana.setLayout(
