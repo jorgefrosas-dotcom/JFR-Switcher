@@ -339,17 +339,19 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             mbpsActual = mbps
             tempActual = temp
             actualizarEstadoEquipo()
+            val detalle = String.format(
+                Locale.US, "CPU %d%% · RAM %d%% · %.1f Mbps · %s", cpu, ramPct, mbps, tempTexto
+            )
             b.txtEtiquetaPrograma.text = if (vertical) {
                 // En vertical la cabecera es estrecha: solo el nombre del visor (la
                 // resolución va al otro extremo) para que quepa en una línea.
                 if (redFloja) "⚠ PROGRAMA" else "PROGRAMA"
             } else {
                 val aviso = if (redFloja) "⚠ " else ""
-                aviso + String.format(
-                    Locale.US, "PROGRAMA · CPU %d%% · RAM %d%% · %.1f Mbps · %s",
-                    cpu, ramPct, mbps, tempTexto
-                )
+                "${aviso}PROGRAMA · $detalle"
             }
+            // En el celular en vertical el monitoreo se muestra debajo del monitor (Jorge, 29/10).
+            txtMonitoreo?.text = if (redFloja) "⚠ $detalle" else detalle
             if (registro != null && ahoraNs - ultimoRegistroNs > 10_000_000_000L) {
                 ultimoRegistroNs = ahoraNs
                 anotar(String.format(Locale.US, "cpu %d%% · ram %d%% · %.1f Mbps · %s", cpu, ramPct, mbps, tempTexto))
@@ -1440,6 +1442,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** Triángulos que avisan de que la barra se desliza (izquierda / derecha). */
     private var flechaIzq: TextView? = null
     private var flechaDer: TextView? = null
+    /** En vertical el monitoreo (CPU, RAM, Mbps, °C) va debajo del monitor de programa. */
+    private var txtMonitoreo: TextView? = null
 
     /**
      * En el celular la lista de fuentes es larguísima (6 cámaras + tablet + overlays + medios) y
@@ -2007,6 +2011,28 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             montarFlechasBarra()
             achicarAvisoCanvas()
             aplicarSeccionFuentes()
+
+            // 5) Aquí la barra no está dentro del visor, así que la flecha de colapsar no hace
+            //    falta (Jorge, 29/10). Y el monitoreo del sistema va DEBAJO del monitor.
+            btnColapsarBarra?.visibility = View.GONE
+            val monitor = txtMonitoreo ?: TextView(this).apply {
+                textSize = 9f
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+                setPadding(6.dp, 2.dp, 6.dp, 3.dp)
+            }.also { txtMonitoreo = it }
+            if ((monitor.parent as? ViewGroup) !== b.panelPrograma) {
+                (monitor.parent as? ViewGroup)?.removeView(monitor)
+                b.panelPrograma.addView(
+                    monitor,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                )
+            } else if (b.panelPrograma.indexOfChild(monitor) < b.panelPrograma.childCount - 1) {
+                monitor.bringToFront()
+            }
+            monitor.visibility = View.VISIBLE
         }
     }
 
