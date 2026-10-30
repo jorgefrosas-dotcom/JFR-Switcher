@@ -12,11 +12,11 @@
 
 ## Pendiente de publicar
 
-- **Ventana «Conectar cámaras» rehacida (29/10):** el **QR va primero y grande** (148 dp) en su propia
-  columna; a la derecha la **IP en una sola línea a 13 sp**, el puerto, «Copiar IP» y «Conectadas: 0/6».
-  **Se quitó el logo**, los textos bajaron a 10 sp y la ventana ahora tiene **ancho propio** (62 % de la
-  pantalla o 560 dp) y alto según el contenido, con `ScrollView` por si algún día no cabe. Antes la IP
-  salía cortada y el QR ni aparecía.
+- **Ventana «Conectar cámaras», segunda vuelta (29/10):** quedó **compacta y ajustada al contenido**:
+  ancho fijo de **360 dp** (75 % de la pantalla como tope) para que la instrucción quepa en **una sola
+  línea**, **alto según el contenido** (termina donde termina el botón), **«Listo» ya no ocupa todo el
+  ancho** (`wrap_content`, mínimo 140 dp) y se quitó la coletilla repetida del puerto («Puerto 8787» a
+  secas). El QR sigue primero y grande (148 dp); la IP completa en una línea a 13 sp; sin logo.
 - **Marco naranja de «en programa» (tablet y celular, estándar y Modo Studio):** la tarjeta de la
   **cámara**, del **overlay** y del **medio** que están al aire llevan un marco naranja de 3 dp
   (`bg_marco_programa`), como `foreground` para no pelear con el fondo de capa A/B. En Modo Studio

@@ -6284,8 +6284,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             db.imgQr.visibility = if (enlace == null) View.GONE else View.VISIBLE
             if (enlace != null) L.i("emparejamiento", "QR: $enlace")
         }
+        // Sin la coletilla «misma red WiFi»: ya lo dice la instrucción de arriba y era repetido.
         db.txtPort.text = if (server.port == Proto.DEFAULT_PORT) {
-            "Puerto ${server.port} · misma red WiFi que los celulares"
+            "Puerto ${server.port}"
         } else {
             "⚠ Puerto ${server.port}: el 8787 estaba ocupado. Escanea el QR tal cual (ya trae el puerto)."
         }
@@ -6302,12 +6303,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         db.btnClose.setOnClickListener { dialog.dismiss() }
         dialog.show()
         cuadroALaIzquierda(dialog)
-        // Ancho suficiente para que la IP quepa en una línea y el QR se vea grande. El alto se
-        // deja al contenido: la ventana ya es compacta (si algún día no cabe, el ScrollView corre).
+        // Ancho justo para que la instrucción quepa en una línea (Jorge, 29/10: «la ventana con el
+        // ancho hasta donde termina la palabra código»), con tope para pantallas chicas.
         dialog.window?.let { ventana ->
             val ancho = resources.displayMetrics.widthPixels
-            val anchoVentana = minOf((ancho * 0.62f).toInt(), 560.dp)
-            ventana.setLayout(anchoVentana, ViewGroup.LayoutParams.WRAP_CONTENT)
+            val anchoFijo = minOf(360.dp, (ancho * 0.75f).toInt())
+            // Alto al contenido: la ventana termina donde termina el botón «Listo».
+            ventana.setLayout(anchoFijo, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
     }
 
