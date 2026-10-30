@@ -2231,11 +2231,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     marginStart = 2.dp
                 }
             }
-            // «Conectar» es la etiqueta más larga: se le da un poco más de ancho para que se lea
-            // completa sin encoger la letra (Jorge, 29/10).
-            b.btnFacebook.layoutParams = LinearLayout.LayoutParams(0, 38.dp, 1.35f).apply {
-                marginStart = 3.dp
-            }
+            // Todos del MISMO ancho (Jorge, 29/10). «Conectar» se abrevia para que entre parejo, y
+            // el separador se quita: ese espacio se reparte entre los botones.
+            b.btnFacebook.text = "Conect."
+            b.separadorBarra.visibility = View.GONE
 
             // 8) El botón de la foto, a la esquina derecha de abajo del monitor (Jorge, 29/10).
             (b.btnPhoto.layoutParams as? FrameLayout.LayoutParams)?.let {

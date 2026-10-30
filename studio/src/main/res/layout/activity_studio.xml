@@ -114,6 +114,7 @@
             android:layout_weight="1" />
 
         <View
+            android:id="@+id/separadorBarra"
             android:layout_width="1dp"
             android:layout_height="18dp"
             android:layout_marginStart="10dp"
