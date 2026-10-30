@@ -1879,10 +1879,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // Botones parejos y cómodos para el dedo (Jorge, 29/10): la barra mide 58 dp, así que los
         // chips van a 44 dp de alto en tablet y 40 dp en celular, con más aire entre ellos.
         val celular = esPantallaCelular()
-        val ancho = if (celular) 68.dp else 108.dp
+        val ancho = if (celular) 68.dp else 96.dp
         val alto = if (celular) 40.dp else 44.dp
         val letra = if (celular) 11.5f else 12.5f
-        val hueco = if (celular) 6.dp else 10.dp
+        val hueco = if (celular) 6.dp else 8.dp
         listOf(
             b.btnSettings, b.btnPlantillas, b.btnTransiciones,
             b.btnOrientacion, b.btnAudio, b.btnFacebook
