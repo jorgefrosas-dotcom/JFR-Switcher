@@ -810,7 +810,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun onTileTap(slot: Int) {
         if (slot == LocalCam.SLOT) {
-            if (vertical) {
+            // En el celular la cámara propia sí funciona en vertical (es la cámara del teléfono).
+            if (vertical && !esPantallaCelular()) {
                 toast("La cámara de la tablet solo está disponible en modo horizontal")
                 return
             }
@@ -1961,7 +1962,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.54f)
             )
             (b.panelFuentes.layoutParams as? LinearLayout.LayoutParams)?.let {
-                it.width = 158.dp
+                it.width = 178.dp
                 it.height = ViewGroup.LayoutParams.MATCH_PARENT
                 it.weight = 0f
             }
@@ -1972,12 +1973,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             // El visor se queda arriba a la derecha y con su forma 9:16 (alto según el ancho).
             (b.canvasHost.layoutParams as? LinearLayout.LayoutParams)?.let {
-                val anchoPanel = resources.displayMetrics.widthPixels - 158.dp - 30.dp
                 it.width = ViewGroup.LayoutParams.MATCH_PARENT
-                // 9:16 exacto y pegado arriba: el monitor no se estira a todo el alto.
-                it.height = (anchoPanel * 16f / 9f).toInt()
-                it.weight = 0f
-                it.gravity = Gravity.TOP or Gravity.END
+                // Más chico y siempre dentro de la pantalla: toma el 58 % del alto del panel y el
+                // AspectFrameLayout lo ajusta al 9:16 sin salirse a los lados.
+                it.height = 0
+                it.weight = 0.58f
+                it.gravity = Gravity.CENTER_HORIZONTAL
             }
 
             // 3) Los botones van al fondo de la pantalla, a todo lo ancho (no sobre el visor).
@@ -2733,7 +2734,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val cols = columnasFuentes()
         // En horizontal se agrega la cámara de la propia tablet como 7ª fuente. En Modo Studio
         // también (ahí la tablet sí puede usarla), sea 9:16 o 16:9.
-        val total = if (vertical && !modoStudio) 6 else 7
+        // En vertical de tablet no hay cámara local; en el celular sí (es su propia cámara).
+        val total = if (vertical && !modoStudio && !esPantallaCelular()) 6 else 7
         // En celular las pestañas necesitan saber dónde terminan las cámaras y empiezan los grupos.
         filasCamaras = (total + cols - 1) / cols
 
@@ -5110,8 +5112,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         ajustarBarraPorOrientacion()
         hub.vertical = vertical
-        // La cámara de la tablet solo existe en horizontal: en vertical se apaga.
-        if (vertical) {
+        // La cámara de la tablet solo existe en horizontal: en vertical se apaga. En el celular
+        // la cámara propia sigue disponible también en vertical (Jorge, 29/10).
+        if (vertical && !esPantallaCelular()) {
             if (localCam.encendida) apagarCamaraTablet()
         } else {
             // Solo se enciende sola si el usuario la dejó encendida la última vez.
@@ -5163,6 +5166,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * líneas: el ancho definitivo es el que ya no cambia, para que el lienzo llene el alto justo.
      */
     private fun aplicarAjusteLienzo(intento: Int) {
+        // En el celular el tamaño del visor lo fija aplicarModoCelular(): aquí no se toca, si no
+        // el lienzo se estiraba más de la pantalla y se salía del área visible (Jorge, 29/10).
+        if (esPantallaCelular()) return
         if (!vertical) {
             b.contenido.setPadding(0, 0, 0, 0)
             b.canvasHost.layoutParams = LinearLayout.LayoutParams(
