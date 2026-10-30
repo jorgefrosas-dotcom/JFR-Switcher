@@ -113,6 +113,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private val uiHandler = Handler(Looper.getMainLooper())
 
     private val localCam = LocalCam()
+    /** Segunda cámara del propio equipo: en el celular se usan las dos a la vez. */
+    private val localCam2 = LocalCam().apply { slot = LocalCam.SLOT_FRONT }
 
     private var camA: Int? = null
     private var camB: Int? = null
@@ -811,6 +813,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     // ------------------------------------------------------------------ asignación de capas
 
     private fun onTileTap(slot: Int) {
+        // Segunda cámara del equipo (frontal): en el celular las dos funcionan a la vez.
+        if (slot == LocalCam.SLOT_FRONT) {
+            if (!localCam2.encendida) {
+                encenderLocal(localCam2, LocalCam.SLOT_FRONT, "Frente")
+            } else if (!pipActivo && !splitActivo) {
+                mostrarEnPrograma(slot)
+            } else {
+                assignCamera(slot, activeLayer)
+            }
+            return
+        }
         if (slot == LocalCam.SLOT) {
             // En el celular la cámara propia sí funciona en vertical (es la cámara del teléfono).
             if (vertical && !esPantallaCelular()) {
@@ -928,36 +941,54 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Enciende la cámara local (solo horizontal) y la deja lista para A o B. */
     private fun encenderCamaraTablet() {
-        // En el celular la cámara propia también sirve en vertical (9:16).
+        encenderLocal(localCam, LocalCam.SLOT, "Tablet")
+    }
+
+    /**
+     * Enciende una cámara del propio equipo (la de atrás o la de adelante) como fuente del
+     * switcher. En el celular se usan **las dos a la vez** (Jorge, 29/10).
+     */
+    private fun encenderLocal(cam: LocalCam, slot: Int, etiqueta: String) {
+        // En la tablet la cámara local solo existe en horizontal; en el celular también en 9:16.
         if (vertical && !esPantallaCelular()) return
         val permiso = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
         if (permiso != PackageManager.PERMISSION_GRANTED) {
             permisoCamara.launch(Manifest.permission.CAMERA)
             return
         }
-        if (localCam.encendida) return
-        val frontal = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_TABLET_FRONTAL, true)
-        val pista = localCam.arrancar(this, frontal)
+        if (cam.encendida) return
+        // La trasera (slot 6) arranca según lo guardado; la frontal (slot 7) siempre en frontal.
+        val frontal = if (slot == LocalCam.SLOT_FRONT) {
+            true
+        } else {
+            getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_TABLET_FRONTAL, true)
+        }
+        val pista = cam.arrancar(this, frontal)
         if (pista == null) {
-            toast("Este dispositivo no tiene cámara disponible")
+            toast("No pude encender la cámara $etiqueta (¿el equipo permite las dos a la vez?)")
             return
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(CLAVE_TABLET_CAM, true).apply()
-        adjuntar(LocalCam.SLOT, pista)
-        tiles.getOrNull(LocalCam.SLOT)?.bindLocal(pista, nombreCamaraTablet())
+        adjuntar(slot, pista)
+        tiles.getOrNull(slot)?.bindLocal(pista, "$etiqueta · ${if (cam.frontal) "frontal" else "trasera"}")
         refreshUi()
     }
 
     /** Apaga la cámara local y la saca del lienzo. */
     private fun apagarCamaraTablet() {
-        val pista = localCam.track
-        if (pista != null) soltar(LocalCam.SLOT, pista)
-        localCam.detener()
+        apagarLocal(localCam, LocalCam.SLOT)
+    }
+
+    /** Apaga una cámara del propio equipo y limpia su tarjeta y su lugar en el lienzo. */
+    private fun apagarLocal(cam: LocalCam, slot: Int) {
+        val pista = cam.track
+        if (pista != null) soltar(slot, pista)
+        cam.detener()
         val scene = b.canvas.scene
-        scene.camAt(LocalCam.SLOT)?.let { scene.remove(it) }
-        if (camA == LocalCam.SLOT) camA = null
-        if (camB == LocalCam.SLOT) camB = null
-        tiles.getOrNull(LocalCam.SLOT)?.setEstadoLocal(false)
+        scene.camAt(slot)?.let { scene.remove(it) }
+        if (camA == slot) camA = null
+        if (camB == slot) camB = null
+        tiles.getOrNull(slot)?.setEstadoLocal(false)
         // Si la pantalla partida usaba la cámara de la tablet (no existe en vertical),
         // se avisa que falta la segunda fuente.
         if (splitActivo) {
@@ -2132,6 +2163,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     if (i > 0) marginStart = 3.dp
                 }
             }
+            // 9) La barra de arriba se reafirma AQUÍ: estandarizarChipsBarra() corre después y
+            //    dejaría los chips fijos (no caben los seis + «Rec» en vertical).
+            for (chip in listOf(
+                b.btnSettings, b.btnPlantillas, b.btnTransiciones,
+                b.btnOrientacion, b.btnAudio, b.btnFacebook
+            )) {
+                chip.textSize = 8f
+                chip.gravity = Gravity.CENTER
+                chip.setPadding(0, 0, 0, 0)
+                chip.layoutParams = LinearLayout.LayoutParams(0, 30.dp, 1f).apply {
+                    marginStart = 3.dp
+                }
+            }
+
             // 8) El botón de la foto, a la esquina derecha de abajo del monitor (Jorge, 29/10).
             (b.btnPhoto.layoutParams as? FrameLayout.LayoutParams)?.let {
                 it.gravity = Gravity.BOTTOM or Gravity.END
@@ -2888,7 +2933,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // En horizontal se agrega la cámara de la propia tablet como 7ª fuente. En Modo Studio
         // también (ahí la tablet sí puede usarla), sea 9:16 o 16:9.
         // En vertical de tablet no hay cámara local; en el celular sí (es su propia cámara).
-        val total = if (vertical && !modoStudio && !esPantallaCelular()) 6 else 7
+        // En el celular se suman las DOS cámaras del equipo: 6 remotas + trasera + frontal.
+        val total = when {
+            esPantallaCelular() -> 8
+            vertical && !modoStudio -> 6
+            else -> 7
+        }
         // En celular las pestañas necesitan saber dónde terminan las cámaras y empiezan los grupos.
         filasCamaras = (total + cols - 1) / cols
 
@@ -2916,7 +2966,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 if (esPantallaCelular() && vertical) tile.modoMuyCompacto()
                 if (index == LocalCam.SLOT) {
                     tile.setup(index) { onTileTap(LocalCam.SLOT) }
-                    tile.setEstadoLocal(localCam.encendida)
+                    tile.setEstadoLocal(localCam.encendida, nombreCamaraTablet())
+                } else if (esPantallaCelular() && index == LocalCam.SLOT_FRONT) {
+                    tile.setup(index) { onTileTap(LocalCam.SLOT_FRONT) }
+                    tile.setEstadoLocal(localCam2.encendida, "Frente")
                 } else {
                     tile.setup(index) { onTileTap(index) }
                 }
@@ -2937,6 +2990,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         localCam.track?.let { pista ->
             tiles.getOrNull(LocalCam.SLOT)?.bindLocal(pista, nombreCamaraTablet())
+        }
+        localCam2.track?.let { pista ->
+            tiles.getOrNull(LocalCam.SLOT_FRONT)?.bindLocal(pista, "Frente")
         }
         // Al rehacer la parrilla hay que volver a decidir qué miniaturas se ven completas (las que
         // quedan fuera se ocultan para que no se encimen al monitor).

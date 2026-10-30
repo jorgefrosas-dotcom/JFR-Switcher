@@ -19,11 +19,15 @@ class LocalCam {
 
     companion object {
         const val SLOT = 6
+        /** Segunda cámara del mismo equipo (frontal) en el celular. */
+        const val SLOT_FRONT = 7
         private const val TAG = "localcam"
         private const val ANCHO = 1280
         private const val ALTO = 720
         private const val FPS = 30
     }
+
+    /** Slot de esta cámara en la parrilla (6 = trasera, 7 = frontal). */    var slot: Int = SLOT
 
     private var capturer: CameraVideoCapturer? = null
     private var helper: SurfaceTextureHelper? = null

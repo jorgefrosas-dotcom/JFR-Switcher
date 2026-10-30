@@ -64,8 +64,8 @@ class CompositorView @JvmOverloads constructor(
     /** Contador de cuadros dibujados, solo para el diagnóstico cada ~2 segundos. */
     private var drawCuenta = 0
 
-    private val bridges = arrayOfNulls<FrameBridge>(7)
-    private val textures = arrayOfNulls<SourceTexture>(7)
+    private val bridges = arrayOfNulls<FrameBridge>(8)
+    private val textures = arrayOfNulls<SourceTexture>(8)
     private val imageTextures = HashMap<Long, ImageTexture>()
 
     private var yuv: YuvProgram? = null
@@ -294,7 +294,7 @@ class CompositorView @JvmOverloads constructor(
     }
 
     private fun pumpFrames() {
-        for (i in 0 until 7) {
+        for (i in 0 until bridges.size) {
             val b = bridges[i] ?: continue
             val f = b.take() ?: continue
             try {
