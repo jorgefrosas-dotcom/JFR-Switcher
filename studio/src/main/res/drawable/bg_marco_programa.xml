@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marco naranja de la fuente que está EN PROGRAMA (cámara, overlay o medio).
+     Se dibuja como foreground de la tarjeta para no pelear con el fondo de capa A/B. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+    <corners android:radius="14dp" />
+    <stroke android:width="3dp" android:color="@color/accent" />
+</shape>

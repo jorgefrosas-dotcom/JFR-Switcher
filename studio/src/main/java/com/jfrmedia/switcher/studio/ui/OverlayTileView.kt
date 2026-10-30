@@ -55,5 +55,16 @@ class OverlayTileView @JvmOverloads constructor(
         )
         setOnClickListener { onTap() }
         delete.setOnClickListener { onDelete() }
+        // Visible en el lienzo = está en programa: se marca con el marco naranja.
+        marcarEnPrograma(item.visible)
+    }
+
+    /** Marco naranja cuando este overlay está en programa. */
+    fun marcarEnPrograma(activo: Boolean) {
+        foreground = if (activo) {
+            androidx.core.content.ContextCompat.getDrawable(context, R.drawable.bg_marco_programa)
+        } else {
+            null
+        }
     }
 }

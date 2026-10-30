@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Botón redondo de la flecha, con aspecto de vidrio (glassmorphism):
+     relleno translúcido con degradado, borde claro y un brillo de reflejo arriba. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:angle="270"
+                android:startColor="#40FFFFFF"
+                android:centerColor="#1AFFFFFF"
+                android:endColor="#0AFFFFFF" />
+            <stroke android:width="1.5dp" android:color="#66FFFFFF" />
+        </shape>
+    </item>
+    <!-- Reflejo: media luna clara en la mitad de arriba -->
+    <item android:top="3dp" android:left="6dp" android:right="6dp" android:bottom="26dp">
+        <shape android:shape="oval">
+            <gradient
+                android:angle="270"
+                android:startColor="#55FFFFFF"
+                android:endColor="#00FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

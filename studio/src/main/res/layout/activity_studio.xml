@@ -97,7 +97,7 @@
             android:paddingTop="6dp"
             android:paddingEnd="9dp"
             android:paddingBottom="6dp"
-            android:text="Facebook"
+            android:text="Conectar"
             android:textSize="12sp" />
 
         <!-- Nivel de audio, junto al chip de Facebook: arriba sobra espacio y en la fila de

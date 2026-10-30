@@ -12,18 +12,19 @@
 
 ## Pendiente de publicar
 
-- **Celular (pantalla chica), 29/10/2026:** pestañas **Cámaras / Overlays / Medios**, columna de **3
-  tarjetas por fila** (205 → 322 dp: el ancho que le sobraba al visor se lo quedó la columna),
-  **controles flotando encima del monitor** en una **barra translúcida** (`bg_barra_flotante`, 48 % de
-  opacidad) que deja ver el video, **colapsable con una flecha** (↓ la oculta, ↑ la muestra), con
-  **triángulos ◀ ▶** a los lados que se encienden solo si hay más botones en esa dirección, y con
-  botones **de 56×48 dp** (mínimo táctil de Android: 48). Los botones de **imagen y audio** y **PiP /
-  2 cam** van **solo con icono** (`ic_image`, `ic_audio_onda`, `ic_pip`, `ic_2cam`); PiP y 2 cam
-  conservan el naranja de «activo». El **monitor de entrada** ya no ocupa una banda: abre **ventana a
-  la izquierda**, igual que los ajustes de imagen. Medido en el POCO X7: el lienzo pasó de **≈450×250
-  px a 1428×803**.
-- **La tablet no cambia:** todo va detrás de `esPantallaCelular()` y se comprobó con captura antes de
-  estos últimos retoques.
+- **Marco naranja de «en programa» (29/10, tablet y celular, estándar y Modo Studio):** la tarjeta de
+  la **cámara**, del **overlay** y del **medio** que están al aire llevan un marco naranja de 3 dp
+  (`bg_marco_programa`), para verlas de un golpe. Se dibuja como `foreground` para no pelear con el
+  fondo de capa A/B. En Modo Studio manda la escena del **monitor de programa**, no la del preview.
+- **Barra superior estandarizada:** Ajustes, Plant., Trans., 16:9, Audio y **Conectar** (antes
+  «Facebook») miden lo mismo (94 dp en tablet, 66 dp en celular, 34 dp de alto). El botón pasa a
+  llamarse **Conectar** porque pronto servirá para más plataformas.
+- **Celular:** la línea informativa («CÁMARAS · PROGRAMA · CPU…») bajó a 9 sp; el botón de la flecha
+  es más grande (54 dp), con **triángulo gordo** (▼/▲) y **aspecto de vidrio** (`bg_glass_redondo`:
+  degradado translúcido + borde claro + reflejo); la barra flotante también es de vidrio con reflejo.
+- **Celular (ronda anterior del día):** pestañas Cámaras / Overlays / Medios, 3 tarjetas por fila,
+  controles flotando sobre el monitor, barra colapsable, triángulos ◀ ▶ de deslizamiento, botones de
+  56×48 dp, audio/imagen/PiP/2 cam con icono y monitor de audio en ventana a la izquierda.
 
 ## Pendiente de programar (no está hecho todavía)
 

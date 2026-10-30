@@ -226,6 +226,18 @@ class SourceTileView @JvmOverloads constructor(
         refreshBorder()
     }
 
+    /**
+     * Marco naranja cuando esta fuente es la que está **en programa** (al aire).
+     * Se dibuja como `foreground`, así convive con el fondo de capa A/B.
+     */
+    fun marcarEnPrograma(activo: Boolean) {
+        foreground = if (activo) {
+            androidx.core.content.ContextCompat.getDrawable(context, R.drawable.bg_marco_programa)
+        } else {
+            null
+        }
+    }
+
     private fun refreshBorder() {
         // El marcador de capa se colorea por capa: A naranja, B azul.
         if (txtBadge.visibility != View.VISIBLE) {

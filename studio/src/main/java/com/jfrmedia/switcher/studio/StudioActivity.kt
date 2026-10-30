@@ -506,6 +506,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         wireClicks()
         montarControlesAudio()
         if (esPantallaCelular()) aplicarModoCelular()
+        // Chips de la barra superior, todos del mismo tamaño (tablet y celular).
+        estandarizarChipsBarra()
         huecoVideo = b.cajaVideo.parent as? ViewGroup
         indiceVideo = huecoVideo?.indexOfChild(b.cajaVideo) ?: 0
 
@@ -771,6 +773,19 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         hub.all().forEach { session ->
             val item = scene.camAt(session.slot)
             session.enviarPrograma(!tapado && item != null && item.visible)
+        }
+        // Y las tarjetas se marcan con el marco naranja para verlas de un golpe.
+        marcarFuentesEnPrograma()
+    }
+
+    /**
+     * Marco naranja en las tarjetas de las fuentes que están **al aire** (en programa).
+     * En Modo Studio manda la escena del monitor de programa, no la del preview.
+     */
+    private fun marcarFuentesEnPrograma() {
+        runCatching {
+            val alAire = escenaAlAire().cams().filter { it.visible }.map { it.slot }.toSet()
+            tiles.forEachIndexed { slot, tile -> tile.marcarEnPrograma(slot in alAire) }
         }
     }
 
@@ -1521,16 +1536,19 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun montarBotonColapsar() {
         if (!esPantallaCelular() || vertical) return
         val boton = btnColapsarBarra ?: TextView(this).apply {
-            textSize = 20f
+            textSize = 24f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             isClickable = true
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
-            setBackgroundResource(R.drawable.bg_pill)
+            // Vidrio: translúcido con brillo, para que se lea sobre el video.
+            setBackgroundResource(R.drawable.bg_glass_redondo)
+            elevation = 6.dp.toFloat()
         }.also { btnColapsarBarra = it }
         if (boton.parent == null) {
             b.canvasHost.addView(
                 boton,
-                FrameLayout.LayoutParams(42.dp, 42.dp).apply {
+                FrameLayout.LayoutParams(54.dp, 54.dp).apply {
                     gravity = Gravity.BOTTOM or Gravity.END
                 }
             )
@@ -1601,17 +1619,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         barraVisible = visible
         b.slotControles.visibility = if (visible) View.VISIBLE else View.GONE
         btnColapsarBarra?.let { boton ->
-            // Abajo = «ocúltala»; arriba = «muéstrala».
-            boton.text = if (visible) "↓" else "↑"
+            // ▼ = «ocúltala» (está abierta) · ▲ = «muéstrala» (está escondida).
+            boton.text = if (visible) "▼" else "▲"
             boton.contentDescription =
                 if (visible) "Ocultar la barra de controles" else "Mostrar la barra de controles"
             (boton.layoutParams as? FrameLayout.LayoutParams)?.let {
                 it.marginEnd = 12.dp
                 // Con la barra a la vista, la flecha se sube para no encimarse con ella.
-                it.bottomMargin = if (visible) 72.dp else 12.dp
+                it.bottomMargin = if (visible) 74.dp else 12.dp
                 boton.layoutParams = it
             }
-            boton.alpha = if (visible) 0.75f else 1f
+            boton.alpha = if (visible) 0.92f else 1f
         }
         // La foto flota más arriba para no quedar debajo de la flecha.
         (b.btnPhoto.layoutParams as? FrameLayout.LayoutParams)?.let {
@@ -1747,6 +1765,28 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
     }
 
+    /**
+     * Todos los chips de la barra superior con el **mismo tamaño** (pedido de Jorge, 29/10):
+     * antes cada uno medía lo que pedía su texto y quedaban desiguales.
+     * El de «Facebook» pasa a llamarse **Conectar** porque pronto servirá para más plataformas.
+     */
+    private fun estandarizarChipsBarra() {
+        // En el celular la barra es más angosta: si no, «Rec» se sale de la pantalla.
+        val ancho = if (esPantallaCelular()) 66.dp else 94.dp
+        val alto = 34.dp
+        val letra = if (esPantallaCelular()) 11f else 12f
+        listOf(
+            b.btnSettings, b.btnPlantillas, b.btnTransiciones,
+            b.btnOrientacion, b.btnAudio, b.btnFacebook
+        ).forEach { chip ->
+            chip.textSize = letra
+            chip.gravity = Gravity.CENTER
+            chip.setPadding(0, 0, 0, 0)
+            chip.layoutParams = LinearLayout.LayoutParams(ancho, alto).apply { marginStart = 6.dp }
+        }
+        b.btnFacebook.text = "Conectar"
+    }
+
     /** Ajusta el diseño para celular: más visor, controles pequeños y ajustes en ventana. */
     private fun aplicarModoCelular() {
         if (vertical) return
@@ -1775,6 +1815,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             // Con «Img.» y «Monitor» en la barra, «Rec + Broadcast» se salía de la pantalla.
             b.btnRecord.text = "Rec"
             b.txtLive.visibility = View.GONE
+            // La línea «CÁMARAS · PROGRAMA · CPU…» es solo informativa: más chica para ganar aire.
+            b.txtEtiquetaPrograma.textSize = 9f
+            b.txtCanvasInfo.textSize = 9f
+            b.txtCamCount.textSize = 9f
             (b.imgLogo.layoutParams as? LinearLayout.LayoutParams)?.let {
                 it.width = 34.dp
                 it.height = 26.dp
@@ -2665,6 +2709,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         refreshMediaTiles()
         // Si es un celular, la parrilla recién hecha vuelve a mostrar solo el grupo de la pestaña.
         aplicarSeccionFuentes()
+        // Y se marcan las cámaras que están en programa.
+        marcarFuentesEnPrograma()
     }
 
     // ------------------------------------------------------------------ medios (videos y fotos)
@@ -2725,6 +2771,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             setBackgroundResource(R.drawable.bg_tile)
             isClickable = true
             isFocusable = true
+        }
+        // Marco naranja si este video/foto es el que está en programa.
+        val enPrograma = runCatching {
+            escenaAlAire().items.any { it is MediaItem && it.uri == medio.uri && it.visible }
+        }.getOrDefault(false)
+        if (enPrograma) {
+            frame.foreground = ContextCompat.getDrawable(this, R.drawable.bg_marco_programa)
         }
         val imagen = android.widget.ImageView(this).apply {
             scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
