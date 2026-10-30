@@ -1445,6 +1445,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private var flechaDer: TextView? = null
     /** En vertical el monitoreo (CPU, RAM, Mbps, °C) va debajo del monitor de programa. */
     private var txtMonitoreo: TextView? = null
+    /** Botón de la cámara propia en la barra del celular (primero en vertical). */
+    private var chipCamaraCelular: ImageView? = null
 
     /**
      * En el celular la lista de fuentes es larguísima (6 cámaras + tablet + overlays + medios) y
@@ -2087,9 +2089,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 it.weight = 0.58f
             }
 
-            // 7) La cámara propia, PRIMERA en la barra (encenderla y cambiar de lente a la mano).
-            (b.btnTabletLens.parent as? ViewGroup)?.removeView(b.btnTabletLens)
-            b.controlesCapa.addView(b.btnTabletLens, 0)
+            // 7) La cámara propia, PRIMERA en la barra. Se usa un botón de icono propio (como los de
+            //    imagen y audio) para que no lo empujen los demás al rearmar la fila.
+            val chipCamara = chipCamaraCelular ?: ImageView(this).apply {
+                setImageResource(R.drawable.ic_camera)
+                contentDescription = "Cámara de este equipo"
+                isClickable = true
+                setBackgroundResource(R.drawable.bg_pill_ghost)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(14.dp, 12.dp, 14.dp, 12.dp)
+                setColorFilter(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+                layoutParams = LinearLayout.LayoutParams(56.dp, 48.dp)
+                setOnClickListener { b.btnTabletLens.performClick() }
+                setOnLongClickListener { b.btnTabletLens.performLongClick() }
+            }.also { chipCamaraCelular = it }
+            (chipCamara.parent as? ViewGroup)?.removeView(chipCamara)
+            b.controlesCapa.addView(chipCamara, 0)
+            chipCamara.layoutParams = LinearLayout.LayoutParams(56.dp, 48.dp)
             for (i in 0 until b.controlesCapa.childCount) {
                 val v = b.controlesCapa.getChildAt(i) as? TextView ?: continue
                 v.textSize = 12f
@@ -6531,6 +6547,26 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             "⚠ Puerto ${server.port}: el 8787 estaba ocupado. Escanea el QR tal cual (ya trae el puerto)."
         }
         db.txtConnCount.text = "Cámaras conectadas: ${hub.count()} / 6"
+        // En vertical (9:16) la pantalla es angosta: el QR arriba y los datos debajo, en UNA
+        // columna; si no, la IP se cortaba y el QR se comía el ancho (Jorge, 29/10).
+        if (esPantallaCelular() && vertical) {
+            val fila = (db.imgQr.parent as? ViewGroup)?.parent as? LinearLayout
+            fila?.let { f ->
+                f.orientation = LinearLayout.VERTICAL
+                for (i in 0 until f.childCount) {
+                    f.getChildAt(i).layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                }
+                (db.imgQr.parent as? LinearLayout)?.gravity = Gravity.CENTER_HORIZONTAL
+                (db.imgQr.layoutParams as? LinearLayout.LayoutParams)?.let {
+                    it.width = 150.dp
+                    it.height = 150.dp
+                    db.imgQr.layoutParams = it
+                }
+            }
+        }
         db.btnCopyIp.setOnClickListener {
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             cm.setPrimaryClip(ClipData.newPlainText("IP", db.txtIp.text))
@@ -6547,7 +6583,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // ancho hasta donde termina la palabra código»), con tope para pantallas chicas.
         dialog.window?.let { ventana ->
             val ancho = resources.displayMetrics.widthPixels
-            val anchoFijo = minOf(360.dp, (ancho * 0.75f).toInt())
+            val anchoFijo = if (esPantallaCelular() && vertical) {
+                (ancho * 0.92f).toInt()
+            } else {
+                minOf(360.dp, (ancho * 0.75f).toInt())
+            }
             // Alto al contenido: la ventana termina donde termina el botón «Listo».
             ventana.setLayout(anchoFijo, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
