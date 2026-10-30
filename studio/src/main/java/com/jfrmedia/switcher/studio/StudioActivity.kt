@@ -1876,10 +1876,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * El de «Facebook» pasa a llamarse **Conectar** porque pronto servirá para más plataformas.
      */
     private fun estandarizarChipsBarra() {
-        // En el celular la barra es más angosta: si no, «Rec» se sale de la pantalla.
-        val ancho = if (esPantallaCelular()) 66.dp else 94.dp
-        val alto = 34.dp
-        val letra = if (esPantallaCelular()) 11f else 12f
+        // Botones parejos y cómodos para el dedo (Jorge, 29/10): la barra mide 58 dp, así que los
+        // chips van a 44 dp de alto en tablet y 40 dp en celular, con más aire entre ellos.
+        val celular = esPantallaCelular()
+        val ancho = if (celular) 68.dp else 108.dp
+        val alto = if (celular) 40.dp else 44.dp
+        val letra = if (celular) 11.5f else 12.5f
+        val hueco = if (celular) 6.dp else 10.dp
         listOf(
             b.btnSettings, b.btnPlantillas, b.btnTransiciones,
             b.btnOrientacion, b.btnAudio, b.btnFacebook
@@ -1887,7 +1890,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             chip.textSize = letra
             chip.gravity = Gravity.CENTER
             chip.setPadding(0, 0, 0, 0)
-            chip.layoutParams = LinearLayout.LayoutParams(ancho, alto).apply { marginStart = 6.dp }
+            chip.includeFontPadding = false
+            chip.letterSpacing = 0.01f
+            chip.layoutParams = LinearLayout.LayoutParams(ancho, alto).apply { marginStart = hueco }
         }
         b.btnFacebook.text = "Conectar"
     }
@@ -1901,6 +1906,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             return
         }
         runCatching {
+            // Al volver del 9:16 el audio quedó dentro del panel de programa: se devuelve a la
+            // banda de controles, que es su sitio en horizontal.
+            if (panelAudio?.parent === b.panelPrograma) ubicarPanelAudio()
             // 1) Columna de fuentes más ancha (3 tarjetas por fila) y visor pegado a la derecha con
             //    su tamaño intacto: el ancho que le sobraba al lienzo se lo queda la columna.
             //    En vertical no aplica: ahí el ancho del visor lo fija la relación 9:16.
@@ -2151,6 +2159,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 ondaAudio?.layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
                 )
+                // En vertical el panel es angosto: la ayuda corta y sin el formato en la cabecera.
+                txtFormatoAudio?.visibility = View.GONE
+                txtAyudaAudio?.text = "Verde < −12 · naranja −12 a −3 · rojo > −3"
             }
             // Y el visor se queda con el 58 % del alto.
             (b.canvasHost.layoutParams as? LinearLayout.LayoutParams)?.let {
@@ -2191,12 +2202,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 b.btnSettings, b.btnPlantillas, b.btnTransiciones,
                 b.btnOrientacion, b.btnAudio, b.btnFacebook
             )) {
-                chip.textSize = 8f
+                // 9 sp y sin espaciado extra: así «Ajustes» entra completo en el ancho que queda.
+                chip.textSize = 9f
                 chip.gravity = Gravity.CENTER
                 chip.setPadding(0, 0, 0, 0)
-                chip.layoutParams = LinearLayout.LayoutParams(0, 30.dp, 1f).apply {
+                chip.includeFontPadding = false
+                chip.letterSpacing = 0f
+                chip.layoutParams = LinearLayout.LayoutParams(0, 38.dp, 1f).apply {
                     marginStart = 3.dp
                 }
+            }
+            // «Conectar» es la etiqueta más larga: se le da un poco más de ancho para que se lea
+            // completa sin encoger la letra (Jorge, 29/10).
+            b.btnFacebook.layoutParams = LinearLayout.LayoutParams(0, 38.dp, 1.35f).apply {
+                marginStart = 3.dp
             }
 
             // 8) El botón de la foto, a la esquina derecha de abajo del monitor (Jorge, 29/10).
