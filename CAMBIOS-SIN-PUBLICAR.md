@@ -12,6 +12,15 @@
 
 ## Pendiente de publicar
 
+- **Celular 9:16 en vertical (29/10):** al elegir 9:16 el teléfono **rota a vertical**. Acomodo propio:
+  barra superior pareja (sin logo/medidor/cronómetro), **tarjetas de 2 por fila a la izquierda**,
+  **monitor de programa arriba a la derecha** (58 % del alto, siempre dentro de la vista),
+  **tarjeta con la info del sistema** debajo (CPU, RAM, Mbps, °C), **ondas de audio fijas** debajo
+  (sin ventana ni botón de audio en la barra), y **botones al fondo de la pantalla** con los
+  triángulos de deslizar dentro de la barra y la **cámara propia como primer botón** (tocar
+  enciende/apaga, mantener cambia de lente). El estado de cada tarjeta es un **punto verde/gris**
+  en vez del texto «Sin conectar», y el nombre de la cámara ya se lee completo. El botón de foto
+  quedó en la esquina inferior derecha del monitor.
 - **Celular: tarjetas más grandes, 2 por fila (29/10):** la columna de fuentes pasó de 3 a **2
   tarjetas por fila** (cámaras, overlays y medios) y recuperaron el **tamaño de letra normal** (ya no
   el compacto). Para ver el resto se desliza la columna, como antes.

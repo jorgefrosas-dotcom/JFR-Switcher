@@ -110,24 +110,52 @@ class SourceTileView @JvmOverloads constructor(
     }
 
     /**
-     * Tarjetas angostas (celular en vertical, 2 por fila): el nombre y el estado tienen que
-     * caber completos, así que van más chicos todavía.
+     * Tarjetas angostas (celular en vertical, 2 por fila): el nombre tiene que caber completo y el
+     * estado pasa a ser un **punto de color** (verde conectada / gris desconectada), porque el
+     * texto «Sin conectar» no entra (Jorge, 29/10).
      */
     fun modoMuyCompacto() {
         txtName.textSize = 8f
         txtStatus.textSize = 7f
         txtNumber.textSize = 9f
         txtBadge.textSize = 8f
-        // El nombre se lee completo; el estado se recorta con puntos si no entra.
         txtName.maxLines = 1
         txtStatus.maxLines = 1
+        estadoComoIcono = true
+        pintarEstado()
+    }
+
+    /** El estado se dibuja como punto de color en vez de texto. */
+    private var estadoComoIcono = false
+    private var conectada = false
+
+    /** Punto verde si está conectada, gris si no. */
+    private fun pintarEstado() {
+        if (!estadoComoIcono) return
+        txtStatus.text = ""
+        txtStatus.setBackgroundResource(
+            if (conectada) R.drawable.bg_dot_green else R.drawable.bg_dot_gray
+        )
+        val lado = (10 * resources.displayMetrics.density).toInt()
+        txtStatus.layoutParams = (txtStatus.layoutParams as? ViewGroup.LayoutParams)?.apply {
+            width = lado
+            height = lado
+        }
+        txtStatus.visibility = View.VISIBLE
+    }
+
+    /** Cambia el texto del estado y, si toca, el punto de color. */
+    private fun estado(texto: String, conectadaAhora: Boolean) {
+        conectada = conectadaAhora
+        txtStatus.text = texto
+        pintarEstado()
     }
 
     fun setup(index: Int, onClick: () -> Unit) {
         slotIndex = index
         txtNumber.text = (index + 1).toString()
         txtName.text = "Cámara ${index + 1}"
-        txtStatus.text = "Sin conectar"
+        estado("Sin conectar", false)
         ensureRenderer()
         setOnClickListener { onClick() }
     }
@@ -166,7 +194,7 @@ class SourceTileView @JvmOverloads constructor(
         video.visibility = View.VISIBLE
         txtHint.visibility = View.GONE
         txtName.text = session.name
-        txtStatus.text = "En vivo · ${session.preset.width}×${session.preset.height}"
+        estado("En vivo · ${session.preset.width}×${session.preset.height}", true)
         refreshBorder()
     }
 
@@ -181,7 +209,7 @@ class SourceTileView @JvmOverloads constructor(
         video.visibility = View.VISIBLE
         txtHint.visibility = View.GONE
         txtName.text = nombre
-        txtStatus.text = "En vivo · esta tablet"
+        estado("En vivo · esta tablet", true)
         refreshBorder()
     }
 
@@ -194,21 +222,23 @@ class SourceTileView @JvmOverloads constructor(
             currentTrack = null
             video.visibility = View.INVISIBLE
             txtHint.visibility = View.VISIBLE
-            txtStatus.text = "Toca para encender"
+            estado("Toca para encender", false)
             setBackgroundResource(R.drawable.bg_tile)
         } else {
-            txtStatus.text = "En vivo · esta tablet"
+            estado("En vivo · esta tablet", true)
         }
     }
 
     fun refreshInfo(session: CameraSession?) {
         if (session == null) {
-            txtStatus.text = "Sin conectar"
+            estado("Sin conectar", false)
             return
         }
         txtName.text = session.name
         val battery = if (session.battery in 1..100) " · ${session.battery}%" else ""
-        txtStatus.text = when (session.state) {
+        val conectadaAhora = session.state == com.jfrmedia.switcher.studio.rtc.CamState.STREAMING ||
+            session.state == com.jfrmedia.switcher.studio.rtc.CamState.CONNECTED
+        val texto = when (session.state) {
             com.jfrmedia.switcher.studio.rtc.CamState.STREAMING ->
                 "${session.fps.coerceAtLeast(0)} fps${battery}"
 
@@ -217,6 +247,7 @@ class SourceTileView @JvmOverloads constructor(
             com.jfrmedia.switcher.studio.rtc.CamState.ERROR -> session.lastError.ifEmpty { "Error" }
             com.jfrmedia.switcher.studio.rtc.CamState.CLOSED -> "Desconectada"
         }
+        estado(texto, conectadaAhora)
     }
 
     fun clearSession() {
@@ -225,7 +256,7 @@ class SourceTileView @JvmOverloads constructor(
         video.visibility = View.INVISIBLE
         txtHint.visibility = View.VISIBLE
         txtName.text = "Cámara ${slotIndex + 1}"
-        txtStatus.text = "Sin conectar"
+        estado("Sin conectar", false)
         txtBadge.visibility = View.GONE
         setBackgroundResource(R.drawable.bg_tile)
     }
