@@ -928,7 +928,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Enciende la cámara local (solo horizontal) y la deja lista para A o B. */
     private fun encenderCamaraTablet() {
-        if (vertical) return
+        // En el celular la cámara propia también sirve en vertical (9:16).
+        if (vertical && !esPantallaCelular()) return
         val permiso = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
         if (permiso != PackageManager.PERMISSION_GRANTED) {
             permisoCamara.launch(Manifest.permission.CAMERA)
@@ -1546,6 +1547,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             b.scrollControles.isHorizontalScrollBarEnabled = false
             // Aire a los lados para que los triángulos no tapen el primer y el último botón.
             b.controlesCapa.setPadding(20.dp, 0, 20.dp, 0)
+            if (vertical) {
+                // En vertical el botón de la cámara propia va PRIMERO: encenderla y cambiar de
+                // frontal a trasera tiene que estar a la mano (Jorge, 29/10).
+                (b.btnTabletLens.parent as? ViewGroup)?.removeView(b.btnTabletLens)
+                b.controlesCapa.addView(b.btnTabletLens, 0)
+                b.btnTabletLens.layoutParams = LinearLayout.LayoutParams(56.dp, 48.dp).apply {
+                    marginStart = 0
+                }
+            }
         }
     }
 
@@ -1679,20 +1689,37 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val izq = flechaIzq ?: flecha("◀").also { flechaIzq = it }
         val der = flechaDer ?: flecha("▶").also { flechaDer = it }
         val alto = 48.dp
-        val abajo = 14.dp
-        if (izq.parent == null) {
-            b.canvasHost.addView(izq, FrameLayout.LayoutParams(22.dp, alto).apply {
-                gravity = Gravity.BOTTOM or Gravity.START
-                marginStart = 12.dp
-                bottomMargin = abajo
-            })
-        }
-        if (der.parent == null) {
-            b.canvasHost.addView(der, FrameLayout.LayoutParams(22.dp, alto).apply {
-                gravity = Gravity.BOTTOM or Gravity.END
-                marginEnd = 12.dp
-                bottomMargin = abajo
-            })
+        if (vertical) {
+            // En vertical la barra está abajo, fuera del visor: los triángulos van DENTRO de la
+            // barra, a los lados de la fila de botones (Jorge, 29/10).
+            (izq.parent as? ViewGroup)?.removeView(izq)
+            (der.parent as? ViewGroup)?.removeView(der)
+            val filaBarra = b.scrollControles.parent as? ViewGroup
+            if (filaBarra is LinearLayout && filaBarra.indexOfChild(izq) < 0) {
+                filaBarra.orientation = LinearLayout.HORIZONTAL
+                (b.scrollControles.parent as? ViewGroup)?.removeView(b.scrollControles)
+                filaBarra.addView(izq, LinearLayout.LayoutParams(26.dp, alto))
+                filaBarra.addView(
+                    b.scrollControles,
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                )
+                filaBarra.addView(der, LinearLayout.LayoutParams(26.dp, alto))
+            }
+        } else {
+            if (izq.parent == null) {
+                b.canvasHost.addView(izq, FrameLayout.LayoutParams(22.dp, alto).apply {
+                    gravity = Gravity.BOTTOM or Gravity.START
+                    marginStart = 12.dp
+                    bottomMargin = 14.dp
+                })
+            }
+            if (der.parent == null) {
+                b.canvasHost.addView(der, FrameLayout.LayoutParams(22.dp, alto).apply {
+                    gravity = Gravity.BOTTOM or Gravity.END
+                    marginEnd = 12.dp
+                    bottomMargin = 14.dp
+                })
+            }
         }
         izq.setOnClickListener { b.scrollControles.smoothScrollBy(-3 * 54.dp, 0) }
         der.setOnClickListener { b.scrollControles.smoothScrollBy(3 * 54.dp, 0) }
@@ -2020,19 +2047,65 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
                 setPadding(6.dp, 2.dp, 6.dp, 3.dp)
             }.also { txtMonitoreo = it }
-            if ((monitor.parent as? ViewGroup) !== b.panelPrograma) {
-                (monitor.parent as? ViewGroup)?.removeView(monitor)
-                b.panelPrograma.addView(
-                    monitor,
-                    LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                    )
+            // Se coloca siempre justo debajo del visor (no al final: el audio va después).
+            (monitor.parent as? ViewGroup)?.removeView(monitor)
+            val trasVisor = (b.panelPrograma.indexOfChild(b.canvasHost) + 1).coerceAtLeast(0)
+            b.panelPrograma.addView(
+                monitor,
+                trasVisor,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
                 )
-            } else if (b.panelPrograma.indexOfChild(monitor) < b.panelPrograma.childCount - 1) {
-                monitor.bringToFront()
-            }
+            )
             monitor.visibility = View.VISIBLE
+
+            // 6) Las ondas de audio ocupan el espacio libre debajo del monitor (Jorge, 29/10).
+            panelAudio?.let { audio ->
+                audio.visibility = View.VISIBLE
+                if ((audio.parent as? ViewGroup) !== b.panelPrograma) {
+                    (audio.parent as? ViewGroup)?.removeView(audio)
+                    b.panelPrograma.addView(
+                        audio,
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 0.42f)
+                    )
+                } else {
+                    (audio.layoutParams as? LinearLayout.LayoutParams)?.let {
+                        it.width = ViewGroup.LayoutParams.MATCH_PARENT
+                        it.height = 0
+                        it.weight = 0.42f
+                        audio.layoutParams = it
+                    }
+                }
+                ondaAudio?.layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+                )
+            }
+            // Y el visor se queda con el 58 % del alto.
+            (b.canvasHost.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.height = 0
+                it.weight = 0.58f
+            }
+
+            // 7) La cámara propia, PRIMERA en la barra (encenderla y cambiar de lente a la mano).
+            (b.btnTabletLens.parent as? ViewGroup)?.removeView(b.btnTabletLens)
+            b.controlesCapa.addView(b.btnTabletLens, 0)
+            for (i in 0 until b.controlesCapa.childCount) {
+                val v = b.controlesCapa.getChildAt(i) as? TextView ?: continue
+                v.textSize = 12f
+                v.gravity = Gravity.CENTER
+                v.setPadding(0, 0, 0, 0)
+                v.layoutParams = LinearLayout.LayoutParams(56.dp, 48.dp).apply {
+                    if (i > 0) marginStart = 3.dp
+                }
+            }
+            // 8) El botón de la foto, a la esquina derecha de abajo del monitor (Jorge, 29/10).
+            (b.btnPhoto.layoutParams as? FrameLayout.LayoutParams)?.let {
+                it.gravity = Gravity.BOTTOM or Gravity.END
+                it.bottomMargin = 10.dp
+                it.marginEnd = 10.dp
+                b.btnPhoto.layoutParams = it
+            }
         }
     }
 
@@ -2122,7 +2195,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 // En el celular el alto es poco: la ventana se acota y los seis ajustes se
                 // alcanzan desplazando (antes los últimos quedaban cortados sin poder llegar).
                 val altoPantalla = resources.displayMetrics.heightPixels
-                ventana.setLayout((anchoPantalla * 0.42f).toInt(), (altoPantalla * 0.86f).toInt())
+                // En vertical (9:16) la pantalla es angosta: se le da casi todo el ancho, si no la
+                // ventana abría de 155 dp y no servía para nada (Jorge, 29/10).
+                val ancho = if (vertical) (anchoPantalla * 0.92f).toInt() else (anchoPantalla * 0.42f).toInt()
+                ventana.setLayout(ancho, (altoPantalla * 0.86f).toInt())
             } else {
                 ventana.setLayout(
                     (anchoPantalla * 0.46f).toInt(),
@@ -2783,9 +2859,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 val tile = SourceTileView(this)
                 // Las tarjetas siguen la forma del lienzo (en Modo Studio vertical van a 3:4).
                 tile.modoAspecto(aspectoFuente)
-                // Con 6 cámaras en una fila hacen falta letras más chicas. En el celular las
-                // tarjetas ahora son grandes (2 por fila), así que usan el tamaño normal.
-                tile.modoCompacto(modoStudio && studioVertical)
+                // Con 6 cámaras en una fila hacen falta letras más chicas; en el celular vertical
+                // las tarjetas son angostas y también (Jorge, 29/10: «sí caben si son más chicos»).
+                tile.modoCompacto((modoStudio && studioVertical) || (esPantallaCelular() && vertical))
                 if (index == LocalCam.SLOT) {
                     tile.setup(index) { onTileTap(LocalCam.SLOT) }
                     tile.setEstadoLocal(localCam.encendida)
