@@ -2023,9 +2023,27 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             // 1) Barra superior que quepa: los seis chips se reparten el ancho.
             b.imgLogo.visibility = View.GONE
             b.audioMeter.visibility = View.GONE
-            b.txtTimer.visibility = View.GONE
             b.liveDot.visibility = View.GONE
             b.txtLive.visibility = View.GONE
+            // El cronómetro de grabación/emisión SÍ se queda en vertical, pegado a «Conectar».
+            b.txtTimer.visibility = View.VISIBLE
+            b.txtTimer.textSize = 9f
+            b.txtTimer.includeFontPadding = false
+            b.txtTimer.gravity = Gravity.CENTER
+            (b.txtTimer.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.width = 38.dp
+                it.height = 38.dp
+                it.weight = 0f
+                it.marginStart = 3.dp
+                b.txtTimer.layoutParams = it
+            }
+            // «Rec» un poco más angosto para que todo siga entrando en la misma línea.
+            (b.btnRecord.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.width = 84.dp
+                it.height = 38.dp
+                it.marginStart = 5.dp
+                b.btnRecord.layoutParams = it
+            }
             b.btnRecord.text = "Rec"
             for (chip in listOf(
                 b.btnSettings, b.btnPlantillas, b.btnTransiciones,
@@ -2202,14 +2220,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 b.btnSettings, b.btnPlantillas, b.btnTransiciones,
                 b.btnOrientacion, b.btnAudio, b.btnFacebook
             )) {
-                // 9 sp y sin espaciado extra: así «Ajustes» entra completo en el ancho que queda.
-                chip.textSize = 9f
+                // Con el cronómetro en la misma línea queda poco ancho: 8,7 sp y sin espaciado
+                // extra para que «Ajustes» entre completo.
+                chip.textSize = 8.7f
                 chip.gravity = Gravity.CENTER
                 chip.setPadding(0, 0, 0, 0)
                 chip.includeFontPadding = false
                 chip.letterSpacing = 0f
                 chip.layoutParams = LinearLayout.LayoutParams(0, 38.dp, 1f).apply {
-                    marginStart = 3.dp
+                    marginStart = 2.dp
                 }
             }
             // «Conectar» es la etiqueta más larga: se le da un poco más de ancho para que se lea
