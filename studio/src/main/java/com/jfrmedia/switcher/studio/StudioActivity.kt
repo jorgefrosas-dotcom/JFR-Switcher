@@ -6602,7 +6602,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         dialog.window?.let { ventana ->
             val ancho = resources.displayMetrics.widthPixels
             val anchoFijo = if (esPantallaCelular() && vertical) {
-                (ancho * 0.92f).toInt()
+                // En vertical la ventana se limita al ancho del QR: el texto se acomoda solo y no
+                // se estira por una línea larga (Jorge, 29/10).
+                minOf(210.dp, (ancho * 0.92f).toInt())
             } else {
                 minOf(360.dp, (ancho * 0.75f).toInt())
             }
