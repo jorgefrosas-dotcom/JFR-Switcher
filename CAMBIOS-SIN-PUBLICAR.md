@@ -12,6 +12,9 @@
 
 ## Pendiente de publicar
 
+- **Celular: tarjetas más grandes, 2 por fila (29/10):** la columna de fuentes pasó de 3 a **2
+  tarjetas por fila** (cámaras, overlays y medios) y recuperaron el **tamaño de letra normal** (ya no
+  el compacto). Para ver el resto se desliza la columna, como antes.
 - **Ventana «Conectar cámaras», segunda vuelta (29/10):** quedó **compacta y ajustada al contenido**:
   ancho fijo de **360 dp** (75 % de la pantalla como tope) para que la instrucción quepa en **una sola
   línea**, **alto según el contenido** (termina donde termina el botón), **«Listo» ya no ocupa todo el
