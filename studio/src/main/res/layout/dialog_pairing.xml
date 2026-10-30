@@ -114,18 +114,20 @@
                     android:text="Conectadas: 0 / 6"
                     android:textColor="@color/text_primary"
                     android:textSize="10sp" />
+
+                <!-- El botón va aquí, debajo del contador: así la ventana no crece a lo alto. -->
+                <TextView
+                    android:id="@+id/btnClose"
+                    style="@style/PillButton.Accent"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:minWidth="120dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:text="Listo"
+                    android:textSize="11sp" />
             </LinearLayout>
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/btnClose"
-            style="@style/PillButton.Accent"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="12dp"
-            android:minWidth="140dp"
-            android:text="Listo"
-            android:textSize="12sp" />
     </LinearLayout>
 </ScrollView>

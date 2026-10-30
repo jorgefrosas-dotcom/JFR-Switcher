@@ -2573,8 +2573,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      */
     /** En vertical las tarjetas son verticales (9:16) y entran más por fila. */
     private fun columnasFuentes(): Int = when {
-        // En celular la columna es más ancha (3 tarjetas) y el visor sigue limitado por el alto.
-        esPantallaCelular() && !vertical -> 3
+        // En celular la columna es más ancha: 2 tarjetas por fila, más grandes. Para ver el resto se
+        // desliza la columna (pedido de Jorge, 29/10).
+        esPantallaCelular() && !vertical -> 2
         // Modo Studio en 9:16: las 6 cámaras en una sola fila, con tarjetas chicas.
         modoStudio && studioVertical -> 6
         // Modo Studio en 16:9: 4 por fila.
@@ -2638,9 +2639,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 val tile = SourceTileView(this)
                 // Las tarjetas siguen la forma del lienzo (en Modo Studio vertical van a 3:4).
                 tile.modoAspecto(aspectoFuente)
-                // Con 6 cámaras en una fila hacen falta letras más chicas, y en el celular la
-                // tarjeta es chica siempre.
-                tile.modoCompacto((modoStudio && studioVertical) || esPantallaCelular())
+                // Con 6 cámaras en una fila hacen falta letras más chicas. En el celular las
+                // tarjetas ahora son grandes (2 por fila), así que usan el tamaño normal.
+                tile.modoCompacto(modoStudio && studioVertical)
                 if (index == LocalCam.SLOT) {
                     tile.setup(index) { onTileTap(LocalCam.SLOT) }
                     tile.setEstadoLocal(localCam.encendida)
