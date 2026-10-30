@@ -12,10 +12,15 @@
 
 ## Pendiente de publicar
 
-- **Marco naranja de «en programa» (29/10, tablet y celular, estándar y Modo Studio):** la tarjeta de
-  la **cámara**, del **overlay** y del **medio** que están al aire llevan un marco naranja de 3 dp
-  (`bg_marco_programa`), para verlas de un golpe. Se dibuja como `foreground` para no pelear con el
-  fondo de capa A/B. En Modo Studio manda la escena del **monitor de programa**, no la del preview.
+- **Ventana «Conectar cámaras» rehacida (29/10):** el **QR va primero y grande** (148 dp) en su propia
+  columna; a la derecha la **IP en una sola línea a 13 sp**, el puerto, «Copiar IP» y «Conectadas: 0/6».
+  **Se quitó el logo**, los textos bajaron a 10 sp y la ventana ahora tiene **ancho propio** (62 % de la
+  pantalla o 560 dp) y alto según el contenido, con `ScrollView` por si algún día no cabe. Antes la IP
+  salía cortada y el QR ni aparecía.
+- **Marco naranja de «en programa» (tablet y celular, estándar y Modo Studio):** la tarjeta de la
+  **cámara**, del **overlay** y del **medio** que están al aire llevan un marco naranja de 3 dp
+  (`bg_marco_programa`), como `foreground` para no pelear con el fondo de capa A/B. En Modo Studio
+  manda la escena del **monitor de programa**.
 - **Barra superior estandarizada:** Ajustes, Plant., Trans., 16:9, Audio y **Conectar** (antes
   «Facebook») miden lo mismo (94 dp en tablet, 66 dp en celular, 34 dp de alto). El botón pasa a
   llamarse **Conectar** porque pronto servirá para más plataformas.
