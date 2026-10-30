@@ -109,6 +109,20 @@ class SourceTileView @JvmOverloads constructor(
         txtBadge.textSize = if (chico) 9f else 11f
     }
 
+    /**
+     * Tarjetas angostas (celular en vertical, 2 por fila): el nombre y el estado tienen que
+     * caber completos, así que van más chicos todavía.
+     */
+    fun modoMuyCompacto() {
+        txtName.textSize = 8f
+        txtStatus.textSize = 7f
+        txtNumber.textSize = 9f
+        txtBadge.textSize = 8f
+        // El nombre se lee completo; el estado se recorta con puntos si no entra.
+        txtName.maxLines = 1
+        txtStatus.maxLines = 1
+    }
+
     fun setup(index: Int, onClick: () -> Unit) {
         slotIndex = index
         txtNumber.text = (index + 1).toString()

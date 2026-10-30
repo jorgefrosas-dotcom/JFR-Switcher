@@ -1447,6 +1447,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private var txtMonitoreo: TextView? = null
     /** Botón de la cámara propia en la barra del celular (primero en vertical). */
     private var chipCamaraCelular: ImageView? = null
+    /** Tarjeta donde vive la info del sistema, debajo del monitor (vertical). */
+    private var cajaInfo: LinearLayout? = null
 
     /**
      * En el celular la lista de fuentes es larguísima (6 cámaras + tablet + overlays + medios) y
@@ -2042,24 +2044,39 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             aplicarSeccionFuentes()
 
             // 5) Aquí la barra no está dentro del visor, así que la flecha de colapsar no hace
-            //    falta (Jorge, 29/10). Y el monitoreo del sistema va DEBAJO del monitor.
+            //    falta (Jorge, 29/10). El botón de audio tampoco: las ondas ya están fijas abajo.
             btnColapsarBarra?.visibility = View.GONE
+            chipAudioIcono?.visibility = View.GONE
+            // La info del sistema va en su propia tarjeta, con aire (Jorge, 29/10).
+            val caja = cajaInfo ?: LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundResource(R.drawable.bg_chip)
+                setPadding(9.dp, 6.dp, 9.dp, 6.dp)
+            }.also { cajaInfo = it }
             val monitor = txtMonitoreo ?: TextView(this).apply {
-                textSize = 9f
-                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
-                setPadding(6.dp, 2.dp, 6.dp, 3.dp)
+                textSize = 10f
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
             }.also { txtMonitoreo = it }
-            // Se coloca siempre justo debajo del visor (no al final: el audio va después).
             (monitor.parent as? ViewGroup)?.removeView(monitor)
-            val trasVisor = (b.panelPrograma.indexOfChild(b.canvasHost) + 1).coerceAtLeast(0)
-            b.panelPrograma.addView(
+            caja.removeAllViews()
+            caja.addView(
                 monitor,
-                trasVisor,
                 LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 )
             )
+            (caja.parent as? ViewGroup)?.removeView(caja)
+            val trasVisor = (b.panelPrograma.indexOfChild(b.canvasHost) + 1).coerceAtLeast(0)
+            b.panelPrograma.addView(
+                caja,
+                trasVisor,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(6.dp, 6.dp, 6.dp, 6.dp) }
+            )
+            caja.visibility = View.VISIBLE
             monitor.visibility = View.VISIBLE
 
             // 6) Las ondas de audio ocupan el espacio libre debajo del monitor (Jorge, 29/10).
@@ -2069,13 +2086,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     (audio.parent as? ViewGroup)?.removeView(audio)
                     b.panelPrograma.addView(
                         audio,
-                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 0.42f)
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 0.34f)
                     )
                 } else {
                     (audio.layoutParams as? LinearLayout.LayoutParams)?.let {
                         it.width = ViewGroup.LayoutParams.MATCH_PARENT
                         it.height = 0
-                        it.weight = 0.42f
+                        it.weight = 0.34f
                         audio.layoutParams = it
                     }
                 }
@@ -2878,6 +2895,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 // Con 6 cámaras en una fila hacen falta letras más chicas; en el celular vertical
                 // las tarjetas son angostas y también (Jorge, 29/10: «sí caben si son más chicos»).
                 tile.modoCompacto((modoStudio && studioVertical) || (esPantallaCelular() && vertical))
+                if (esPantallaCelular() && vertical) tile.modoMuyCompacto()
                 if (index == LocalCam.SLOT) {
                     tile.setup(index) { onTileTap(LocalCam.SLOT) }
                     tile.setEstadoLocal(localCam.encendida)
