@@ -939,6 +939,27 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun nombreCamaraTablet(): String =
         "Tablet · " + (if (localCam.frontal) "frontal" else "trasera")
 
+    /**
+     * Toque del botón de la cámara propia en el celular: si está apagada la enciende y, si ya
+     * está encendida, **rota entre frontal y trasera** (Jorge, 29/10).
+     */
+    private fun tocarCamaraPropia() {
+        if (!localCam.encendida) {
+            encenderCamaraTablet()
+            return
+        }
+        if (localCam.cambiarCamara(!localCam.frontal)) {
+            localCam.track?.let { pista ->
+                adjuntar(LocalCam.SLOT, pista)
+                tiles.getOrNull(LocalCam.SLOT)?.bindLocal(pista, nombreCamaraTablet())
+            }
+            actualizarBotonTablet()
+            toast(if (localCam.frontal) "Cámara frontal" else "Cámara trasera")
+        } else {
+            toast("No pude cambiar de cámara en este equipo")
+        }
+    }
+
     /** Enciende la cámara local (solo horizontal) y la deja lista para A o B. */
     private fun encenderCamaraTablet() {
         encenderLocal(localCam, LocalCam.SLOT, "Tablet")
@@ -2148,9 +2169,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 setPadding(14.dp, 12.dp, 14.dp, 12.dp)
                 setColorFilter(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
                 layoutParams = LinearLayout.LayoutParams(56.dp, 48.dp)
-                setOnClickListener { b.btnTabletLens.performClick() }
-                setOnLongClickListener { b.btnTabletLens.performLongClick() }
+                setOnClickListener { tocarCamaraPropia() }
+                setOnLongClickListener { apagarCamaraTablet(); true }
             }.also { chipCamaraCelular = it }
+            b.btnTabletLens.visibility = View.GONE
             (chipCamara.parent as? ViewGroup)?.removeView(chipCamara)
             b.controlesCapa.addView(chipCamara, 0)
             chipCamara.layoutParams = LinearLayout.LayoutParams(56.dp, 48.dp)
@@ -2933,12 +2955,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // En horizontal se agrega la cámara de la propia tablet como 7ª fuente. En Modo Studio
         // también (ahí la tablet sí puede usarla), sea 9:16 o 16:9.
         // En vertical de tablet no hay cámara local; en el celular sí (es su propia cámara).
-        // En el celular se suman las DOS cámaras del equipo: 6 remotas + trasera + frontal.
-        val total = when {
-            esPantallaCelular() -> 8
-            vertical && !modoStudio -> 6
-            else -> 7
-        }
+        // 7 fuentes: 6 cámaras remotas + la cámara del equipo (que rota entre frontal y trasera).
+        val total = if (vertical && !modoStudio && !esPantallaCelular()) 6 else 7
         // En celular las pestañas necesitan saber dónde terminan las cámaras y empiezan los grupos.
         filasCamaras = (total + cols - 1) / cols
 
