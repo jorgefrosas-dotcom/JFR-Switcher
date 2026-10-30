@@ -2222,7 +2222,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )) {
                 // Con el cronómetro en la misma línea queda poco ancho: 8,7 sp y sin espaciado
                 // extra para que «Ajustes» entre completo.
-                chip.textSize = 8.7f
+                chip.textSize = 9.2f
                 chip.gravity = Gravity.CENTER
                 chip.setPadding(0, 0, 0, 0)
                 chip.includeFontPadding = false
@@ -2235,6 +2235,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             // el separador se quita: ese espacio se reparte entre los botones.
             b.btnFacebook.text = "Conect."
             b.separadorBarra.visibility = View.GONE
+            // El hueco flexible entre los chips y el cronómetro también se reparte: así los
+            // botones quedan más anchos y la barra no tiene espacio muerto (Jorge, 29/10).
+            b.espacioBarra.visibility = View.GONE
 
             // 8) El botón de la foto, a la esquina derecha de abajo del monitor (Jorge, 29/10).
             (b.btnPhoto.layoutParams as? FrameLayout.LayoutParams)?.let {
