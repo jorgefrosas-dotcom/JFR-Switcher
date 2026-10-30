@@ -2144,6 +2144,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
             // 5) Aquí la barra no está dentro del visor, así que la flecha de colapsar no hace
             //    falta (Jorge, 29/10). El botón de audio tampoco: las ondas ya están fijas abajo.
+            // En vertical NO hay flecha para volver a mostrarla: si venía oculta del horizontal,
+            // aquí la barra se fuerza visible (Jorge, 29/10).
+            if (!barraVisible) ponerBarraVisible(true)
             btnColapsarBarra?.visibility = View.GONE
             chipAudioIcono?.visibility = View.GONE
             // La info del sistema va en su propia tarjeta, con aire (Jorge, 29/10).
