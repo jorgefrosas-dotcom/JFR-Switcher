@@ -494,6 +494,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         aplicarAudioGuardado()
         }
         aplicarOrientacion()
+        // En el celular, si quedó guardado el lienzo 9:16 la app abre directo en vertical.
+        if (esPantallaCelular()) {
+            requestedOrientation = if (vertical) {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+            }
+        }
         // Los últimos medios de la sesión anterior: ya con la parrilla y la orientación listas.
         cargarMediosRecientes()
 
@@ -558,6 +566,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         super.onConfigurationChanged(newConfig)
         // La tablet gira: al pasar a vertical entra el Modo Studio y al volver a horizontal sale.
         evaluarModoStudio()
+        // En el celular, al girar (por el botón 9:16) hay que reacomodar con las medidas nuevas.
+        if (esPantallaCelular() && !modoStudio) {
+            uiHandler.post {
+                runCatching {
+                    aplicarOrientacion()
+                    if (!vertical) aplicarModoCelular()
+                }
+            }
+        }
     }
 
     // ------------------------------------------------------- versión y actualizaciones
@@ -1534,7 +1551,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * El botón vive en el visor, así que sigue a la mano con la barra escondida.
      */
     private fun montarBotonColapsar() {
-        if (!esPantallaCelular() || vertical) return
+        if (!esPantallaCelular()) return
         val boton = btnColapsarBarra ?: TextView(this).apply {
             textSize = 24f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -1646,7 +1663,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * nada en esa dirección, así el aviso nunca miente. Tocar un triángulo también desliza.
      */
     private fun montarFlechasBarra() {
-        if (!esPantallaCelular() || vertical) return
+        if (!esPantallaCelular()) return
         fun flecha(texto: String): TextView = TextView(this).apply {
             this.text = texto
             textSize = 13f
@@ -1700,7 +1717,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * para que siempre se vean.
      */
     private fun montarChipsIconoCelular() {
-        if (!esPantallaCelular() || vertical) return
+        if (!esPantallaCelular()) return
         // El chip de texto «♪ Audio» de la tablet se oculta aquí: lo reemplaza el icono.
         btnVistaControles?.visibility = View.GONE
         chipImagenCelular?.visibility = View.GONE
@@ -1731,13 +1748,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
 
     private fun acomodarChipsCelular() {
-        if (!esPantallaCelular() || vertical) return
+        if (!esPantallaCelular()) return
         montarChipsIconoCelular()
     }
 
     /** Pone los dos botones de icono en la barra (antes eran un chip de texto «Img.»). */
     private fun asegurarChipImagen() {
-        if (!esPantallaCelular() || vertical) return
+        if (!esPantallaCelular()) return
         montarChipsIconoCelular()
     }
 
@@ -1789,7 +1806,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Ajusta el diseño para celular: más visor, controles pequeños y ajustes en ventana. */
     private fun aplicarModoCelular() {
-        if (vertical) return
+        if (!esPantallaCelular()) return
+        // Con el lienzo 9:16 el teléfono se pone en vertical y el acomodo es otro.
+        if (vertical) {
+            aplicarModoCelularVertical()
+            return
+        }
         runCatching {
             // 1) Columna de fuentes más ancha (3 tarjetas por fila) y visor pegado a la derecha con
             //    su tamaño intacto: el ancho que le sobraba al lienzo se lo queda la columna.
@@ -1890,6 +1912,100 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             montarBotonColapsar()
             // Triángulos de «se desliza» a los dos lados de la barra.
             montarFlechasBarra()
+        }
+    }
+
+    /**
+     * Celular con el lienzo en **9:16**: la pantalla va en vertical y manda el visor.
+     *
+     * Arriba una barra sin adornos (logo, medidor y cronómetro fuera: en vertical no caben), el
+     * visor 9:16 con todo el ancho, la columna de fuentes como **tira abajo** (128 dp, se desliza)
+     * y los controles flotando encima del visor, igual que en horizontal.
+     */
+    private fun aplicarModoCelularVertical() {
+        runCatching {
+            // 1) Barra superior que quepa: los seis chips se reparten el ancho.
+            b.imgLogo.visibility = View.GONE
+            b.audioMeter.visibility = View.GONE
+            b.txtTimer.visibility = View.GONE
+            b.liveDot.visibility = View.GONE
+            b.txtLive.visibility = View.GONE
+            b.btnRecord.text = "Rec"
+            for (chip in listOf(
+                b.btnSettings, b.btnPlantillas, b.btnTransiciones,
+                b.btnOrientacion, b.btnAudio, b.btnFacebook
+            )) {
+                chip.textSize = 8f
+                chip.gravity = Gravity.CENTER
+                chip.maxLines = 1
+                chip.setPadding(0, 0, 0, 0)
+                chip.layoutParams = LinearLayout.LayoutParams(0, 30.dp, 1f).apply {
+                    marginStart = 3.dp
+                }
+            }
+            // La cabecera «CÁMARAS 0/6» no hace falta: en vertical manda la fila de pestañas.
+            (b.txtCamCount.parent as? View)?.visibility = View.GONE
+
+            // 2) Dos columnas, como en horizontal pero angostas: las tarjetas a la izquierda
+            //    (2 por fila) y el monitor de programa arriba a la derecha (pedido de Jorge, 29/10).
+            b.cuerpo.orientation = LinearLayout.HORIZONTAL
+            b.slotIzquierdo.visibility = View.GONE
+            (b.panelPrograma.parent as? ViewGroup)?.removeView(b.panelPrograma)
+            (b.panelFuentes.parent as? ViewGroup)?.removeView(b.panelFuentes)
+            b.cuerpo.addView(
+                b.panelFuentes,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.46f)
+            )
+            b.cuerpo.addView(
+                b.panelPrograma,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.54f)
+            )
+            (b.panelFuentes.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.width = 158.dp
+                it.height = ViewGroup.LayoutParams.MATCH_PARENT
+                it.weight = 0f
+            }
+            (b.panelPrograma.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.width = 0
+                it.height = ViewGroup.LayoutParams.MATCH_PARENT
+                it.weight = 1f
+            }
+            // El visor se queda arriba a la derecha y con su forma 9:16 (alto según el ancho).
+            (b.canvasHost.layoutParams as? LinearLayout.LayoutParams)?.let {
+                val anchoPanel = resources.displayMetrics.widthPixels - 158.dp - 30.dp
+                it.width = ViewGroup.LayoutParams.MATCH_PARENT
+                // 9:16 exacto y pegado arriba: el monitor no se estira a todo el alto.
+                it.height = (anchoPanel * 16f / 9f).toInt()
+                it.weight = 0f
+                it.gravity = Gravity.TOP or Gravity.END
+            }
+
+            // 3) Los botones van al fondo de la pantalla, a todo lo ancho (no sobre el visor).
+            val contenido = b.contenido
+            (b.slotControles.parent as? ViewGroup)?.removeView(b.slotControles)
+            contenido.addView(
+                b.slotControles,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+            b.slotControles.visibility = View.VISIBLE
+            b.slotControles.setBackgroundResource(R.drawable.bg_barra_flotante)
+            b.slotControles.setPadding(6.dp, 4.dp, 6.dp, 4.dp)
+            (b.btnPhoto.layoutParams as? FrameLayout.LayoutParams)?.let {
+                it.bottomMargin = 12.dp
+                b.btnPhoto.layoutParams = it
+            }
+
+            // 4) Pestañas, iconos, flechas y aviso del visor.
+            montarTabsFuentes()
+            compactarControlesCelular()
+            asegurarChipImagen()
+            montarBotonColapsar()
+            montarFlechasBarra()
+            achicarAvisoCanvas()
+            aplicarSeccionFuentes()
         }
     }
 
@@ -2575,7 +2691,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun columnasFuentes(): Int = when {
         // En celular la columna es más ancha: 2 tarjetas por fila, más grandes. Para ver el resto se
         // desliza la columna (pedido de Jorge, 29/10).
-        esPantallaCelular() && !vertical -> 2
+        esPantallaCelular() -> 2
         // Modo Studio en 9:16: las 6 cámaras en una sola fila, con tarjetas chicas.
         modoStudio && studioVertical -> 6
         // Modo Studio en 16:9: 4 por fila.
@@ -3932,6 +4048,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         vertical = nuevoVertical
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
             .putBoolean(CLAVE_VERTICAL, vertical).apply()
+        // En el celular el 9:16 pone la pantalla en vertical (y el 16:9 la devuelve a horizontal):
+        // así el lienzo vertical llena la pantalla en vez de quedar chico dentro de un marco apaisado.
+        if (esPantallaCelular()) {
+            requestedOrientation = if (vertical) {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+            }
+        }
         aplicarOrientacion()
         toast(
             if (vertical) {
@@ -5019,6 +5144,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         ajustarLienzo()
         b.canvas.requestRender()
         refreshOverlayTiles()
+        // En el celular el acomodo (horizontal o vertical 9:16) lo fija aplicarModoCelular().
+        if (esPantallaCelular()) aplicarModoCelular()
     }
 
     /**
@@ -5078,6 +5205,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     private fun reacomodarCuerpo() {
+        // En el celular el acomodo lo manda aplicarModoCelular() (horizontal o vertical 9:16).
+        if (esPantallaCelular()) return
         val cuerpo = b.cuerpo
         cuerpo.removeAllViews()
         // Los dos diseños de siempre (horizontal y 9:16) acomodan el cuerpo en fila. El Modo
@@ -5160,7 +5289,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         )
         for (v in botones) (v.parent as? ViewGroup)?.removeView(v)
 
-        if (vertical) {
+        if (vertical && !esPantallaCelular()) {
             // Dos columnas de ajustes: la columna es más ancha y así queda sitio para el monitor.
             caja.orientation = LinearLayout.VERTICAL
             b.filaVideo.removeAllViews()
@@ -5653,7 +5782,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         )
         for (v in botones) (v.parent as? ViewGroup)?.removeView(v)
 
-        if (vertical) {
+        // En el celular (también en vertical 9:16) los controles van en una fila que flota
+        // sobre el visor; la columna de la izquierda es cosa de la tablet.
+        if (vertical && !esPantallaCelular()) {
             b.slotIzquierdo.removeAllViews()
             // La cabecera («PROGRAMA» + 9:16 y resolución) se queda visible: ahora el visor
             // va dentro del cuerpo y no flota encima de la barra superior.
