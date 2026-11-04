@@ -8,7 +8,8 @@
 > Referencia: la última versión publicada está en
 > https://github.com/jorgefrosas-dotcom/JFR-Switcher/releases/latest
 
-**Última versión publicada:** 0.2.8 (29/10/2026) — «Diseño móvil: el celular como switcher de mano»
+**Última versión publicada:** 0.2.9 (04/11/2026) — «La cámara ya no se congela al cambiar a 9:16»
 
-Sin cambios pendientes: el 0.2.8 se publicó con todo lo del diseño móvil (celular 9:16 y horizontal)
-y los botones nuevos de la barra. Notas completas en `docs/NOTAS-0.2.8.md`.
+Sin cambios pendientes: el 0.2.9 se publicó con el arreglo de la cámara (sin reinicio de captura,
+reconexión automática y vista previa limpia) y el botón de frontal/trasera en la barra del 9:16 del
+celular. Notas completas en `docs/NOTAS-0.2.9.md`.

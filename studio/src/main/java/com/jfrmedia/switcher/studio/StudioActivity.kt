@@ -870,7 +870,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * Sustituye a las opciones del menú.
      */
     private fun ciclarLenteTablet() {
-        if (vertical) {
+        // En la tablet la cámara local no existe en vertical; en el celular sí (9:16).
+        if (vertical && !esPantallaCelular()) {
             toast("La cámara de la tablet solo está disponible en modo horizontal")
             return
         }
@@ -1114,7 +1115,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * tablet (no está disponible) y la barra es más angosta, así que se acortan etiquetas.
      */
     private fun ajustarBarraPorOrientacion() {
-        b.btnTabletLens.visibility = if (vertical) View.GONE else View.VISIBLE
+        // En la tablet vertical la cámara propia no existe; en el celular 9:16 sí, y ahí el
+        // botón se queda (Jorge, 4/11: quiere cambiar frontal/trasera también en vertical).
+        b.btnTabletLens.visibility =
+            if (vertical && !esPantallaCelular()) View.GONE else View.VISIBLE
         b.btnPlantillas.text = if (vertical) "Plant." else "Plantillas"
         b.btnTransiciones.text = if (vertical) "Trans." else "Transiciones"
     }
@@ -2211,24 +2215,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 it.weight = 0.58f
             }
 
-            // 7) La cámara propia, PRIMERA en la barra. Se usa un botón de icono propio (como los de
-            //    imagen y audio) para que no lo empujen los demás al rearmar la fila.
-            val chipCamara = chipCamaraCelular ?: ImageView(this).apply {
-                setImageResource(R.drawable.ic_camera)
-                contentDescription = "Cámara de este equipo"
-                isClickable = true
-                setBackgroundResource(R.drawable.bg_pill_ghost)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(14.dp, 12.dp, 14.dp, 12.dp)
-                setColorFilter(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
-                layoutParams = LinearLayout.LayoutParams(56.dp, 48.dp)
-                setOnClickListener { tocarCamaraPropia() }
-                setOnLongClickListener { apagarCamaraTablet(); true }
-            }.also { chipCamaraCelular = it }
-            b.btnTabletLens.visibility = View.GONE
-            (chipCamara.parent as? ViewGroup)?.removeView(chipCamara)
-            b.controlesCapa.addView(chipCamara, 0)
-            chipCamara.layoutParams = LinearLayout.LayoutParams(56.dp, 48.dp)
+            // 7) La cámara propia, PRIMERA en la barra, con el MISMO botón de la barra horizontal
+            //    («Off / F / T»): Jorge lo pidió el 4/11 para cambiar entre frontal y trasera
+            //    también en 9:16. El chip de icono que había antes se retira (no se entendía).
+            b.btnTabletLens.visibility = View.VISIBLE
+            (b.btnTabletLens.parent as? ViewGroup)?.removeView(b.btnTabletLens)
+            b.controlesCapa.addView(b.btnTabletLens, 0)
+            b.btnTabletLens.layoutParams = LinearLayout.LayoutParams(56.dp, 48.dp)
+            chipCamaraCelular?.let { (it.parent as? ViewGroup)?.removeView(it) }
+            actualizarBotonTablet()
             for (i in 0 until b.controlesCapa.childCount) {
                 val v = b.controlesCapa.getChildAt(i) as? TextView ?: continue
                 v.textSize = 12f

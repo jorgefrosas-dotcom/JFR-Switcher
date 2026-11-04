@@ -115,6 +115,15 @@ class CamEngine(contexto: Context, private val escucha: Escucha) {
     private var socket: FramedSocket? = null
     private var hiloLectura: Thread? = null
 
+    // ---- Reconexión automática si el enlace se cae (Wi-Fi, app en segundo plano, etc.) ----
+    /** Última dirección a la que se conectó bien: es la que se reintenta. */
+    private var ultimaIp: String? = null
+    private var ultimoPuerto: Int = Proto.DEFAULT_PORT
+    private var reintentos = 0
+    /** true si el usuario pulsó «Desconectar»: entonces no se reintenta. */
+    private var cortePorUsuario = false
+    private var tareaReconexion: Runnable? = null
+
     // ---- WebRTC ----
     private var egl: EglBase? = null
     private var factory: PeerConnectionFactory? = null
@@ -174,7 +183,7 @@ class CamEngine(contexto: Context, private val escucha: Escucha) {
      * Abre el canal con la tablet. [puerto] es el que trae el QR (`jfr://IP:PUERTO`): puede
      * no ser el 8787 si en la tablet estaba ocupado. Sin puerto se usa el de siempre.
      */
-    fun conectar(ipTexto: String, puerto: Int = Proto.DEFAULT_PORT) {
+    fun conectar(ipTexto: String, puerto: Int = Proto.DEFAULT_PORT, automatico: Boolean = false) {
         val ip = ipTexto.trim()
         if (ip.isEmpty()) {
             fallar("Escribe la IP de la tablet")
@@ -185,11 +194,20 @@ class CamEngine(contexto: Context, private val escucha: Escucha) {
             fallar("El puerto $puerto no es válido")
             return
         }
+        if (!automatico) {
+            // Conexión pedida por el usuario: se cancela cualquier reintento pendiente y
+            // se vuelve a contar desde cero.
+            cortePorUsuario = false
+            reintentos = 0
+            cancelarReconexion()
+        }
+        ultimaIp = ip
+        ultimoPuerto = puerto
 
         // Si quedó un canal a medias de un intento anterior, se tira antes de abrir otro.
         if (socket != null) cerrarCanal()
 
-        cambiarEstado(EstadoEnlace.CONECTANDO, "Conectando…")
+        cambiarEstado(EstadoEnlace.CONECTANDO, if (automatico) "Reconectando…" else "Conectando…")
         hiloRed.execute {
             var porSiFalla: FramedSocket? = null
             try {
@@ -224,6 +242,7 @@ class CamEngine(contexto: Context, private val escucha: Escucha) {
                 hiloPrincipal.post {
                     if (estado == EstadoEnlace.CONECTANDO) {
                         fallar("No se pudo conectar a $ip:$puerto — $detalle")
+                        programarReconexion()
                     }
                 }
             }
@@ -233,13 +252,48 @@ class CamEngine(contexto: Context, private val escucha: Escucha) {
     /** Cierra el canal por decisión del usuario (o porque la tablet mandó BYE). */
     fun desconectar(motivo: String? = null) {
         val habiaCanal = estado == EstadoEnlace.CONECTANDO || estado == EstadoEnlace.CONECTADA
+        cortePorUsuario = true
+        cancelarReconexion()
         runCatching { socket?.send(Msg.builder(Proto.BYE).build()) }
         cerrarCanal()
         if (habiaCanal) cambiarEstado(EstadoEnlace.SIN_CONECTAR, motivo.orEmpty())
     }
 
+    /**
+     * Si el enlace se cayó solo (Wi-Fi, la tablet pasó a segundo plano, un corte del router),
+     * se reintenta la última dirección cada 3 s durante 2 minutos. Antes la app se quedaba en
+     * «Se perdió la conexión» con el último cuadro congelado y había que tocar «Conectar» a
+     * mano; en un evento eso es perder la cámara (Jorge, 4/11/2026).
+     */
+    private fun programarReconexion() {
+        if (cortePorUsuario || ultimaIp == null) return
+        if (reintentos >= MAX_REINTENTOS) {
+            L.w(TAG, "se agotaron los $MAX_REINTENTOS reintentos de conexión")
+            return
+        }
+        cancelarReconexion()
+        reintentos++
+        val tarea = Runnable {
+            if (!cortePorUsuario &&
+                estado != EstadoEnlace.CONECTADA && estado != EstadoEnlace.CONECTANDO
+            ) {
+                L.i(TAG, "reintento $reintentos de conexión con ${ultimaIp}:${ultimoPuerto}")
+                conectar(ultimaIp.orEmpty(), ultimoPuerto, automatico = true)
+            }
+        }
+        tareaReconexion = tarea
+        hiloPrincipal.postDelayed(tarea, RETARDO_RECONEXION_MS)
+    }
+
+    private fun cancelarReconexion() {
+        tareaReconexion?.let { hiloPrincipal.removeCallbacks(it) }
+        tareaReconexion = null
+    }
+
     /** Libera todo: cámara apagada, socket cerrado, WebRTC destruido. Idempotente. */
     fun liberar() {
+        cortePorUsuario = true
+        cancelarReconexion()
         // `cerrarCanal` ya suelta pista, surfaceHelper, fuente, capturer y PeerConnection.
         cerrarCanal()
         detenerTicker()
@@ -346,6 +400,7 @@ class CamEngine(contexto: Context, private val escucha: Escucha) {
         when (msg.type) {
             Proto.WELCOME -> {
                 indiceCamara = msg.int(Proto.K_INDEX, indiceCamara).coerceIn(1, 6)
+                reintentos = 0
                 cambiarEstado(EstadoEnlace.CONECTADA, "Cámara $indiceCamara")
                 arrancarWebRtc()
             }
@@ -366,21 +421,20 @@ class CamEngine(contexto: Context, private val escucha: Escucha) {
 
     /**
      * El switcher manda la orientación del lienzo al conectar (y si la cambia en vivo).
-     * La app se bloquea en esa orientación y reinicia la captura para que WebRTC
-     * recalcule la rotación de los cuadros: así el video sale vertical u horizontal
-     * igual que el lienzo.
+     * La app se bloquea en esa orientación; la captura **no** se reinicia.
+     *
+     * Antes se hacía `detenerCaptura()` + `arrancarCaptura()` a los 600 ms. Eso bloqueaba
+     * el hilo principal (stopCapture/startCapture esperan a Camera2), congelaba la vista
+     * previa y cortaba el video un segundo justo al cambiar a 9:16 (Jorge, 4/11/2026).
+     * No hace falta: al girar la Activity, WebRTC vuelve a calcular la rotación de cada
+     * cuadro por su cuenta —en el log se ve «rotación de cuadro: 90» 40 ms después del
+     * aviso, antes del viejo reinicio— y el switcher gira la imagen con ese dato.
      */
     private fun aplicarOrientacionLienzo(vertical: Boolean) {
         if (vertical == orientacionVertical) return
         orientacionVertical = vertical
-        L.i(TAG, "lienzo " + (if (vertical) "vertical" else "horizontal") + ": ajustando cámara")
+        L.i(TAG, "lienzo " + (if (vertical) "vertical" else "horizontal") + ": la app gira; la captura sigue")
         escucha.onOrientacion(vertical)
-        hiloPrincipal.postDelayed({
-            if (capturando) {
-                detenerCaptura()
-                arrancarCaptura(ajustes.preset)
-            }
-        }, 600)
     }
 
     private fun manejarComando(msg: Msg) {
@@ -917,12 +971,16 @@ class CamEngine(contexto: Context, private val escucha: Escucha) {
     private fun alPerderConexion() {
         cerrarCanal()
         cambiarEstado(EstadoEnlace.ERROR, "Se perdió la conexión con la tablet")
+        programarReconexion()
     }
 
     /** Suelta canal, cámara y PeerConnection pero conserva EglBase y la fábrica. */
     private fun cerrarCanal() {
         detenerTicker()
         detenerCaptura()
+        // Sin esto la vista previa se queda con el último cuadro y parece «congelada»
+        // aunque ya no hay enlace: se limpia para que el aviso «Sin señal» sea verdad.
+        runCatching { renderer?.clearImage() }
         apagarLinterna()
 
         val canal = socket
@@ -1021,6 +1079,10 @@ class CamEngine(contexto: Context, private val escucha: Escucha) {
         const val STREAM_VIDEO = "stream0"
         const val TIMEOUT_CONEXION_MS = 6000
         const val INTERVALO_STATS_MS = 2000L
+
+        /** Reintento de enlace: cada 3 s, hasta 40 veces (2 minutos). */
+        const val RETARDO_RECONEXION_MS = 3000L
+        const val MAX_REINTENTOS = 40
 
         /** `PeerConnectionFactory.initialize` solo debe correr una vez por proceso. */
         @Volatile
