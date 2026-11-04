@@ -188,9 +188,11 @@ class SourceTileView @JvmOverloads constructor(
 
     fun bind(session: CameraSession, track: VideoTrack) {
         ensureRenderer()
-        currentTrack?.removeSink(video)
+        // La pista puede llegar ya liberada si la sesión se cerró entre el aviso y este hilo
+        // (pasa al reconectar la cámara). Antes tronaba con «MediaStreamTrack has been disposed».
+        runCatching { currentTrack?.removeSink(video) }
         currentTrack = track
-        track.addSink(video)
+        runCatching { track.addSink(video) }
         video.visibility = View.VISIBLE
         txtHint.visibility = View.GONE
         txtName.text = session.name
@@ -203,9 +205,9 @@ class SourceTileView @JvmOverloads constructor(
      */
     fun bindLocal(track: VideoTrack, nombre: String) {
         ensureRenderer()
-        currentTrack?.removeSink(video)
+        runCatching { currentTrack?.removeSink(video) }
         currentTrack = track
-        track.addSink(video)
+        runCatching { track.addSink(video) }
         video.visibility = View.VISIBLE
         txtHint.visibility = View.GONE
         txtName.text = nombre
@@ -218,7 +220,7 @@ class SourceTileView @JvmOverloads constructor(
         txtName.text = nombre
         txtNumber.text = "T"
         if (!encendida) {
-            currentTrack?.removeSink(video)
+            runCatching { currentTrack?.removeSink(video) }
             currentTrack = null
             video.visibility = View.INVISIBLE
             txtHint.visibility = View.VISIBLE
@@ -251,7 +253,7 @@ class SourceTileView @JvmOverloads constructor(
     }
 
     fun clearSession() {
-        currentTrack?.removeSink(video)
+        runCatching { currentTrack?.removeSink(video) }
         currentTrack = null
         video.visibility = View.INVISIBLE
         txtHint.visibility = View.VISIBLE

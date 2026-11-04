@@ -729,8 +729,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     private fun onTrackReady(session: CameraSession, track: VideoTrack) {
+        // Si la sesión se cerró entre el aviso y este hilo, la pista ya está liberada y
+        // engancharla tronaba con «MediaStreamTrack has been disposed» (pasó al reconectar).
+        if (session.state == com.jfrmedia.switcher.studio.rtc.CamState.CLOSED) return
         val tile = tiles.getOrNull(session.slot) ?: return
-        tile.bind(session, track)
+        if (runCatching { tile.bind(session, track) }.isFailure) return
         if (camA == null && camB == null) {
             assignCamera(session.slot, 'A')
         } else if (camA == session.slot || camB == session.slot) {
@@ -7053,16 +7056,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Adjunta la pista a los dos monitores (preview y programa). */
     private fun adjuntar(slot: Int, track: VideoTrack) {
-        b.canvas.attachTrack(slot, track)
+        // Si la pista ya se liberó (sesión cerrada), no se puede enganchar: se ignora.
+        runCatching { b.canvas.attachTrack(slot, track) }
         // El monitor de programa solo se usa en Modo Studio. Fuera de él, engancharle la pista
         // duplicaba el trabajo por cada cámara (CPU altísima y, con ella, el programa se trababa).
-        if (modoStudio) monitorPrograma?.attachTrack(slot, track)
+        if (modoStudio) runCatching { monitorPrograma?.attachTrack(slot, track) }
     }
 
     /** Suelta la pista de los dos monitores. */
     private fun soltar(slot: Int, track: VideoTrack?) {
-        b.canvas.detachTrack(slot, track)
-        monitorPrograma?.detachTrack(slot, track)
+        runCatching { b.canvas.detachTrack(slot, track) }
+        runCatching { monitorPrograma?.detachTrack(slot, track) }
     }
 
     /** Para no repetir el aviso de que el diseño no cambia en medio de una sesión. */
