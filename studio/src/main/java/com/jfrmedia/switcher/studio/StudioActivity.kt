@@ -301,11 +301,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /**
      * Consumo en la etiqueta del visor:
-     * `PROGRAMA · CPU 34% · RAM 62% · 11.8 Mbps · 44°`
+     * `PROGRAMA · CPU 14% · RAM 62% · 11.8 Mbps · 44°`
      *
-     * CPU es la de **esta app** sumando sus hilos (puede pasar de 100 %: varios núcleos). RAM es la
-     * del sistema. La red es lo que **sube esta app**, o sea lo que cuesta el directo. La temperatura
-     * se lee del sensor térmico; si Android no lo expone, se usa la de la batería.
+     * **CPU es el de esta app, en % del equipo** (0–100): se mide sumando sus hilos y dividiendo
+     * entre los núcleos que tiene la tablet. Antes se mostraba "por núcleo" y pasaba de 100 % en
+     * reposo, que confundía (Jorge, 15/11: parecía que la tablet estaba al tope cuando en realidad
+     * usaba un núcleo de ocho). El detalle sin dividir queda en el registro cada 10 s.
+     * RAM es la del sistema. La red es lo que **sube esta app**, o sea lo que cuesta el directo. La
+     * temperatura se lee del sensor térmico; si Android no lo expone, se usa la de la batería.
      */
     private val medidorUso = object : Runnable {
         override fun run() {
@@ -317,6 +320,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             cpuAnteriorMs = cpuMs
             cpuAnteriorNs = ahoraNs
+            // `cpu` son "núcleos usados × 100"; el porcentaje del equipo lo reparte entre núcleos.
+            val nucleos = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+            val cpuEquipo = (cpu * 100 / nucleos).coerceIn(0L, 100L)
 
             val ramPct = runCatching {
                 val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
@@ -336,13 +342,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
             val temp = temperatura()
             val tempTexto = if (temp != null) "$temp°" else "—°"
-            cpuActual = cpu
+            cpuActual = cpuEquipo
             ramActual = ramPct
             mbpsActual = mbps
             tempActual = temp
             actualizarEstadoEquipo()
             val detalle = String.format(
-                Locale.US, "CPU %d%% · RAM %d%% · %.1f Mbps · %s", cpu, ramPct, mbps, tempTexto
+                Locale.US, "CPU %d%% · RAM %d%% · %.1f Mbps · %s", cpuEquipo, ramPct, mbps, tempTexto
             )
             b.txtEtiquetaPrograma.text = if (vertical) {
                 // En vertical la cabecera es estrecha: solo el nombre del visor (la
@@ -356,7 +362,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             txtMonitoreo?.text = if (redFloja) "⚠ $detalle" else detalle
             if (registro != null && ahoraNs - ultimoRegistroNs > 10_000_000_000L) {
                 ultimoRegistroNs = ahoraNs
-                anotar(String.format(Locale.US, "cpu %d%% · ram %d%% · %.1f Mbps · %s", cpu, ramPct, mbps, tempTexto))
+                anotar(
+                    String.format(
+                        Locale.US,
+                        "cpu %d%% del equipo (%.1f de %d nucleos) · ram %d%% · %.1f Mbps · %s",
+                        cpuEquipo, cpu / 100.0, nucleos, ramPct, mbps, tempTexto
+                    )
+                )
             }
             uiHandler.postDelayed(this, 2000)
         }
@@ -7487,11 +7499,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         for (v in botones) {
             (v.parent as? ViewGroup)?.removeView(v)
             recordarEstilo(v)
+            // 38 dp y letra de 12: con 32 dp y letra de 10 los botones quedaban chicos para el
+            // dedo en la tablet (Jorge, 15/11). A y B, además, con la letra más grande.
+            val esCapa = v.id == R.id.btnLayerA || v.id == R.id.btnLayerB
             v.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 32.dp
+                ViewGroup.LayoutParams.MATCH_PARENT, if (esCapa) 42.dp else 38.dp
             ).apply { topMargin = 4.dp }
             v.gravity = Gravity.CENTER
-            v.textSize = 10f
+            v.textSize = if (esCapa) 16f else 12f
             // Sin icono en la columna: con el icono, «Frontal» no cabe y sale «Fron…».
             if (v.id == R.id.btnTabletLens) v.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
             centro.addView(v)
@@ -7532,13 +7547,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         fun colocar(contenedor: LinearLayout, v: TextView) {
             (v.parent as? ViewGroup)?.removeView(v)
             recordarEstilo(v)
-            // Ancho natural: así se lee «PiP», «2 cam» y «Frontal» completos, y el bloque se
-            // pega hacia el centro donde está «Transicionar».
-            v.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, 36.dp
-            ).apply { marginStart = 5.dp }
+            // A y B son los que más se usan (eligen a qué capa va cada cámara): van más anchos,
+            // más altos y con la letra grande. Antes medían el ancho de su propia letra y en la
+            // tablet quedaban como los dos botones más chicos de la fila (Jorge, 15/11).
+            val esCapa = v.id == R.id.btnLayerA || v.id == R.id.btnLayerB
+            if (esCapa) {
+                v.layoutParams = LinearLayout.LayoutParams(56.dp, 46.dp).apply { marginStart = 5.dp }
+                v.textSize = 17f
+                v.setPadding(0, 0, 0, 0)
+            } else {
+                // El resto: ancho natural para que se lean «PiP», «2cam» y «Frontal» completos,
+                // y el mismo alto que A/B para que la fila se vea pareja.
+                v.layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 46.dp
+                ).apply { marginStart = 5.dp }
+                v.textSize = 13f
+            }
             v.gravity = Gravity.CENTER
-            v.textSize = 11f
             contenedor.addView(v)
         }
 
