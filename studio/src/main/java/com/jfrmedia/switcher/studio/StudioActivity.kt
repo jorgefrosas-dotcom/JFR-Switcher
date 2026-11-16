@@ -300,6 +300,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private var redAnteriorNs = 0L
     /** Muestra anterior de `/proc/stat`: [ticks totales, ticks ociosos] de la tablet entera. */
     private var statAnterior: LongArray? = null
+    /** Android negó `/proc/stat`: el total de la tablet no está disponible y no se reintenta. */
+    private var tabBloqueado = false
+    /** Android negó `/sys/class/thermal`: se usa la temperatura de la batería y no se reintenta. */
+    private var thermalBloqueado = false
 
     /**
      * Consumo en la etiqueta del visor:
@@ -325,10 +329,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             cpuAnteriorMs = cpuMs
             cpuAnteriorNs = ahoraNs
-            // `cpuPorNucleo` viene "por núcleo" (100 = un núcleo a tope); se reparte entre los núcleos
-            // para que 100 % sea el equipo completo.
+            // `cpuPorNucleo` YA viene en porcentaje por núcleo (100 = un núcleo a tope), así que
+            // para pasarlo a "equipo completo" se DIVIDE entre los núcleos (no se multiplica por
+            // 100: el 15/11 se coló ese error y un 63 % por núcleo salía como 100 %).
             val nucleos = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
-            val cpu = (cpuPorNucleo * 100 / nucleos).coerceIn(0L, 100L)
+            val cpu = (cpuPorNucleo / nucleos).coerceIn(0L, 100L)
             val cpuTablet = cpuDeLaTablet()
 
             val ramPct = runCatching {
@@ -354,15 +359,22 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             mbpsActual = mbps
             tempActual = temp
             actualizarEstadoEquipo()
-            // Los dos van en la misma escala: 100 % = todos los núcleos a tope.
-            val tabTexto = if (cpuTablet >= 0) "$cpuTablet%" else "—"
-            val detalle = String.format(
-                Locale.US, "CPU %d%% · TAB %s · RAM %d%% · %.1f Mbps · %s",
-                cpu, tabTexto, ramPct, mbps, tempTexto
-            )
-            b.txtEtiquetaPrograma.text = if (vertical) {
-                // En vertical la cabecera es estrecha: solo el nombre del visor (la
-                // resolución va al otro extremo) para que quepa en una línea.
+            // Los dos van en la misma escala: 100 % = todos los núcleos a tope. Si la tablet no deja
+            // leer /proc/stat, el TAB se omite en vez de dejar un «—» que no dice nada.
+            val detalle = if (cpuTablet >= 0) {
+                String.format(
+                    Locale.US, "CPU %d%% · TAB %d%% · RAM %d%% · %.1f Mbps · %s",
+                    cpu, cpuTablet, ramPct, mbps, tempTexto
+                )
+            } else {
+                String.format(
+                    Locale.US, "CPU %d%% · RAM %d%% · %.1f Mbps · %s",
+                    cpu, ramPct, mbps, tempTexto
+                )
+            }
+            b.txtEtiquetaPrograma.text = if (cabeceraEstrecha()) {
+                // Cabecera estrecha (9:16): solo el nombre del visor (la resolución va al otro
+                // extremo) para que quepa en una línea.
                 if (redFloja) "⚠ PROGRAMA" else "PROGRAMA"
             } else {
                 val aviso = if (redFloja) "⚠ " else ""
@@ -375,11 +387,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 anotar(
                     String.format(
                         Locale.US,
-                        "cpu %d%% (%.1f de %d nucleos) · tablet %s · ram %d%% · %.1f Mbps · %s",
+                        "cpu %d%% (%.1f de %d nucleos)%s · ram %d%% · %.1f Mbps · %s",
                         cpu,
                         cpu / 100.0 * nucleos,
                         nucleos,
-                        if (cpuTablet >= 0) String.format(Locale.US, "%d%% (%.1f de %d nucleos)", cpuTablet, cpuTablet / 100.0 * nucleos, nucleos) else "sin dato",
+                        if (cpuTablet >= 0) String.format(Locale.US, " · tablet %d%% (%.1f de %d nucleos)", cpuTablet, cpuTablet / 100.0 * nucleos, nucleos) else "",
                         ramPct,
                         mbps,
                         tempTexto
@@ -389,6 +401,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             uiHandler.postDelayed(this, 2000)
         }
     }
+
+    /**
+     * ¿La cabecera del programa es la estrecha (9:16)? Ahí solo cabe «PROGRAMA».
+     *
+     * En Modo Studio manda **el formato que se está viendo** (`studioVertical`), no el guardado
+     * (`vertical`): el chip cambia uno y el otro se queda como estaba, así que al pasar a 16:9 dentro
+     * del Modo Studio la info del sistema seguía oculta (visto el 15/11 en la tablet).
+     */
+    private fun cabeceraEstrecha(): Boolean = if (modoStudio) studioVertical else vertical
 
     /**
      * Uso de CPU de **toda la tablet** (todos los procesos) en la misma escala que la app:
@@ -402,7 +423,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * Devuelve -1 si Android no deja leer el archivo; en ese caso la etiqueta muestra «—».
      */
     private fun cpuDeLaTablet(): Long {
-        val muestra = runCatching {
+        if (tabBloqueado) return -1
+        val lectura = runCatching {
             var total = 0L
             var ocioso = 0L
             java.io.File("/proc/stat").forEachLine { linea ->
@@ -415,7 +437,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
             }
             longArrayOf(total, ocioso)
-        }.getOrNull() ?: return -1
+        }
+        val muestra = lectura.getOrNull()
+        if (muestra == null) {
+            // Android 10+ puede negar /proc/stat a las apps. Se anota una vez y no se reintenta,
+            // para no repetir la misma negativa cada 2 segundos.
+            tabBloqueado = true
+            L.w("uso", "no puedo leer /proc/stat: ${lectura.exceptionOrNull()?.message ?: "sin datos"}")
+            return -1
+        }
         val previo = statAnterior
         statAnterior = muestra
         if (previo == null) return -1
@@ -432,19 +462,29 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * lo bloquea, se devuelve la de la batería, que sube junto con la del equipo.
      */
     private fun temperatura(): Int? {
-        val zonas = java.io.File("/sys/class/thermal")
-            .listFiles { f -> f.name.startsWith("thermal_zone") }
-            .orEmpty()
-        for (zona in zonas) {
-            val tipo = runCatching { java.io.File(zona, "type").readText().trim().lowercase() }
-                .getOrDefault("")
-            if (tipo.contains("cpu") || tipo.contains("soc") || tipo.contains("ap") ||
-                tipo.contains("tscpu")
-            ) {
-                val valor = runCatching { java.io.File(zona, "temp").readText().trim().toFloat() }
-                    .getOrNull() ?: continue
-                val grados = if (valor > 1000f) valor / 1000f else valor
-                if (grados in 1f..120f) return grados.toInt()
+        if (!thermalBloqueado) {
+            val zonas = runCatching {
+                java.io.File("/sys/class/thermal")
+                    .listFiles { f -> f.name.startsWith("thermal_zone") }
+                    .orEmpty()
+            }.getOrDefault(emptyArray())
+            if (zonas.isEmpty()) {
+                // Android 10+ suele negar /sys/class/thermal a las apps. Se anota una vez y se deja
+                // de intentar: antes se repetía cada 2 s (30 negativas por minuto en el registro).
+                thermalBloqueado = true
+                L.i("uso", "termómetro del SoC no disponible: se usa el de la batería")
+            }
+            for (zona in zonas) {
+                val tipo = runCatching { java.io.File(zona, "type").readText().trim().lowercase() }
+                    .getOrDefault("")
+                if (tipo.contains("cpu") || tipo.contains("soc") || tipo.contains("ap") ||
+                    tipo.contains("tscpu")
+                ) {
+                    val valor = runCatching { java.io.File(zona, "temp").readText().trim().toFloat() }
+                        .getOrNull() ?: continue
+                    val grados = if (valor > 1000f) valor / 1000f else valor
+                    if (grados in 1f..120f) return grados.toInt()
+                }
             }
         }
         val bateria = runCatching {
