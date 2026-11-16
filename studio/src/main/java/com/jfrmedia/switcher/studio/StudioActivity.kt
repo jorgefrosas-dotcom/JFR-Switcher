@@ -298,15 +298,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private var cpuAnteriorNs = 0L
     private var redAnteriorBytes = -1L
     private var redAnteriorNs = 0L
+    /** Muestra anterior de `/proc/stat`: [ticks totales, ticks ociosos] de la tablet entera. */
+    private var statAnterior: LongArray? = null
 
     /**
      * Consumo en la etiqueta del visor:
-     * `PROGRAMA · CPU 14% · RAM 62% · 11.8 Mbps · 44°`
+     * `PROGRAMA · CPU 14% · TAB 42% · RAM 62% · 11.8 Mbps · 44°`
      *
-     * **CPU es el de esta app, en % del equipo** (0–100): se mide sumando sus hilos y dividiendo
-     * entre los núcleos que tiene la tablet. Antes se mostraba "por núcleo" y pasaba de 100 % en
-     * reposo, que confundía (Jorge, 15/11: parecía que la tablet estaba al tope cuando en realidad
-     * usaba un núcleo de ocho). El detalle sin dividir queda en el registro cada 10 s.
+     * **100 % = todos los núcleos al máximo.** Android mide el CPU por núcleo (100 % = un núcleo
+     * entero), así que aquí se reparte entre los núcleos que tiene la tablet: 50 % significa que se
+     * están usando 4 de 8 núcleos, y 100 % que los 8 están a tope. Así el número se lee de un vistazo
+     * y es comparable con la RAM (Jorge, 15/11).
+     *
+     * - `CPU` → lo que usa **esta app** (suma de todos sus hilos, repartida entre núcleos).
+     * - `TAB` → lo que usa **la tablet completa** (todos los procesos), leído de `/proc/stat`.
      * RAM es la del sistema. La red es lo que **sube esta app**, o sea lo que cuesta el directo. La
      * temperatura se lee del sensor térmico; si Android no lo expone, se usa la de la batería.
      */
@@ -314,15 +319,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         override fun run() {
             val ahoraNs = SystemClock.elapsedRealtimeNanos()
             val cpuMs = android.os.Process.getElapsedCpuTime()
-            var cpu = 0L
+            var cpuPorNucleo = 0L
             if (cpuAnteriorMs >= 0 && ahoraNs > cpuAnteriorNs) {
-                cpu = (cpuMs - cpuAnteriorMs) * 100_000_000L / (ahoraNs - cpuAnteriorNs)
+                cpuPorNucleo = (cpuMs - cpuAnteriorMs) * 100_000_000L / (ahoraNs - cpuAnteriorNs)
             }
             cpuAnteriorMs = cpuMs
             cpuAnteriorNs = ahoraNs
-            // `cpu` son "núcleos usados × 100"; el porcentaje del equipo lo reparte entre núcleos.
+            // `cpuPorNucleo` viene "por núcleo" (100 = un núcleo a tope); se reparte entre los núcleos
+            // para que 100 % sea el equipo completo.
             val nucleos = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
-            val cpuEquipo = (cpu * 100 / nucleos).coerceIn(0L, 100L)
+            val cpu = (cpuPorNucleo * 100 / nucleos).coerceIn(0L, 100L)
+            val cpuTablet = cpuDeLaTablet()
 
             val ramPct = runCatching {
                 val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
@@ -342,13 +349,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
             val temp = temperatura()
             val tempTexto = if (temp != null) "$temp°" else "—°"
-            cpuActual = cpuEquipo
+            cpuActual = cpu
             ramActual = ramPct
             mbpsActual = mbps
             tempActual = temp
             actualizarEstadoEquipo()
+            // Los dos van en la misma escala: 100 % = todos los núcleos a tope.
+            val tabTexto = if (cpuTablet >= 0) "$cpuTablet%" else "—"
             val detalle = String.format(
-                Locale.US, "CPU %d%% · RAM %d%% · %.1f Mbps · %s", cpuEquipo, ramPct, mbps, tempTexto
+                Locale.US, "CPU %d%% · TAB %s · RAM %d%% · %.1f Mbps · %s",
+                cpu, tabTexto, ramPct, mbps, tempTexto
             )
             b.txtEtiquetaPrograma.text = if (vertical) {
                 // En vertical la cabecera es estrecha: solo el nombre del visor (la
@@ -365,13 +375,54 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 anotar(
                     String.format(
                         Locale.US,
-                        "cpu %d%% del equipo (%.1f de %d nucleos) · ram %d%% · %.1f Mbps · %s",
-                        cpuEquipo, cpu / 100.0, nucleos, ramPct, mbps, tempTexto
+                        "cpu %d%% (%.1f de %d nucleos) · tablet %s · ram %d%% · %.1f Mbps · %s",
+                        cpu,
+                        cpu / 100.0 * nucleos,
+                        nucleos,
+                        if (cpuTablet >= 0) String.format(Locale.US, "%d%% (%.1f de %d nucleos)", cpuTablet, cpuTablet / 100.0 * nucleos, nucleos) else "sin dato",
+                        ramPct,
+                        mbps,
+                        tempTexto
                     )
                 )
             }
             uiHandler.postDelayed(this, 2000)
         }
+    }
+
+    /**
+     * Uso de CPU de **toda la tablet** (todos los procesos) en la misma escala que la app:
+     * **0–100 %, donde 100 % es que los ocho núcleos están a tope**.
+     *
+     * La línea `cpu` de `/proc/stat` acumula los ticks de todos los núcleos: el 4.º valor es el tiempo
+     * ocioso y el 5.º la espera de disco (iowait), que también se cuenta como ocioso. Con la
+     * diferencia entre dos muestras sale directamente la proporción ocupada del equipo completo, sin
+     * multiplicar por nada.
+     *
+     * Devuelve -1 si Android no deja leer el archivo; en ese caso la etiqueta muestra «—».
+     */
+    private fun cpuDeLaTablet(): Long {
+        val muestra = runCatching {
+            var total = 0L
+            var ocioso = 0L
+            java.io.File("/proc/stat").forEachLine { linea ->
+                if (linea.startsWith("cpu ")) {
+                    val v = linea.trim().split(Regex("\\s+")).drop(1).mapNotNull { it.toLongOrNull() }
+                    if (v.size >= 4) {
+                        total = v.sum()
+                        ocioso = v[3] + v.getOrElse(4) { 0L }
+                    }
+                }
+            }
+            longArrayOf(total, ocioso)
+        }.getOrNull() ?: return -1
+        val previo = statAnterior
+        statAnterior = muestra
+        if (previo == null) return -1
+        val dTotal = muestra[0] - previo[0]
+        val dOcioso = muestra[1] - previo[1]
+        if (dTotal <= 0) return 0
+        return ((dTotal - dOcioso) * 100 / dTotal).coerceIn(0L, 100L)
     }
 
     /**

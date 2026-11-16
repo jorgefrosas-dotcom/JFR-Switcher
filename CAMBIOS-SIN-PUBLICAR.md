@@ -17,8 +17,10 @@
   −, +, Frontal) subió a **46 dp de alto y letra de 13** para que la fila quede pareja.
 - **Modo Studio con lienzo 9:16:** la columna de botones pasó de 32 a **38 dp** de alto (A y B a
   **42 dp**) y la letra de 10 a **12** (A y B en **16**), porque quedaban chicos para el dedo.
-- **El medidor del visor ya no pasa de 100 %.** Mostraba el CPU de la app «por núcleo» (sumando
-  hilos), así que en reposo marcaba 120–150 % y parecía que la tablet estaba al tope. Ahora muestra
-  el **% del equipo** (0–100) dividiendo entre los núcleos, que es comparable con la RAM. El detalle
-  sin dividir (cuántos núcleos usa) se sigue anotando en el registro cada 10 s.
+- **El medidor del visor ya no pasa de 100 % y ahora sí se entiende.** Mostraba el CPU «por núcleo»
+  (100 % = un núcleo), así que en reposo marcaba 120–150 % y parecía que la tablet estaba al tope
+  cuando en realidad usaba un núcleo de ocho. Ahora **100 % = todos los núcleos al máximo**:
+  `CPU 14%` es lo que usa la app y **`TAB 42%`** lo que usa la tablet completa (todos los procesos,
+  leído de `/proc/stat`), las dos en la misma escala que la RAM. El registro anota cada 10 s el
+  equivalente en núcleos: `cpu 14% (1.1 de 8 nucleos) · tablet 42% (3.4 de 8 nucleos)`.
 
