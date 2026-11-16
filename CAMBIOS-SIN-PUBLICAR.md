@@ -10,8 +10,14 @@
 
 **Última versión publicada:** 0.2.9 (04/11/2026) — «La cámara ya no se congela al cambiar a 9:16»
 
-## En prueba (0.2.9.8, instalada el 15/11/2026 en la tablet Cubot)
+## En prueba (0.2.9.10, instalada el 15/11/2026 en la tablet Cubot)
 
+- **La transición ya no hace el «flash de ida y vuelta» (pasaba solo en vertical).** El velo con el
+  cuadro que sale se armaba **después** de pedir el cuadro, así que el hilo de dibujo alcanzaba a pintar
+  la escena nueva antes del velo —en vertical el monitor está dibujando todo el tiempo por la cámara en
+  vivo— y se veía un parpadeo: primero el cambio seco y luego el velo. Ahora el velo se arma **antes** de
+  cambiar la escena y se pide un solo cuadro después (`prepararVelo`). Comprobado con registro que **un
+  toque dispara una sola transición** (no eran dos).
 - **Modo Studio con lienzo 16:9: los botones A y B ya son grandes.** Medían el ancho de su propia
   letra y 36 dp de alto; ahora van a **56 × 46 dp con letra de 17**. El resto de la fila (PiP, 2cam,
   −, +, Frontal) subió a **46 dp de alto y letra de 13** para que la fila quede pareja.

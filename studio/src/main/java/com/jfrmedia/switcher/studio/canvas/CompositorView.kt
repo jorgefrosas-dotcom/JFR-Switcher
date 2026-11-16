@@ -352,16 +352,29 @@ class CompositorView @JvmOverloads constructor(
      * transición elegida, para que el cambio preview → programa se vea, no que salte de golpe.
      */
     fun animarVelo(bitmap: Bitmap, tipo: Transicion = transicion, duracionMs: Int = transicionMs) {
+        prepararVelo(bitmap, tipo, duracionMs)
+        requestRender()
+    }
+
+    /**
+     * Igual que [animarVelo] pero **sin pedir cuadro**. Sirve para armar el velo *antes* de cambiar la
+     * escena y pedir el cuadro una sola vez: si se pide el cuadro primero, el hilo de GL puede dibujar
+     * la escena nueva sin el velo y se ve un parpadeo de ida y vuelta (pasaba en vertical, donde el
+     * monitor está dibujando todo el tiempo por la cámara en vivo).
+     */
+    fun prepararVelo(
+        bitmap: Bitmap,
+        tipo: Transicion = transicion,
+        duracionMs: Int = transicionMs
+    ) {
         if (tipo == Transicion.CORTE || duracionMs <= 0) {
             veloBitmap = null
-            requestRender()
             return
         }
         veloBitmap = bitmap
         veloTipo = tipo
         veloDurMs = duracionMs.coerceAtLeast(1)
         veloInicioNs = System.nanoTime()
-        requestRender()
     }
 
     /** true mientras el velo se está retirando (para pedir cuadros). */

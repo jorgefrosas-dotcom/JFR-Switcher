@@ -7753,10 +7753,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val programa = monitorPrograma ?: return
         if (!modoStudio) return
         if (programa.width <= 0 || programa.height <= 0) return
+        // Sondeo: en vertical el cambio se veía «de ida y vuelta». Este registro dice si la
+        // transición se dispara dos veces y con cuánta separación (Jorge, 15/11/2026).
+        L.i("trans", "transicionar() · studioVertical=$studioVertical · ${programa.width}x${programa.height}" +
+            " · veloActivo=${programa.veloActivo}")
         val foto = Bitmap.createBitmap(programa.width, programa.height, Bitmap.Config.ARGB_8888)
         android.view.PixelCopy.request(
             programa, foto,
             { resultado ->
+                L.i("trans", "PixelCopy resultado=$resultado (0=ok)")
                 intercambiarMonitor(
                     if (resultado == android.view.PixelCopy.SUCCESS) foto else null
                 )
@@ -7767,17 +7772,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun intercambiarMonitor(foto: Bitmap?) {
         val programa = monitorPrograma ?: return
+        L.i("trans", "intercambiarMonitor · foto=${foto != null}")
         val escenaPreview = b.canvas.scene
         val escenaPrograma = programa.scene
+        // 1) El velo se arma PRIMERO. Si se pide el cuadro antes, el hilo de dibujo puede pintar la
+        //    escena nueva sin el velo y se ve un parpadeo (Jorge, 15/11: «de ida y vuelta», solo en
+        //    vertical, donde el monitor está dibujando continuamente por la cámara en vivo).
+        if (foto != null) programa.prepararVelo(foto, b.canvas.transicion, b.canvas.transicionMs)
+        // 2) Ahora sí, el cambio de escenas.
         b.canvas.scene = escenaPrograma
         programa.scene = escenaPreview
         escenaPreview.selectedId = null
         escenaPrograma.selectedId = null
         aplicarAspectoEstudio()
+        // 3) Un solo pedido de cuadro para los dos, ya con el velo armado.
         b.canvas.requestRender()
         programa.requestRender()
         if (foto != null) {
-            programa.animarVelo(foto, b.canvas.transicion, b.canvas.transicionMs)
             // El lienzo se dibuja bajo demanda: se le piden cuadros mientras dura la transición.
             val paso = object : Runnable {
                 override fun run() {
