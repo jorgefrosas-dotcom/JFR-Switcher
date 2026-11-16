@@ -1,10 +1,36 @@
 # Para la próxima sesión — JFR Switcher
 
-> Actualizado el **28/10/2026, 22:10** al cerrar la sesión. **Lee esto primero: tiene todo lo necesario
-> para seguir sin que Jorge vuelva a explicar nada.**
-> Canal de memoria de la otra PC: `%USERPROFILE%\.dsh\memoria\CAMBIOS.md` (entradas del 28/10).
+> Actualizado el **15/11/2026, 19:30** (ver **§0**, que es lo más reciente).
+> **Lee esto primero: tiene todo lo necesario para seguir sin que Jorge vuelva a explicar nada.**
+> Canal de memoria de la otra PC: `%USERPROFILE%\.dsh\memoria\CAMBIOS.md` (entradas del 15/11).
 > Repo: `github.com/jorgefrosas-dotcom/JFR-Switcher` · Proyecto local:
 > `C:\Users\noman\AndroidStudioProjects\JFR-Switcher`
+
+## 0. Estado al 15/11/2026 (noche) — lo que cambió y lo que falta
+
+- **Versión en la tablet: `0.2.9.10` (versionCode 21)**, instalada y **probada por Jorge**. Sigue **sin
+  publicarse Release**: la lista para las notas está en `CAMBIOS-SIN-PUBLICAR.md` (él avisa cuándo se saca).
+- **La tablet es una CUBOT TAB KINGKONG** (Android 13, 8 núcleos, 7.9 GB, 1200×1920 a 280 dpi). Se trabaja
+  por **depuración inalámbrica**: `adb connect 192.168.100.8:42337` (la IP cambia con el router; se
+  descubre con `adb mdns services`). Las cámaras son el **Samsung SM-S928B** y el **POCO 2412DPC0YA**.
+- **Cinco cosas corregidas y verificadas en el equipo en esta sesión:**
+  1. **Botones A/B** grandes en Modo Studio (16:9 y 9:16); antes eran una barrita con la letra recortada.
+  2. **Cabecera del programa**: en Modo Studio decide por el formato **que se ve** (9:16 oculta la info,
+     16:9 la muestra).
+  3. **Medidor de CPU**: muestra el **% del total de los 8 núcleos** (100 % = todos a tope). Ojo:
+     `/proc/stat` y `/sys/class/thermal` están **negados** a las apps en Android 13, así que no hay total
+     de la tablet ni temperatura del SoC (se usa la de la batería y se anota una vez).
+  4. **Vúmetro**: 40 fps con señal, **10 fps en silencio** (RenderThread bajó de 38 % a 23 %).
+  5. **Audio sincronizado** con el video (estaba **340 ms adelantado**) y **transición sin el flash de
+     ida y vuelta** en vertical (era una carrera de hilos: el velo se armaba después de pedir el cuadro).
+- **Pendiente / candidatos, por orden de valor:**
+  - **Sacar versión** cuando Jorge diga (las notas ya están redactadas en `CAMBIOS-SIN-PUBLICAR.md`).
+  - **Ajuste fino de audio (±200 ms)** con un deslizable, **solo si** al grabarse hablando nota un resto
+    de desfase (>80 ms). Hoy no existe.
+  - **Consumo en reposo**: las tarjetas de MEDIOS se reproducen **en vivo a propósito** (Jorge decide el
+    cambio de cámara mirándolas). **No apagarlas.** Si algún día se quiere bajar el costo, tiene que ser
+    **sin quitarles el movimiento** (decodificar a menor tamaño), y solo si él lo pide.
+  - `logs`: `adb logcat -s JFR` muestra `[trans]` (transiciones), `[rec]` (grabador) y `[uso]` (medidor).
 
 ## 1. Dónde estamos
 

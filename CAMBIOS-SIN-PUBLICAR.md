@@ -10,7 +10,7 @@
 
 **Última versión publicada:** 0.2.9 (04/11/2026) — «La cámara ya no se congela al cambiar a 9:16»
 
-## En prueba (0.2.9.10, instalada el 15/11/2026 en la tablet Cubot)
+## En prueba (0.2.9.10, instalada y **probada por Jorge** el 15/11/2026 en la tablet Cubot)
 
 - **La transición ya no hace el «flash de ida y vuelta» (pasaba solo en vertical).** El velo con el
   cuadro que sale se armaba **después** de pedir el cuadro, así que el hilo de dibujo alcanzaba a pintar
