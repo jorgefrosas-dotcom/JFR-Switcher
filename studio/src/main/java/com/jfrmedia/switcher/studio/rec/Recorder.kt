@@ -128,6 +128,16 @@ class Recorder(private val context: Context) {
     private var aUltimaUs = 0L
     private var aMuestras = 0
 
+    /**
+     * Instante (µs desde [baseTimeNs]) de la **primera muestra** del micrófono.
+     *
+     * El audio se marcaba desde su propio cero mientras el video se marca desde `baseTimeNs`, y el
+     * primer cuadro del video llega ~340 ms después de ese instante: la pista de audio quedaba 340 ms
+     * adelantada y se oía antes de que se movieran los labios (Jorge, 15/11/2026). Se calcula una sola
+     * vez, cuando llega el primer bloque del micrófono.
+     */
+    private var audioBaseUs = -1L
+
     private fun anotarVideo(us: Long) {
         if (vPrimeraUs == Long.MIN_VALUE) vPrimeraUs = us
         vUltimaUs = us
@@ -421,6 +431,34 @@ class Recorder(private val context: Context) {
         }
     }
 
+    /**
+     * Instante (µs desde `baseTimeNs`) en que se capturó la **primera** muestra del micrófono.
+     *
+     * Se apoya en `AudioRecord.getTimestamp`, que relaciona un número de muestra con un instante del
+     * reloj monotónico (el mismo de `System.nanoTime`): es la forma exacta y ya incluye la latencia
+     * del micrófono y de su búfer. Si el equipo no lo implementa, se toma el momento de la primera
+     * lectura; ahí queda un error del tamaño de un bloque (unos milisegundos).
+     */
+    private fun baseDelAudio(rec: AudioRecord, sampleRate: Int, muestras: Int): Long {
+        val ts = android.media.AudioTimestamp()
+        // getTimestamp devuelve int: >0 = éxito.
+        val ok = runCatching {
+            rec.getTimestamp(ts, android.media.AudioTimestamp.TIMEBASE_MONOTONIC) > 0
+        }.getOrDefault(false)
+        if (ok && ts.framePosition >= 0 && ts.nanoTime > 0) {
+            val base = (ts.nanoTime - baseTimeNs) / 1000 -
+                ts.framePosition * 1_000_000L / sampleRate
+            L.i("rec", "audio: base ${base / 1000.0} ms (posición ${ts.framePosition}, exacta)")
+            return base
+        }
+        // Sin getTimestamp: este bloque se capturó entre "ahora menos su duración" y "ahora", así que
+        // la primera muestra es de hace la duración del bloque (con 44.1 kHz y bloques de ~20 ms).
+        val duracionUs = muestras * 1_000_000L / sampleRate
+        val base = (System.nanoTime() - baseTimeNs) / 1000 - duracionUs
+        L.i("rec", "audio: base ${base / 1000.0} ms (aproximada, sin getTimestamp)")
+        return base
+    }
+
     private fun audioLoop(sampleRate: Int) {
         val codec = audioCodec ?: return
         val rec = audioRecord ?: return
@@ -443,7 +481,11 @@ class Recorder(private val context: Context) {
                 silentReads = 0
                 procesarPcm(pcm, read)
                 lastLevel = computeLevel(pcm, read)
-                val ptsUs = totalSamples * 1_000_000L / sampleRate
+                // El audio se marca en el MISMO reloj que el video (baseTimeNs). Antes se numeraba
+                // desde su propio cero y el video arranca ~340 ms después, así que el audio salía
+                // 340 ms adelantado y se notaba desincronizado (Jorge, 15/11/2026).
+                if (audioBaseUs < 0) audioBaseUs = baseDelAudio(rec, sampleRate, read / 2)
+                val ptsUs = audioBaseUs + totalSamples * 1_000_000L / sampleRate
                 totalSamples += read / 2
 
                 val inIndex = codec.dequeueInputBuffer(10_000)
@@ -490,7 +532,8 @@ class Recorder(private val context: Context) {
             if (leido <= 0) break
             procesarPcm(pcm, leido)
             lastLevel = computeLevel(pcm, leido)
-            val ptsUs = totalSamples * 1_000_000L / sampleRate
+            if (audioBaseUs < 0) audioBaseUs = baseDelAudio(rec, sampleRate, leido / 2)
+            val ptsUs = audioBaseUs + totalSamples * 1_000_000L / sampleRate
             totalSamples += leido / 2
             val inIndex = codec.dequeueInputBuffer(50_000)
             if (inIndex < 0) break
@@ -704,6 +747,7 @@ class Recorder(private val context: Context) {
         cerrando = false
         videoPendienteDeVolcar = false
         ultimoPtsVideo = -1L
+        audioBaseUs = -1L
         vPrimeraUs = Long.MIN_VALUE
         vUltimaUs = 0L
         vCuadros = 0

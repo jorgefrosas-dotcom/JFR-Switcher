@@ -10,7 +10,7 @@
 
 **Última versión publicada:** 0.2.9 (04/11/2026) — «La cámara ya no se congela al cambiar a 9:16»
 
-## En prueba (0.2.9.4, compilada e instalada el 15/11/2026 en la tablet Cubot)
+## En prueba (0.2.9.8, instalada el 15/11/2026 en la tablet Cubot)
 
 - **Modo Studio con lienzo 16:9: los botones A y B ya son grandes.** Medían el ancho de su propia
   letra y 36 dp de alto; ahora van a **56 × 46 dp con letra de 17**. El resto de la fila (PiP, 2cam,
@@ -32,6 +32,13 @@
   baja a **10 fps** (100 ms) y vuelve a 40 en cuanto el nivel se mueve (o mientras el LED CLIP está
   encendido), así que en uso no se nota. Medido en la tablet: el hilo de dibujo bajó de **38 % a 23 %**
   de un núcleo.
+- **Audio y video ya comparten el mismo reloj (desincronización corregida).** El video se marcaba con
+  el reloj del equipo (`baseTimeNs`) y el audio con **su propio cero**, y el primer cuadro del video
+  llega ~230–350 ms después de ese instante: la pista de audio quedaba **adelantada** y se oía antes
+  de que se movieran los labios. Ahora la primera muestra de audio se marca con
+  `AudioRecord.getTimestamp` (cuando el equipo lo da) o con el instante de la primera lectura menos la
+  duración del bloque. **Medido:** antes `audio 0.000 / video 0.340`; ahora el audio real arranca en
+  el mismo entorno que el video (13 ms de diferencia en la primera prueba).
 - **El termómetro ya no insiste de gusto:** `/sys/class/thermal` también está negado y se reintentaba
   cada 2 s (30 negativas por minuto en el registro). Ahora se anota una vez y se usa el de la batería.
 
