@@ -8,8 +8,10 @@
 
 ## 0. Estado al 15/11/2026 (noche) — lo que cambió y lo que falta
 
-- **Versión en la tablet: `0.2.9.10` (versionCode 21)**, instalada y **probada por Jorge**. Sigue **sin
-  publicarse Release**: la lista para las notas está en `CAMBIOS-SIN-PUBLICAR.md` (él avisa cuándo se saca).
+- **Versión en la tablet: `0.2.10` (versionCode 22)**, ya **publicada como Release** (tag `v0.2.10`, con
+  `JFR-Switcher.apk` y `JFR-Camera.apk`) y **probada por Jorge**. Las notas están en `docs/NOTAS-0.2.10.md`.
+- **Las cámaras (Samsung S928B y POCO) las actualiza Jorge cuando lo considere necesario** — regla suya del
+  15/11/2026: **no insistir con eso ni darlas por pendientes**. La app de cámara revisa actualizaciones sola.
 - **La tablet es una CUBOT TAB KINGKONG** (Android 13, 8 núcleos, 7.9 GB, 1200×1920 a 280 dpi). Se trabaja
   por **depuración inalámbrica**: `adb connect 192.168.100.8:42337` (la IP cambia con el router; se
   descubre con `adb mdns services`). Las cámaras son el **Samsung SM-S928B** y el **POCO 2412DPC0YA**.
