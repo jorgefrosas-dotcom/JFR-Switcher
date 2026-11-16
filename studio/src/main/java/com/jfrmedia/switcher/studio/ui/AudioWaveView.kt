@@ -18,20 +18,24 @@ import kotlin.math.log10
  * con zonas verde / naranja / rojo (rojo = rozando el recorte), envolvente suavizada, línea de
  * pico retenido y un LED **CLIP** que se enciende cuando la entrada llega al máximo.
  *
- * El nivel se pide 40 veces por segundo con [proveedorPico]; sin sesión de audio el proveedor
- * devuelve 0 y el monitor se queda en «Sin señal».
+ * El nivel se pide con [proveedorPico]. **Con señal se repinta 40 veces por segundo; en silencio,
+ * 10** (medido el 15/11/2026 en la tablet: repintar siempre era el 39 % de un núcleo en reposo y la
+ * onda en silencio es una línea plana, así que bajar el ritmo no se nota).
  */
 class AudioWaveView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    /** Pico actual (0..1) del micrófono. Se consulta 40 veces por segundo. */
+    /** Pico actual (0..1) del micrófono. */
     var proveedorPico: (() -> Float)? = null
 
-    /** 240 muestras × 25 ms = 6 s de historia. */
+    /** 240 muestras. A 40 fps son 6 s de historia; en silencio se llena más despacio. */
     private val historia = FloatArray(240)
     private var indice = 0
+
+    /** Pico de la vuelta anterior: si no cambia, no hace falta repintar tan seguido. */
+    private var picoAnterior = -1f
 
     private var picoRetenido = 0f
     private var picoDesdeMs = 0L
@@ -59,6 +63,9 @@ class AudioWaveView @JvmOverloads constructor(
     private val tarea = object : Runnable {
         override fun run() {
             val pico = (proveedorPico?.invoke() ?: 0f).coerceIn(0f, 1f)
+            // ¿Se movió lo suficiente para que valga la pena repintar a 40 fps?
+            val cambio = kotlin.math.abs(pico - picoAnterior)
+            picoAnterior = pico
             historia[indice] = pico
             indice = (indice + 1) % historia.size
             val ahora = System.currentTimeMillis()
@@ -70,7 +77,10 @@ class AudioWaveView @JvmOverloads constructor(
             // haya sido muy corto.
             if (pico >= 0.985f) clipHastaMs = ahora + 2500
             invalidate()
-            postDelayed(this, 25)
+            // 40 fps mientras hay señal (o el CLIP está encendido); 10 fps en silencio.
+            // En silencio la onda es una línea plana: mismo dibujo, un cuarto del trabajo.
+            val moviendo = cambio >= 0.01f || ahora < clipHastaMs
+            postDelayed(this, if (moviendo) 25L else 100L)
         }
     }
 

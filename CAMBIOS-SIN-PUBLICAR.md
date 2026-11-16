@@ -28,6 +28,10 @@
   núcleo). Comprobado contra `top` de Android (`adb`): 65 % por núcleo → 8 % en el visor.
 - **El total de la tablet no se puede mostrar:** Android 13 le niega `/proc/stat` a las apps
   (`open failed: EACCES`), así que el «TAB» que se probó un rato se quitó en vez de dejar un «—».
+- **El vúmetro ya no se repinta 40 veces por segundo cuando no hay nada que mostrar.** En silencio
+  baja a **10 fps** (100 ms) y vuelve a 40 en cuanto el nivel se mueve (o mientras el LED CLIP está
+  encendido), así que en uso no se nota. Medido en la tablet: el hilo de dibujo bajó de **38 % a 23 %**
+  de un núcleo.
 - **El termómetro ya no insiste de gusto:** `/sys/class/thermal` también está negado y se reintentaba
   cada 2 s (30 negativas por minuto en el registro). Ahora se anota una vez y se usa el de la batería.
 
