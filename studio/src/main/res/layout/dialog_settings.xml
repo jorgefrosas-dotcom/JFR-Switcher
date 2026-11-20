@@ -61,6 +61,65 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
+            android:text="DISEÑO DEL BANNER (MODO POKÉMON TCG)" />
+
+        <RadioGroup
+            android:id="@+id/rgBanner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rbBanner1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="1 · Azul torneo (por defecto)"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbBanner2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="2 · Nocturno (negro con cian)"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbBanner3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="3 · Pokéball rojo"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbBanner4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="4 · Claro (salas con mucha luz)"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbBanner5"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="5 · Esmeralda con dorado"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </RadioGroup>
+
+        <TextView
+            style="@style/Txt.Micro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
             android:text="QUÉ QUIERES HACER" />
 
         <RadioGroup

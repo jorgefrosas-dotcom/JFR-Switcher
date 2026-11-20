@@ -194,6 +194,40 @@ object Banners {
         return bmp
     }
 
+    /**
+     * Chips Energy / Supporter / Retreat de un jugador, para dibujarlos **dentro del video**
+     * debajo de su cámara. Si no es su turno, van apagados.
+     */
+    fun dibujarChips(jugador: JugadorTcg, enTurno: Boolean, ancho: Int = 700, alto: Int = 120): Bitmap {
+        val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(bmp)
+        val u = alto / 120f
+        val nombres = listOf("ENERGY", "SUPPORTER", "RETREAT")
+        val colores = listOf(Color.rgb(88, 200, 140), Color.rgb(122, 152, 244), Color.rgb(242, 172, 82))
+        val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
+        val texto = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+            textSize = 34f * u
+        }
+        var x = 4f * u
+        for (i in 0 until 3) {
+            val activo = enTurno && jugador.chips[i]
+            val w = ancho / 3f - 8f * u
+            val caja = RectF(x, 8f * u, x + w, alto - 8f * u)
+            pintura.color = if (activo) colores[i] else if (enTurno) Color.rgb(22, 27, 40) else Color.rgb(22, 24, 30)
+            cv.drawRoundRect(caja, 20f * u, 20f * u, pintura)
+            pintura.style = Paint.Style.STROKE
+            pintura.strokeWidth = 3f * u
+            pintura.color = if (activo) Color.WHITE else if (enTurno) Color.rgb(62, 78, 110) else Color.rgb(48, 52, 62)
+            cv.drawRoundRect(caja, 20f * u, 20f * u, pintura)
+            pintura.style = Paint.Style.FILL
+            texto.color = if (activo) Color.rgb(16, 16, 18) else if (enTurno) Color.rgb(120, 136, 160) else Color.rgb(78, 84, 96)
+            cv.drawText(nombres[i], caja.centerX(), caja.centerY() + 12f * u, texto)
+            x += w + 8f * u
+        }
+        return bmp
+    }
     private fun pokebola(cv: Canvas, cx: Float, cy: Float, r: Float, encendida: Boolean, borde: Int) {
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
         val arriba = if (encendida) Color.rgb(227, 53, 13) else Color.rgb(58, 59, 64)

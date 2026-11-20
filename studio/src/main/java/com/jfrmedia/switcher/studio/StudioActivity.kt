@@ -148,6 +148,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private var modoTcg = false
     private var estadoTcg = EstadoTcg()
     private var bannerTcg: CanvasItem? = null
+    private var chipsTcgUno: CanvasItem? = null
+    private var chipsTcgDos: CanvasItem? = null
     private var panelTcg: PanelTcg? = null
 
     /** true = grabar en 1080p/1080x1920, false = 720p/720x1280. */
@@ -3608,7 +3610,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (!::overlayContainer.isInitialized) return
         overlayContainer.removeAllViews()
         // El banner del torneo es del modo, no un overlay del usuario: no se lista.
-        val imagenes = b.canvas.scene.images().filter { it.id != bannerTcg?.id }
+        val propios = setOfNotNull(bannerTcg?.id, chipsTcgUno?.id, chipsTcgDos?.id)
+        val imagenes = b.canvas.scene.images().filter { it.id !in propios }
         val cols = columnasFuentes()
         // Primera celda: crear texto. Después los overlays puestos y al final «+ Overlay».
         val total = 2 + imagenes.size
@@ -6907,6 +6910,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun showSettings() {
         val db = DialogSettingsBinding.inflate(layoutInflater)
         db.rgModoTrabajo.check(if (modoTcg) R.id.rbModoPokemon else R.id.rbModoStudio)
+        // Diseño del banner del torneo (solo aplica al Modo Pokémon TCG).
+        val radioBanner = when (estadoTcg.paleta) {
+            2 -> R.id.rbBanner2
+            3 -> R.id.rbBanner3
+            4 -> R.id.rbBanner4
+            5 -> R.id.rbBanner5
+            else -> R.id.rbBanner1
+        }
+        db.rgBanner.check(radioBanner)
         when (preset.label) {
             VideoPresets.BAJA.label -> db.rb360.isChecked = true
             VideoPresets.ALTA.label -> db.rb720.isChecked = true
@@ -7023,6 +7035,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 toast(if (pedidoTcg) "Modo Pokémon TCG" else "Modo Studio")
                 recreate()
                 return@setOnClickListener
+            }
+            if (modoTcg) {
+                val nuevaPaleta = when {
+                    db.rbBanner2.isChecked -> 2
+                    db.rbBanner3.isChecked -> 3
+                    db.rbBanner4.isChecked -> 4
+                    db.rbBanner5.isChecked -> 5
+                    else -> 1
+                }
+                if (nuevaPaleta != estadoTcg.paleta) {
+                    cambiarEstadoTcg(estadoTcg.copy(paleta = nuevaPaleta))
+                }
             }
             // Elegir una calidad fija desactiva el modo automático.
             calidadAuto = false
@@ -7941,7 +7965,29 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         estadoTcg = nuevo
         guardarEstadoTcg()
         dibujarBannerTcg()
+        dibujarChipsTcg()
         panelTcg?.refrescar(nuevo)
+    }
+
+    /** Dibuja los chips de cada jugador dentro del video, debajo de su cámara. */
+    private fun dibujarChipsTcg() {
+        val escena = b.canvas.scene
+        val alto = 0.17f * (16f / 9f) / (700f / 120f)
+
+        fun pintar(actual: CanvasItem?, lado: Int, x0: Float): CanvasItem {
+            val rect = actual?.rect?.let { RectF(it) } ?: RectF(x0, 0.205f, x0 + 0.17f, 0.205f + alto)
+            actual?.let { runCatching { escena.remove(it) } }
+            val jugador = if (lado == 0) estadoTcg.uno else estadoTcg.dos
+            val imagen = Banners.dibujarChips(jugador, estadoTcg.turno == lado)
+            val item = escena.addImage(imagen, "Chips TCG", null, rect)
+            item.radiusDp = 6f
+            escena.selectedId = null
+            return item
+        }
+
+        chipsTcgUno = pintar(chipsTcgUno, 0, 0.015f)
+        chipsTcgDos = pintar(chipsTcgDos, 1, 0.815f)
+        runCatching { b.canvas.requestRender() }
     }
 
     /** Vuelve a pintar el banner y lo deja como capa del programa (así se graba y se transmite). */
@@ -8331,6 +8377,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             escena.items.remove(item)
             escena.items.add(item)
         }
+        dibujarChipsTcg()
         escena.touch()
         runCatching { b.canvas.requestRender() }
     }
