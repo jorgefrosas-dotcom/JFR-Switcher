@@ -7212,6 +7212,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             localCam.track?.let { t -> runCatching { adjuntar(LocalCam.SLOT, t) } }
             b.canvas.requestRender()
         }
+        // Primera vez: la cámara de la tablet se lleva el preview completo.
+        if (!ambienteTcg) {
+            alternarAmbienteTcg()
+            return
+        }
         ambienteFrontal = !ambienteFrontal
         runCatching { localCam.cambiarCamara(ambienteFrontal) }
         toast("Cámara 4: tablet " + if (ambienteFrontal) "frontal" else "trasera")
@@ -8483,32 +8488,42 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun alternarAmbienteTcg() {
         val escena = b.canvas.scene
         ambienteTcg = !ambienteTcg
-        val ambiente = escena.camAt(3) ?: if (ambienteTcg) escena.addCam(3) else null
+        // La cámara de ambiente es la de la tablet si está en la escena; si no, la cámara 4 remota.
+        val slotAmbiente = if (escena.camAt(LocalCam.SLOT) != null) LocalCam.SLOT else 3
+        val ambiente = escena.camAt(slotAmbiente) ?: if (ambienteTcg) escena.addCam(slotAmbiente) else null
         val uno = escena.camAt(0)
         val dos = escena.camAt(1)
+        val mesa = escena.camAt(2)
         if (ambienteTcg) {
             if (ambiente == null) {
                 ambienteTcg = false
-                toast("Conecta la cámara de ambiente (cámara 4) para usarla")
+                toast("Conecta la cámara de ambiente (o usa la de la tablet con «Lente»)")
                 return
             }
+            // Pantalla completa y sin nada encima: ni jugadores, ni mesa, ni banner.
             ambiente.rect.set(0f, 0f, 1f, 1f)
             ambiente.visible = true
             uno?.visible = false
             dos?.visible = false
-            // Se coloca justo debajo del banner para que el marcador siga visible.
+            mesa?.visible = false
+            bannerTcg?.visible = false
             escena.items.remove(ambiente)
-            val indiceBanner = bannerTcg?.let { escena.items.indexOf(it) } ?: -1
-            if (indiceBanner >= 0) escena.items.add(indiceBanner, ambiente) else escena.items.add(ambiente)
+            escena.items.add(ambiente)
         } else {
             ambiente?.visible = false
             ambiente?.rect?.set(0.805f, 0.78f, 0.975f, 0.95f)
             uno?.visible = true
             dos?.visible = true
+            mesa?.visible = true
+            bannerTcg?.visible = true
+            bannerTcg?.let { itm ->
+                escena.items.remove(itm)
+                escena.items.add(itm)
+            }
         }
         escena.touch()
         runCatching { b.canvas.requestRender() }
-        toast(if (ambienteTcg) "Cámara de ambiente a pantalla completa" else "Vuelve la mesa con los jugadores")
+        toast(if (ambienteTcg) "Cámara 4 a pantalla completa" else "Vuelve la mesa con los jugadores")
     }
 
     companion object {
