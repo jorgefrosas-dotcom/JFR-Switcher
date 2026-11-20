@@ -145,9 +145,9 @@ object Banners {
         texto.textAlign = Paint.Align.LEFT
         texto.color = p.nombre
         texto.textSize = 33f * u
-        cv.drawText(estado.uno.nombre.uppercase(), 34f * u, 106f * u, texto)
+        cv.drawText(estado.uno.nombre.uppercase(), 34f * u, 132f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
-        cv.drawText(estado.dos.nombre.uppercase(), ancho - 34f * u, 106f * u, texto)
+        cv.drawText(estado.dos.nombre.uppercase(), ancho - 34f * u, 132f * u, texto)
 
         // 6 pokebolas en 2 filas de 3, a la derecha (jugador 1) y a la izquierda (jugador 2)
         val r = 22f * u
@@ -161,12 +161,12 @@ object Banners {
         }
 
         // récord
-        texto.textSize = 22f * u
+        texto.textSize = 34f * u
         texto.color = p.record
         texto.textAlign = Paint.Align.LEFT
-        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 214f * u, texto)
+        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 216f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
-        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 214f * u, texto)
+        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 216f * u, texto)
 
         // Chips Energy / Supporter / Retreat de cada jugador, debajo de sus pokebolas.
         filaChips(cv, estado.uno, estado.turno == 0, 34f * u, 240f * u, 500f * u, u, alDerecha = false, p)

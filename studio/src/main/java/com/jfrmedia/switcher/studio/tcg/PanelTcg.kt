@@ -162,7 +162,6 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
                 ).apply { leftMargin = dp(contexto, 5f) }
             )
         }
-        if (!enTurno) fichas.addView(etiqueta(contexto, " espera", 0xFF646A76.toInt()))
         fila.addView(fichas)
     }
 
