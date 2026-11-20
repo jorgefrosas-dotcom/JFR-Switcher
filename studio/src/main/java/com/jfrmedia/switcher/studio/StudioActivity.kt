@@ -1,4 +1,4 @@
-﻿package com.jfrmedia.switcher.studio
+package com.jfrmedia.switcher.studio
 
 import android.Manifest
 import android.content.ClipData
@@ -8210,15 +8210,46 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         dibujarBannerTcg()
         montarPanelTcg()
         // Al ocultar los controles viejos el lienzo debe volver a medirse (si no, queda chico).
+        // Monitor con tamaño EXACTO y la columna de herramientas a su derecha.
+        // (El contenedor del monitor no admite "ancho 0 + peso": mide 0 y desaparece.)
         b.cuerpo.postDelayed({
             runCatching {
-                b.cuerpo.requestLayout()
-                b.canvasHost.requestLayout()
-                b.canvas.requestLayout()
-                L.i("tcg", "alto cuerpo=${b.cuerpo.height} programa=${b.panelPrograma.height} canvasHost=${b.canvasHost.height} slotControles=${b.slotControles.height} anchoHost=${b.canvasHost.width}")
-
+                if (b.canvasHost.parent === b.panelPrograma) {
+                    val anchoTotal = b.panelPrograma.width - 8.dp
+                    val altoTotal = b.panelPrograma.height - b.cabeceraPrograma.height -
+                        b.slotControles.height - 8.dp
+                    val anchoHerramientas = 208.dp
+                    var anchoC = anchoTotal - anchoHerramientas
+                    var altoC = anchoC * 9 / 16
+                    if (altoC > altoTotal) {
+                        altoC = altoTotal
+                        anchoC = altoC * 16 / 9
+                    }
+                    L.i("tcg", "monitor ancho=$anchoC alto=$altoC (total $anchoTotal x $altoTotal)")
+                    if (anchoC > 320 && altoC > 220) {
+                        val padre = b.panelPrograma
+                        val indice = padre.indexOfChild(b.canvasHost)
+                        padre.removeView(b.canvasHost)
+                        val fila = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                        fila.addView(b.canvasHost, LinearLayout.LayoutParams(anchoC, altoC))
+                        panelTcg?.let { p ->
+                            fila.addView(
+                                p.vistaHerramientas,
+                                LinearLayout.LayoutParams(anchoHerramientas, altoC)
+                            )
+                        }
+                        padre.addView(
+                            fila,
+                            indice.coerceAtLeast(0),
+                            LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            )
+                        )
+                    }
+                }
             }
-        }, 1200)
+        }, 700)
         // La escena del modo: mesa al fondo, PiPs de los jugadores y el banner encima.
         b.cuerpo.postDelayed({ runCatching { aplicarEscenaTcg() } }, 300)
     }

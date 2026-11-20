@@ -49,22 +49,24 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
         centro = LinearLayout(contexto)
         tarjetaDos = LinearLayout(contexto)
 
+        // La fila se queda solo con los dos cuadros: el centro pasa a ser la columna de al lado.
         fila.addView(
             tarjetaUno,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(contexto, 8f) }
-        )
-        fila.addView(
-            centro,
-            LinearLayout.LayoutParams(dp(contexto, 330f), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                rightMargin = dp(contexto, 8f)
-            }
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { rightMargin = dp(contexto, 8f) }
         )
         fila.addView(
             tarjetaDos,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
         )
         vista = fila
+
+        centro.orientation = LinearLayout.VERTICAL
+        centro.background = caja(contexto, 0xFF16181E.toInt(), 0xFF2C303A.toInt(), 12f)
+        centro.setPadding(dp(contexto, 8f), dp(contexto, 8f), dp(contexto, 8f), dp(contexto, 8f))
     }
+
+    /** Columna de herramientas (turno, resultado y herramientas) para ponerla al lado del monitor. */
+    val vistaHerramientas: View get() = centro
 
     fun refrescar(estado: EstadoTcg) {
         pintarTarjeta(tarjetaUno, estado, 0)
@@ -172,54 +174,52 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
         fila.removeAllViews()
         fila.orientation = LinearLayout.VERTICAL
         fila.background = caja(contexto, 0xFF16181E.toInt(), 0xFF2C303A.toInt(), 12f)
-        fila.setPadding(dp(contexto, 10f), dp(contexto, 8f), dp(contexto, 10f), dp(contexto, 8f))
+        fila.setPadding(dp(contexto, 8f), dp(contexto, 8f), dp(contexto, 8f), dp(contexto, 8f))
 
-        // Turno y el botón de pasar, en la misma fila (ahorra alto para el monitor).
-        val turnoFila = LinearLayout(contexto).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.CENTER_HORIZONTAL
-        }
-        turnoFila.addView(
+        fila.addView(
             TextView(contexto).apply {
-                text = "TURNO DE $quien".uppercase()
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                setTextColor(0xFFFF6B35.toInt())
-                typeface = Typeface.DEFAULT_BOLD
-                setPadding(0, 0, dp(contexto, 8f), 0)
+                text = "TURNO DE"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                setTextColor(0xFF9AA0AA.toInt())
+                gravity = Gravity.CENTER
             }
         )
-        turnoFila.addView(boton(contexto, "Pasar turno", 0xFF23262E.toInt(), 0xFFECEEF2.toInt(), 11f) { escucha.onPasarTurno() })
-        fila.addView(turnoFila)
+        fila.addView(
+            TextView(contexto).apply {
+                text = quien.uppercase()
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setTextColor(0xFFFF6B35.toInt())
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, dp(contexto, 6f))
+            }
+        )
 
-        val resultado = LinearLayout(contexto).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(0, dp(contexto, 6f), 0, 0)
+        fun agregar(t: String, fondo: Int, color: Int, accion: () -> Unit) {
+            val v = boton(contexto, t, fondo, color, 11f, accion)
+            v.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            fila.addView(
+                v,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(contexto, 5f) }
+            )
         }
-        resultado.addView(boton(contexto, "Ganó ${estado.uno.nombre}", 0xFF1A4A30.toInt(), 0xFFD6FFE8.toInt(), 10f) {
-            escucha.onResultado(1)
-        })
-        resultado.addView(boton(contexto, "Empate", 0xFF23262E.toInt(), 0xFFECEEF2.toInt(), 10f) {
-            escucha.onResultado(0)
-        })
-        resultado.addView(boton(contexto, "Ganó ${estado.dos.nombre}", 0xFF1A4A30.toInt(), 0xFFD6FFE8.toInt(), 10f) {
-            escucha.onResultado(2)
-        })
-        fila.addView(resultado)
 
-        val herramientas = LinearLayout(contexto).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(0, dp(contexto, 6f), 0, 0)
-        }
-        herramientas.addView(boton(contexto, "Evento", 0xFF23262E.toInt(), 0xFFFFCB05.toInt(), 10f) { escucha.onAbrirEvento() })
-        herramientas.addView(boton(contexto, "Nueva", 0xFF23262E.toInt(), 0xFFECEEF2.toInt(), 10f) { escucha.onNuevaPartida() })
-        herramientas.addView(boton(contexto, "Reiniciar", 0xFF23262E.toInt(), 0xFF9AA0AA.toInt(), 10f) { escucha.onReiniciarMarcador() })
-        herramientas.addView(boton(contexto, "Ambiente", 0xFF23262E.toInt(), 0xFF9AA0AA.toInt(), 10f) { escucha.onAlternarAmbiente() })
-        herramientas.addView(boton(contexto, "Banner", 0xFF23262E.toInt(), 0xFF96BEFF.toInt(), 10f) { escucha.onCambiarPaleta() })
-        fila.addView(herramientas)
+        agregar("Pasar turno", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) { escucha.onPasarTurno() }
+        agregar("Ganó ${estado.uno.nombre}", 0xFF1A4A30.toInt(), 0xFFD6FFE8.toInt()) { escucha.onResultado(1) }
+        agregar("Empate", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) { escucha.onResultado(0) }
+        agregar("Ganó ${estado.dos.nombre}", 0xFF1A4A30.toInt(), 0xFFD6FFE8.toInt()) { escucha.onResultado(2) }
+        agregar("Evento", 0xFF23262E.toInt(), 0xFFFFCB05.toInt()) { escucha.onAbrirEvento() }
+        agregar("Partida nueva", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) { escucha.onNuevaPartida() }
+        agregar("Reiniciar", 0xFF23262E.toInt(), 0xFF9AA0AA.toInt()) { escucha.onReiniciarMarcador() }
+        agregar("Ambiente", 0xFF23262E.toInt(), 0xFF9AA0AA.toInt()) { escucha.onAlternarAmbiente() }
+        agregar("Banner", 0xFF23262E.toInt(), 0xFF96BEFF.toInt()) { escucha.onCambiarPaleta() }
     }
-
     // ------------------------------------------------------------------ ayudas
 
     private fun etiqueta(contexto: Context, t: String, color: Int): TextView = TextView(contexto).apply {
