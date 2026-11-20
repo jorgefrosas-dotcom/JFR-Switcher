@@ -3193,6 +3193,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             tiles.getOrNull(3)?.botonEsquina(if (localCam.encendida) "Lente" else "Tablet") {
                 cicloCamaraAmbiente()
             }
+            // La parrilla se rehace cada vez que cambia una cámara y eso limpia la tarjeta:
+            // si la cámara de la tablet está en uso, se le devuelve su vista a la tarjeta 4.
+            if (modoTcg && localCam.encendida) {
+                localCam.track?.let { t ->
+                    runCatching { tiles.getOrNull(3)?.bindLocal(t, "Tablet · ambiente") }
+                }
+            }
         }
 
         // Volver a enganchar los videos: las tarjetas son nuevas y sin esto se quedaban en negro

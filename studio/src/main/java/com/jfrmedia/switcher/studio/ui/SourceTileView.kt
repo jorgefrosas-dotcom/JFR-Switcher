@@ -31,6 +31,7 @@ class SourceTileView @JvmOverloads constructor(
     private val txtStatus: TextView
     private val txtHint: TextView
 
+    private var fijadoLocal = false
     private var rendererReady = false
     private var currentTrack: VideoTrack? = null
     private var slotIndex = 0
@@ -237,6 +238,7 @@ class SourceTileView @JvmOverloads constructor(
      * Fuente local (cámara de la propia tablet): no hay sesión remota, solo la pista.
      */
     fun bindLocal(track: VideoTrack, nombre: String) {
+        fijadoLocal = true
         ensureRenderer()
         runCatching { currentTrack?.removeSink(video) }
         currentTrack = track
@@ -249,7 +251,14 @@ class SourceTileView @JvmOverloads constructor(
     }
 
     /** Estado de la fuente local sin sesión: encendida o apagada. */
+    /** Suelta la cámara local fija (para poder limpiar la tarjeta otra vez). */
+    fun soltarLocal() {
+        fijadoLocal = false
+        clearSession()
+    }
+
     fun setEstadoLocal(encendida: Boolean, nombre: String = "Tablet") {
+        if (!encendida) fijadoLocal = false
         txtName.text = nombre
         txtNumber.text = "T"
         if (!encendida) {
@@ -286,6 +295,9 @@ class SourceTileView @JvmOverloads constructor(
     }
 
     fun clearSession() {
+        // Si la tarjeta está mostrando una cámara local fija (Modo TCG: la de la tablet),
+        // no se limpia: los refrescos de la parrilla la dejaban en negro al instante.
+        if (fijadoLocal) return
         runCatching { currentTrack?.removeSink(video) }
         currentTrack = null
         video.visibility = View.INVISIBLE
