@@ -1,4 +1,4 @@
-package com.jfrmedia.switcher.studio.canvas
+﻿package com.jfrmedia.switcher.studio.canvas
 
 import android.graphics.Bitmap
 import android.graphics.RectF
@@ -154,7 +154,8 @@ class Scene(aspectInicial: Float = 16f / 9f) {
 
     fun images(): List<ImageItem> = items.filterIsInstance<ImageItem>()
 
-    val maxCams: Int get() = 2
+    /** Cuántas cámaras caben en la escena. En Modo Pokémon TCG se sube a 4 (mesa + 2 + ambiente). */
+    var maxCams: Int = 2
 
     fun canAddCam(slot: Int): Boolean = camAt(slot) == null && cams().size < maxCams
 

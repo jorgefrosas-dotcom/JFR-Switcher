@@ -579,6 +579,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (modoTcg) {
             vertical = false
             estadoTcg = leerEstadoTcg()
+            b.canvas.scene.maxCams = 4
         }
         // Ajustes guardados de sesión (modo, resoluciones, bitrates).
         runCatching {
@@ -3138,7 +3139,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // también (ahí la tablet sí puede usarla), sea 9:16 o 16:9.
         // En vertical de tablet no hay cámara local; en el celular sí (es su propia cámara).
         // 7 fuentes: 6 cámaras remotas + la cámara del equipo (que rota entre frontal y trasera).
-        val total = if (vertical && !modoStudio && !esPantallaCelular()) 6 else 7
+        // En Modo Pokémon TCG son 4 fuentes fijas: Jugador 1, Jugador 2, Mesa y Ambiente.
+        val total = if (modoTcg) 4 else if (vertical && !modoStudio && !esPantallaCelular()) 6 else 7
         // En celular las pestañas necesitan saber dónde terminan las cámaras y empiezan los grupos.
         filasCamaras = (total + cols - 1) / cols
 
@@ -3176,6 +3178,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 filaView.addView(tile, celdaParams())
                 tiles.add(tile)
             }
+        }
+
+        if (modoTcg) {
+            val nombres = listOf("Jugador 1", "Jugador 2", "Mesa", "Ambiente")
+            tiles.forEachIndexed { i, t -> t.ponerNombre(nombres.getOrElse(i) { "Cámara ${i + 1}" }) }
         }
 
         // Volver a enganchar los videos: las tarjetas son nuevas y sin esto se quedaban en negro
@@ -8024,6 +8031,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 cambiarEstadoTcg(estadoTcg.copy(paleta = siguiente))
                 toast("Banner $siguiente de ${Banners.PALETAS.size}")
             }
+
+            override fun onAlternarAmbiente() = alternarAmbienteTcg()
         })
         panel.refrescar(estadoTcg)
         panelTcg = panel
@@ -8104,6 +8113,62 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
             }
         }, 1200)
+        // La escena del modo: mesa al fondo, PiPs de los jugadores y el banner encima.
+        b.cuerpo.postDelayed({ runCatching { aplicarEscenaTcg() } }, 300)
+    }
+
+    /** Cámara de ambiente: ocupa la pantalla completa cuando está activa. */
+    private var ambienteTcg = false
+
+    /**
+     * Escena del modo: la mesa al fondo, las dos cámaras de jugador como PiP arriba y el banner
+     * encima de todo (así se graba igual que se ve).
+     */
+    private fun aplicarEscenaTcg() {
+        val escena = b.canvas.scene
+        escena.cams().forEach { runCatching { quitarCamaraDelLienzo(it) } }
+        escena.addCam(2)?.rect?.set(0f, 0f, 1f, 1f)
+        escena.addCam(0)?.rect?.set(0.02f, 0.03f, 0.19f, 0.20f)
+        escena.addCam(1)?.rect?.set(0.81f, 0.03f, 0.98f, 0.20f)
+        // El banner siempre al final: tiene que quedar por encima.
+        bannerTcg?.let { item ->
+            escena.items.remove(item)
+            escena.items.add(item)
+        }
+        escena.touch()
+        runCatching { b.canvas.requestRender() }
+    }
+
+    /** Prende o apaga la cámara de ambiente a pantalla completa. */
+    private fun alternarAmbienteTcg() {
+        val escena = b.canvas.scene
+        ambienteTcg = !ambienteTcg
+        val ambiente = escena.camAt(3) ?: if (ambienteTcg) escena.addCam(3) else null
+        val uno = escena.camAt(0)
+        val dos = escena.camAt(1)
+        if (ambienteTcg) {
+            if (ambiente == null) {
+                ambienteTcg = false
+                toast("Conecta la cámara de ambiente (cámara 4) para usarla")
+                return
+            }
+            ambiente.rect.set(0f, 0f, 1f, 1f)
+            ambiente.visible = true
+            uno?.visible = false
+            dos?.visible = false
+            // Se coloca justo debajo del banner para que el marcador siga visible.
+            escena.items.remove(ambiente)
+            val indiceBanner = bannerTcg?.let { escena.items.indexOf(it) } ?: -1
+            if (indiceBanner >= 0) escena.items.add(indiceBanner, ambiente) else escena.items.add(ambiente)
+        } else {
+            ambiente?.visible = false
+            ambiente?.rect?.set(0.02f, 0.79f, 0.20f, 0.97f)
+            uno?.visible = true
+            dos?.visible = true
+        }
+        escena.touch()
+        runCatching { b.canvas.requestRender() }
+        toast(if (ambienteTcg) "Cámara de ambiente a pantalla completa" else "Vuelve la mesa con los jugadores")
     }
 
     companion object {

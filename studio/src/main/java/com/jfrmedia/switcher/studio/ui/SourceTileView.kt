@@ -1,4 +1,4 @@
-package com.jfrmedia.switcher.studio.ui
+﻿package com.jfrmedia.switcher.studio.ui
 
 import android.content.Context
 import android.util.AttributeSet
@@ -151,6 +151,14 @@ class SourceTileView @JvmOverloads constructor(
         pintarEstado()
     }
 
+    /** Nombre fijo de la tarjeta en Modo TCG (manda sobre el que reporta el celular). */
+    private var nombreFijo: String? = null
+
+    fun ponerNombre(t: String) {
+        nombreFijo = t
+        txtName.text = t
+    }
+
     fun setup(index: Int, onClick: () -> Unit) {
         slotIndex = index
         txtNumber.text = (index + 1).toString()
@@ -236,7 +244,7 @@ class SourceTileView @JvmOverloads constructor(
             estado("Sin conectar", false)
             return
         }
-        txtName.text = session.name
+        txtName.text = nombreFijo ?: session.name
         val battery = if (session.battery in 1..100) " · ${session.battery}%" else ""
         val conectadaAhora = session.state == com.jfrmedia.switcher.studio.rtc.CamState.STREAMING ||
             session.state == com.jfrmedia.switcher.studio.rtc.CamState.CONNECTED
