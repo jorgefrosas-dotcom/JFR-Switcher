@@ -216,7 +216,11 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
         agregar("Evento", 0xFF23262E.toInt(), 0xFFFFCB05.toInt()) { escucha.onAbrirEvento() }
         agregar("Partida nueva", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) { escucha.onNuevaPartida() }
         agregar("Reiniciar", 0xFF23262E.toInt(), 0xFF9AA0AA.toInt()) { escucha.onReiniciarMarcador() }
-        agregar("Ambiente", 0xFF23262E.toInt(), 0xFF9AA0AA.toInt()) { escucha.onAlternarAmbiente() }
+        agregar(
+            if (estado.generalActivo) "Cambiar a mesa" else "Cámara general",
+            0xFF23262E.toInt(),
+            if (estado.generalActivo) 0xFFFF6B35.toInt() else 0xFF9AA0AA.toInt()
+        ) { escucha.onAlternarAmbiente() }
         agregar("Banner", 0xFF23262E.toInt(), 0xFF96BEFF.toInt()) { escucha.onCambiarPaleta() }
     }
     // ------------------------------------------------------------------ ayudas

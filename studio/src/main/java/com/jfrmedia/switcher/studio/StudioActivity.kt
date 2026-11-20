@@ -8534,7 +8534,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         escena.touch()
         runCatching { b.canvas.requestRender() }
-        toast(if (ambienteTcg) "Cámara 4 a pantalla completa" else "Vuelve la mesa con los jugadores")
+        // El botón cambia de nombre según el estado (no se redibuja el banner para no revivir el oculto).
+        estadoTcg = estadoTcg.copy(generalActivo = ambienteTcg)
+        guardarEstadoTcg()
+        panelTcg?.refrescar(estadoTcg)
+        toast(if (ambienteTcg) "Cámara general a pantalla completa" else "Vuelve la mesa con los jugadores")
     }
 
     companion object {

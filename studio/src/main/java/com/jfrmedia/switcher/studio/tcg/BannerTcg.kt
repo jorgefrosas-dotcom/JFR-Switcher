@@ -62,6 +62,8 @@ data class EstadoTcg(
     val turno: Int = 0,
     /** Paleta del banner, 1 a 5. */
     val paleta: Int = 1,
+    /** true cuando la cámara general ocupa el preview (el botón cambia a «Cambiar a mesa»). */
+    val generalActivo: Boolean = false,
 )
 
 /** Colores de cada una de las cinco propuestas de banner. */
