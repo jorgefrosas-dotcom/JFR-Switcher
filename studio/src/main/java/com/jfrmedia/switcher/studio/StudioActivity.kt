@@ -7200,16 +7200,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (!localCam.encendida) {
             ambienteFrontal = true
             encenderCamaraTablet()
+            // La tarjeta 4 muestra la cámara de la tablet.
+            localCam.track?.let { t -> runCatching { tiles.getOrNull(3)?.bindLocal(t, "Tablet") } }
             toast("Cámara 4: cámara de la tablet (frontal)")
             return
         }
+        // La tarjeta 4 muestra siempre la cámara de la tablet cuando se está usando.
+        localCam.track?.let { t -> runCatching { tiles.getOrNull(3)?.bindLocal(t, "Tablet") } }
         // La cámara de la tablet puede estar encendida sin estar en la escena (la escena del modo
         // solo pone mesa y jugadores): se agrega en el hueco de ambiente y se engancha su video.
         val escena = b.canvas.scene
         if (escena.camAt(LocalCam.SLOT) == null) {
             escena.addCam(LocalCam.SLOT)?.rect?.set(0.805f, 0.78f, 0.975f, 0.95f)
             escena.selectedId = null
-            localCam.track?.let { t -> runCatching { adjuntar(LocalCam.SLOT, t) } }
+            localCam.track?.let { t ->
+                runCatching { adjuntar(LocalCam.SLOT, t) }
+                runCatching { tiles.getOrNull(3)?.bindLocal(t, "Tablet") }
+            }
             b.canvas.requestRender()
         }
         // Primera vez: la cámara de la tablet se lleva el preview completo.
@@ -8465,7 +8472,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         escena.addCam(2)?.rect?.set(0f, 0f, 1f, 1f)
         if (localCam.encendida) {
             escena.addCam(LocalCam.SLOT)?.rect?.set(0.805f, 0.78f, 0.975f, 0.95f)
-            localCam.track?.let { t -> runCatching { adjuntar(LocalCam.SLOT, t) } }
+            localCam.track?.let { t ->
+                runCatching { adjuntar(LocalCam.SLOT, t) }
+                runCatching { tiles.getOrNull(3)?.bindLocal(t, "Tablet") }
+                runCatching { tiles.getOrNull(3)?.ponerNombre("Tablet · ambiente") }
+            }
         }
         escena.addCam(0)?.rect?.set(0.015f, 0.03f, 0.185f, 0.20f)
         escena.addCam(1)?.rect?.set(0.815f, 0.03f, 0.985f, 0.20f)
