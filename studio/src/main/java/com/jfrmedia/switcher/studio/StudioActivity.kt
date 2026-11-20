@@ -72,6 +72,10 @@ import com.jfrmedia.switcher.studio.rtc.CameraSession
 import com.jfrmedia.switcher.studio.rtc.LocalCam
 import com.jfrmedia.switcher.studio.rtc.RtcCore
 import com.jfrmedia.switcher.studio.rtc.StudioServer
+import com.jfrmedia.switcher.studio.tcg.Banners
+import com.jfrmedia.switcher.studio.tcg.EstadoTcg
+import com.jfrmedia.switcher.studio.tcg.JugadorTcg
+import com.jfrmedia.switcher.studio.tcg.PanelTcg
 import com.jfrmedia.switcher.studio.ui.OverlayTileView
 import com.jfrmedia.switcher.studio.ui.SourceTileView
 import org.webrtc.VideoTrack
@@ -138,6 +142,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** false = plantilla horizontal (16:9), true = vertical (9:16). */
     private var vertical = false
+
+    /** true = Modo Pokémon TCG: 16:9 fijo, sin rotación y con el banner del torneo en el video. */
+    private var modoTcg = false
+    private var estadoTcg = EstadoTcg()
+    private var bannerTcg: CanvasItem? = null
+    private var panelTcg: PanelTcg? = null
 
     /** true = grabar en 1080p/1080x1920, false = 720p/720x1280. */
     private var grabarAlta = false
@@ -564,6 +574,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         vigilarScrollFuentes()
 
         vertical = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_VERTICAL, false)
+        // Modo Pokémon TCG: en este modo el lienzo es siempre 16:9.
+        modoTcg = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_MODO_TCG, false)
+        if (modoTcg) {
+            vertical = false
+            estadoTcg = leerEstadoTcg()
+        }
         // Ajustes guardados de sesión (modo, resoluciones, bitrates).
         runCatching {
             val p = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -634,6 +650,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         refreshUi()
         updatePairingLabels()
+        if (modoTcg) aplicarModoTcg()
         uiHandler.post(medidorUso)
         escucharEmisor()
         // Si la pantalla se recreó con un envío en curso, se reengancha el compositor a la
@@ -3582,7 +3599,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun refreshOverlayTiles() {
         if (!::overlayContainer.isInitialized) return
         overlayContainer.removeAllViews()
-        val imagenes = b.canvas.scene.images()
+        // El banner del torneo es del modo, no un overlay del usuario: no se lista.
+        val imagenes = b.canvas.scene.images().filter { it.id != bannerTcg?.id }
         val cols = columnasFuentes()
         // Primera celda: crear texto. Después los overlays puestos y al final «+ Overlay».
         val total = 2 + imagenes.size
@@ -6872,6 +6890,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private fun showSettings() {
         val db = DialogSettingsBinding.inflate(layoutInflater)
+        db.rgModoTrabajo.check(if (modoTcg) R.id.rbModoPokemon else R.id.rbModoStudio)
         when (preset.label) {
             VideoPresets.BAJA.label -> db.rb360.isChecked = true
             VideoPresets.ALTA.label -> db.rb720.isChecked = true
@@ -6979,6 +6998,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         val dialog = AlertDialog.Builder(this).setView(db.root).create()
         db.btnClose.setOnClickListener {
+            // Cambio de modo de trabajo: se guarda y se vuelve a armar la pantalla.
+            val pedidoTcg = db.rbModoPokemon.isChecked
+            if (pedidoTcg != modoTcg) {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putBoolean(CLAVE_MODO_TCG, pedidoTcg).apply()
+                dialog.dismiss()
+                toast(if (pedidoTcg) "Modo Pokémon TCG" else "Modo Studio")
+                recreate()
+                return@setOnClickListener
+            }
             // Elegir una calidad fija desactiva el modo automático.
             calidadAuto = false
             preset = when {
@@ -7806,6 +7835,257 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         actualizarProgramaCamaras()
     }
 
+    // ================================================================ Modo Pokémon TCG
+
+    /** Carga el estado del torneo desde las preferencias. */
+    private fun leerEstadoTcg(): EstadoTcg = runCatching {
+        val p = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val texto = p.getString(CLAVE_TCG_ESTADO, null) ?: return@runCatching EstadoTcg()
+        val raiz = org.json.JSONObject(texto)
+
+        fun jugador(clave: String): JugadorTcg {
+            val o = raiz.optJSONObject(clave) ?: return JugadorTcg()
+            val fichas = BooleanArray(3)
+            val arr = o.optJSONArray("chips")
+            if (arr != null) for (i in 0 until minOf(3, arr.length())) fichas[i] = arr.getBoolean(i)
+            return JugadorTcg(
+                nombre = o.optString("nombre", "Jugador"),
+                ganadas = o.optInt("g", 0),
+                empatadas = o.optInt("e", 0),
+                perdidas = o.optInt("p", 0),
+                debilitados = o.optInt("deb", 0),
+                chips = fichas,
+            )
+        }
+
+        EstadoTcg(
+            evento = raiz.optString("evento", "LIGA JFR"),
+            uno = jugador("j1"),
+            dos = jugador("j2"),
+            serieUno = raiz.optInt("s1", 0),
+            serieDos = raiz.optInt("s2", 0),
+            turno = raiz.optInt("turno", 0),
+            paleta = raiz.optInt("paleta", 1),
+        )
+    }.getOrDefault(EstadoTcg())
+
+    private fun guardarEstadoTcg() = runCatching {
+        fun jugador(j: JugadorTcg) = org.json.JSONObject().apply {
+            put("nombre", j.nombre)
+            put("g", j.ganadas)
+            put("e", j.empatadas)
+            put("p", j.perdidas)
+            put("deb", j.debilitados)
+            put("chips", org.json.JSONArray().apply { j.chips.forEach { put(it) } })
+        }
+        val raiz = org.json.JSONObject().apply {
+            put("evento", estadoTcg.evento)
+            put("j1", jugador(estadoTcg.uno))
+            put("j2", jugador(estadoTcg.dos))
+            put("s1", estadoTcg.serieUno)
+            put("s2", estadoTcg.serieDos)
+            put("turno", estadoTcg.turno)
+            put("paleta", estadoTcg.paleta)
+        }
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putString(CLAVE_TCG_ESTADO, raiz.toString()).apply()
+    }
+
+    private fun cambiarEstadoTcg(nuevo: EstadoTcg) {
+        estadoTcg = nuevo
+        guardarEstadoTcg()
+        dibujarBannerTcg()
+        panelTcg?.refrescar(nuevo)
+    }
+
+    /** Vuelve a pintar el banner y lo deja como capa del programa (así se graba y se transmite). */
+    private fun dibujarBannerTcg() {
+        val imagen = Banners.dibujar(estadoTcg, 1600, 320)
+        val previo = bannerTcg
+        // Franja centrada arriba: aspecto 5:1 dentro de un lienzo 16:9.
+        val alto = 0.62f * (16f / 9f) / 5f
+        val rect = previo?.let { RectF(it.rect) } ?: RectF(0.19f, 0.02f, 0.81f, 0.02f + alto)
+        previo?.let { runCatching { b.canvas.scene.remove(it) } }
+        val item = b.canvas.scene.addImage(imagen, "Banner TCG", null, rect)
+        item.radiusDp = 8f
+        b.canvas.scene.selectedId = null
+        bannerTcg = item
+        runCatching { b.canvas.requestRender() }
+    }
+
+    private fun montarPanelTcg() {
+        val panel = PanelTcg(this, object : PanelTcg.Escucha {
+            override fun onEditarNombre(lado: Int) = editarNombreTcg(lado)
+
+            override fun onCambiarDebilitados(lado: Int, delta: Int) {
+                val j = if (lado == 0) estadoTcg.uno else estadoTcg.dos
+                val nuevo = (j.debilitados + delta).coerceIn(0, 6)
+                cambiarEstadoTcg(
+                    if (lado == 0) estadoTcg.copy(uno = j.copy(debilitados = nuevo))
+                    else estadoTcg.copy(dos = j.copy(debilitados = nuevo))
+                )
+            }
+
+            override fun onCambiarChip(lado: Int, chip: Int) {
+                if (estadoTcg.turno != lado) return
+                val j = if (lado == 0) estadoTcg.uno else estadoTcg.dos
+                val fichas = j.chips.copyOf()
+                fichas[chip] = !fichas[chip]
+                cambiarEstadoTcg(
+                    if (lado == 0) estadoTcg.copy(uno = j.copy(chips = fichas))
+                    else estadoTcg.copy(dos = j.copy(chips = fichas))
+                )
+            }
+
+            override fun onPasarTurno() {
+                // Los chips se reinician y el control pasa al otro lado.
+                cambiarEstadoTcg(
+                    estadoTcg.copy(
+                        turno = 1 - estadoTcg.turno,
+                        uno = estadoTcg.uno.copy(chips = booleanArrayOf(false, false, false)),
+                        dos = estadoTcg.dos.copy(chips = booleanArrayOf(false, false, false)),
+                    )
+                )
+            }
+
+            override fun onResultado(resultado: Int) {
+                val uno = estadoTcg.uno
+                val dos = estadoTcg.dos
+                val vacias = booleanArrayOf(false, false, false)
+                val nuevo = when (resultado) {
+                    1 -> estadoTcg.copy(
+                        serieUno = estadoTcg.serieUno + 1,
+                        uno = uno.copy(ganadas = uno.ganadas + 1, debilitados = 0, chips = vacias),
+                        dos = dos.copy(perdidas = dos.perdidas + 1, debilitados = 0, chips = vacias),
+                        turno = 0,
+                    )
+
+                    2 -> estadoTcg.copy(
+                        serieDos = estadoTcg.serieDos + 1,
+                        uno = uno.copy(perdidas = uno.perdidas + 1, debilitados = 0, chips = vacias),
+                        dos = dos.copy(ganadas = dos.ganadas + 1, debilitados = 0, chips = vacias),
+                        turno = 0,
+                    )
+
+                    else -> estadoTcg.copy(
+                        uno = uno.copy(empatadas = uno.empatadas + 1, debilitados = 0, chips = vacias),
+                        dos = dos.copy(empatadas = dos.empatadas + 1, debilitados = 0, chips = vacias),
+                    )
+                }
+                cambiarEstadoTcg(nuevo)
+                toast(
+                    when (resultado) {
+                        1 -> "Partida para ${uno.nombre} · serie ${nuevo.serieUno}-${nuevo.serieDos}"
+                        2 -> "Partida para ${dos.nombre} · serie ${nuevo.serieUno}-${nuevo.serieDos}"
+                        else -> "Empate · la serie queda ${nuevo.serieUno}-${nuevo.serieDos}"
+                    }
+                )
+            }
+
+            override fun onNuevaPartida() {
+                cambiarEstadoTcg(
+                    estadoTcg.copy(
+                        turno = 0,
+                        uno = estadoTcg.uno.copy(debilitados = 0, chips = booleanArrayOf(false, false, false)),
+                        dos = estadoTcg.dos.copy(debilitados = 0, chips = booleanArrayOf(false, false, false)),
+                    )
+                )
+                toast("Partida nueva: pokebolas y chips en cero")
+            }
+
+            override fun onReiniciarMarcador() {
+                cambiarEstadoTcg(
+                    estadoTcg.copy(
+                        serieUno = 0,
+                        serieDos = 0,
+                        turno = 0,
+                        uno = estadoTcg.uno.copy(debilitados = 0, chips = booleanArrayOf(false, false, false)),
+                        dos = estadoTcg.dos.copy(debilitados = 0, chips = booleanArrayOf(false, false, false)),
+                    )
+                )
+                toast("Marcador de la serie en 0 - 0")
+            }
+
+            override fun onCambiarPaleta() {
+                val siguiente = if (estadoTcg.paleta >= Banners.PALETAS.size) 1 else estadoTcg.paleta + 1
+                cambiarEstadoTcg(estadoTcg.copy(paleta = siguiente))
+                toast("Banner $siguiente de ${Banners.PALETAS.size}")
+            }
+        })
+        panel.refrescar(estadoTcg)
+        panelTcg = panel
+        b.slotControles.addView(panel.vista, 0)
+    }
+
+    /** Escribe el nombre del jugador. */
+    private fun editarNombreTcg(lado: Int) {
+        val actual = if (lado == 0) estadoTcg.uno else estadoTcg.dos
+        val campo = EditText(this).apply {
+            setText(actual.nombre)
+            setSingleLine()
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+        }
+        val caja = android.widget.FrameLayout(this).apply {
+            setPadding(18.dp, 8.dp, 18.dp, 0)
+            addView(campo)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Nombre del jugador ${lado + 1}")
+            .setView(caja)
+            .setPositiveButton("Guardar") { _, _ ->
+                val nombre = campo.text.toString().trim().ifEmpty { "Jugador ${lado + 1}" }
+                cambiarEstadoTcg(
+                    if (lado == 0) estadoTcg.copy(uno = actual.copy(nombre = nombre))
+                    else estadoTcg.copy(dos = actual.copy(nombre = nombre))
+                )
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    /** Nombre del evento (va en la franja del banner y se graba). */
+    private fun editarEventoTcg() {
+        val campo = EditText(this).apply {
+            setText(estadoTcg.evento)
+            setSingleLine()
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+        }
+        val caja = android.widget.FrameLayout(this).apply {
+            setPadding(18.dp, 8.dp, 18.dp, 0)
+            addView(campo)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Nombre del evento")
+            .setView(caja)
+            .setPositiveButton("Guardar") { _, _ ->
+                val nombre = campo.text.toString().trim().ifEmpty { "LIGA JFR" }
+                cambiarEstadoTcg(estadoTcg.copy(evento = nombre))
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    /** Aplica el modo al arrancar: 16:9 fijo, sin rotación y sin las herramientas que no van. */
+    private fun aplicarModoTcg() {
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        b.btnPlantillas.visibility = View.GONE
+        b.btnTransiciones.visibility = View.GONE
+        b.btnOrientacion.visibility = View.GONE
+        b.btnPhoto.visibility = View.GONE
+        b.scrollControles.visibility = View.GONE
+        b.cajaVideo.visibility = View.GONE
+        b.panelAjuste.visibility = View.GONE
+        dibujarBannerTcg()
+        montarPanelTcg()
+        // Al ocultar los controles viejos el lienzo debe volver a medirse (si no, queda chico).
+        b.cuerpo.post {
+            runCatching {
+                b.cuerpo.requestLayout()
+                b.canvasHost.requestLayout()
+                b.canvas.requestLayout()
+            }
+        }
+    }
 
     companion object {
         private const val PREFS = "jfr_studio"
@@ -7848,6 +8128,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         private const val CLAVE_PRESET = "preset"
         private const val CLAVE_TRANSICION = "transicion"
         private const val CLAVE_TRANSICION_MS = "transicion_ms"
+        private const val CLAVE_MODO_TCG = "modo_tcg"
+        private const val CLAVE_TCG_ESTADO = "tcg_estado"
     }
 }
 

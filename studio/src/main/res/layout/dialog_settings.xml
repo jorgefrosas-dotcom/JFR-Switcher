@@ -21,6 +21,46 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
+            android:text="MODO DE TRABAJO" />
+
+        <RadioGroup
+            android:id="@+id/rgModoTrabajo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/rbModoStudio"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="Modo Studio — 6 cámaras, 16:9 y 9:16"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <RadioButton
+                android:id="@+id/rbModoPokemon"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/accent"
+                android:text="Modo Pokémon TCG — 4 cámaras, solo 16:9 horizontal"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </RadioGroup>
+
+        <TextView
+            style="@style/Txt.Micro"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="En Pokémon TCG se ocultan plantillas, transiciones y los ajustes de imagen, y el banner del torneo se graba dentro del video."
+            android:textColor="@color/text_dim" />
+
+        <TextView
+            style="@style/Txt.Micro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
             android:text="QUÉ QUIERES HACER" />
 
         <RadioGroup
