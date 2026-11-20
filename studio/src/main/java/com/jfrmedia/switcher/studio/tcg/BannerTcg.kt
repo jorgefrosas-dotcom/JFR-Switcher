@@ -141,26 +141,23 @@ object Banners {
         texto.textSize = 26f * u
         cv.drawText(estado.evento.uppercase(), ancho / 2f, 40f * u, texto)
 
-        // nombres
+        // nombres (a la izquierda del bloque) y pokebolas grandes en dos filas de 3 al lado
         texto.textAlign = Paint.Align.LEFT
         texto.color = p.nombre
-        texto.textSize = 46f * u
-        val nombreUno = estado.uno.nombre.uppercase()
-        val nombreDos = estado.dos.nombre.uppercase()
-        cv.drawText(nombreUno, 34f * u, 122f * u, texto)
+        texto.textSize = 33f * u
+        cv.drawText(estado.uno.nombre.uppercase(), 34f * u, 106f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
-        cv.drawText(nombreDos, ancho - 34f * u, 122f * u, texto)
+        cv.drawText(estado.dos.nombre.uppercase(), ancho - 34f * u, 106f * u, texto)
 
-        // pokebolas (6 por lado)
-        var x = 44f * u
-        repeat(6) { i ->
-            pokebola(cv, x + 16f * u, 172f * u, 16f * u, i >= estado.uno.debilitados, p.pokebolaBorde)
-            x += 44f * u
-        }
-        x = ancho - 44f * u
-        repeat(6) { i ->
-            pokebola(cv, x - 16f * u, 172f * u, 16f * u, i >= estado.dos.debilitados, p.pokebolaBorde)
-            x -= 44f * u
+        // 6 pokebolas en 2 filas de 3, a la derecha (jugador 1) y a la izquierda (jugador 2)
+        val r = 22f * u
+        for (i in 0 until 6) {
+            val fila = i / 3
+            val col = i % 3
+            val xIzq = 300f * u + col * 62f * u
+            pokebola(cv, xIzq, 92f * u + fila * 56f * u, r, i >= estado.uno.debilitados, p.pokebolaBorde)
+            val xDer = ancho - 300f * u - col * 62f * u
+            pokebola(cv, xDer, 92f * u + fila * 56f * u, r, i >= estado.dos.debilitados, p.pokebolaBorde)
         }
 
         // récord

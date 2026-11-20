@@ -8427,6 +8427,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             escena.items.add(item)
         }
         dibujarChipsTcg()
+        // Reenganchar el video de las cámaras que ya estaban conectadas (al rehacer la escena
+        // se suelta la pista y sin esto el PiP quedaba en negro).
+        hub.all().forEach { s -> s.videoTrack?.let { t -> runCatching { adjuntar(s.slot, t) } } }
         escena.selectedId = null   // sin marco de selección: el resaltado es del turno
         b.canvas.slotResaltado = if (estadoTcg.turno == 0) 0 else 1
         escena.touch()
