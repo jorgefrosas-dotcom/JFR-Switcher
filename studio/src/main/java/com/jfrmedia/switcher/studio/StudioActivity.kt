@@ -7923,8 +7923,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val imagen = Banners.dibujar(estadoTcg, 1600, 320)
         val previo = bannerTcg
         // Franja centrada arriba: aspecto 5:1 dentro de un lienzo 16:9.
-        val alto = 0.62f * (16f / 9f) / 5f
-        val rect = previo?.let { RectF(it.rect) } ?: RectF(0.19f, 0.02f, 0.81f, 0.02f + alto)
+        val alto = 0.60f * (16f / 9f) / 5f
+        val rect = previo?.let { RectF(it.rect) } ?: RectF(0.20f, 0.02f, 0.80f, 0.02f + alto)
         previo?.let { runCatching { b.canvas.scene.remove(it) } }
         val item = b.canvas.scene.addImage(imagen, "Banner TCG", null, rect)
         item.radiusDp = 8f
@@ -8128,8 +8128,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val escena = b.canvas.scene
         escena.cams().forEach { runCatching { quitarCamaraDelLienzo(it) } }
         escena.addCam(2)?.rect?.set(0f, 0f, 1f, 1f)
-        escena.addCam(0)?.rect?.set(0.02f, 0.03f, 0.19f, 0.20f)
-        escena.addCam(1)?.rect?.set(0.81f, 0.03f, 0.98f, 0.20f)
+        escena.addCam(0)?.rect?.set(0.015f, 0.03f, 0.185f, 0.20f)
+        escena.addCam(1)?.rect?.set(0.815f, 0.03f, 0.985f, 0.20f)
         // El banner siempre al final: tiene que quedar por encima.
         bannerTcg?.let { item ->
             escena.items.remove(item)
@@ -8162,7 +8162,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             if (indiceBanner >= 0) escena.items.add(indiceBanner, ambiente) else escena.items.add(ambiente)
         } else {
             ambiente?.visible = false
-            ambiente?.rect?.set(0.02f, 0.79f, 0.20f, 0.97f)
+            ambiente?.rect?.set(0.805f, 0.78f, 0.975f, 0.95f)
             uno?.visible = true
             dos?.visible = true
         }

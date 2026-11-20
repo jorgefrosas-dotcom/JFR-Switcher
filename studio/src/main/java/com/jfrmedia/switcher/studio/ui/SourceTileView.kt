@@ -265,7 +265,7 @@ class SourceTileView @JvmOverloads constructor(
         currentTrack = null
         video.visibility = View.INVISIBLE
         txtHint.visibility = View.VISIBLE
-        txtName.text = "Cámara ${slotIndex + 1}"
+        txtName.text = nombreFijo ?: "Cámara ${slotIndex + 1}"
         estado("Sin conectar", false)
         txtBadge.visibility = View.GONE
         setBackgroundResource(R.drawable.bg_tile)
