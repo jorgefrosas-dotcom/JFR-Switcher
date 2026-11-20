@@ -7203,6 +7203,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             toast("Cámara 4: cámara de la tablet (frontal)")
             return
         }
+        // La cámara de la tablet puede estar encendida sin estar en la escena (la escena del modo
+        // solo pone mesa y jugadores): se agrega en el hueco de ambiente y se engancha su video.
+        val escena = b.canvas.scene
+        if (escena.camAt(LocalCam.SLOT) == null) {
+            escena.addCam(LocalCam.SLOT)?.rect?.set(0.805f, 0.78f, 0.975f, 0.95f)
+            escena.selectedId = null
+            localCam.track?.let { t -> runCatching { adjuntar(LocalCam.SLOT, t) } }
+            b.canvas.requestRender()
+        }
         ambienteFrontal = !ambienteFrontal
         runCatching { localCam.cambiarCamara(ambienteFrontal) }
         toast("Cámara 4: tablet " + if (ambienteFrontal) "frontal" else "trasera")
@@ -8449,6 +8458,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val escena = b.canvas.scene
         escena.cams().forEach { runCatching { quitarCamaraDelLienzo(it) } }
         escena.addCam(2)?.rect?.set(0f, 0f, 1f, 1f)
+        if (localCam.encendida) {
+            escena.addCam(LocalCam.SLOT)?.rect?.set(0.805f, 0.78f, 0.975f, 0.95f)
+            localCam.track?.let { t -> runCatching { adjuntar(LocalCam.SLOT, t) } }
+        }
         escena.addCam(0)?.rect?.set(0.015f, 0.03f, 0.185f, 0.20f)
         escena.addCam(1)?.rect?.set(0.815f, 0.03f, 0.985f, 0.20f)
         // El banner siempre al final: tiene que quedar por encima.
