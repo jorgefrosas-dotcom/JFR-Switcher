@@ -147,6 +147,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** true = Modo Pokémon TCG: 16:9 fijo, sin rotación y con el banner del torneo en el video. */
     private var modoTcg = false
     private var estadoTcg = EstadoTcg()
+    private var aplicandoRectTcg = false
     private var bannerTcg: CanvasItem? = null
     private var chipsTcgUno: CanvasItem? = null
     private var chipsTcgDos: CanvasItem? = null
@@ -7183,7 +7184,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     override fun onSceneChanged() {
-        // nada extra por ahora: el lienzo se redibuja solo
+        // En Modo TCG la escena es fija: si una cámara se coloca sola, se le devuelve su sitio.
+        if (!modoTcg || aplicandoRectTcg) return
+        aplicarRectangulosTcg()
+    }
+
+    /** Coloca las cámaras en su rectángulo del modo (mesa al fondo, jugadores como PiP). */
+    private fun aplicarRectangulosTcg() {
+        val escena = b.canvas.scene
+        aplicandoRectTcg = true
+        try {
+            escena.camAt(2)?.rect?.set(0f, 0f, 1f, 1f)
+            escena.camAt(0)?.rect?.set(0.015f, 0.03f, 0.185f, 0.20f)
+            escena.camAt(1)?.rect?.set(0.815f, 0.03f, 0.985f, 0.20f)
+            escena.selectedId = null
+            b.canvas.slotResaltado = if (estadoTcg.turno == 0) 0 else 1
+            b.canvas.requestRender()
+        } finally {
+            aplicandoRectTcg = false
+        }
     }
 
     private fun toast(msg: String) {
