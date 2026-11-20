@@ -30,6 +30,7 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
         fun onReiniciarMarcador()
         fun onCambiarPaleta()
         fun onAlternarAmbiente()
+        fun onAbrirEvento()
     }
 
     val vista: View
@@ -59,6 +60,7 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
             setTextColor(Color.parseColor("#FFCB05"))
         }
         cabecera.addView(textoEvento, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        cabecera.addView(boton(contexto, "Evento", 0xFF23262E.toInt(), 0xFFFFCB05.toInt()) { escucha.onAbrirEvento() })
         cabecera.addView(boton(contexto, "Nueva partida", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) { escucha.onNuevaPartida() })
         cabecera.addView(boton(contexto, "Reiniciar", 0xFF23262E.toInt(), 0xFF9AA0AA.toInt()) { escucha.onReiniciarMarcador() })
         cabecera.addView(boton(contexto, "Ambiente", 0xFF23262E.toInt(), 0xFF9AA0AA.toInt()) { escucha.onAlternarAmbiente() })

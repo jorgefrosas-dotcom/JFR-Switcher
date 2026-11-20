@@ -74,6 +74,7 @@ import com.jfrmedia.switcher.studio.rtc.RtcCore
 import com.jfrmedia.switcher.studio.rtc.StudioServer
 import com.jfrmedia.switcher.studio.tcg.Banners
 import com.jfrmedia.switcher.studio.tcg.EstadoTcg
+import com.jfrmedia.switcher.studio.tcg.JugadorEvento
 import com.jfrmedia.switcher.studio.tcg.JugadorTcg
 import com.jfrmedia.switcher.studio.tcg.PanelTcg
 import com.jfrmedia.switcher.studio.ui.OverlayTileView
@@ -7878,8 +7879,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )
         }
 
+        val roster = ArrayList<JugadorEvento>()
+        raiz.optJSONArray("roster")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                roster.add(
+                    JugadorEvento(
+                        nombre = o.optString("nombre", "Jugador"),
+                        ganadas = o.optInt("g", 0),
+                        empatadas = o.optInt("e", 0),
+                        perdidas = o.optInt("p", 0),
+                    )
+                )
+            }
+        }
         EstadoTcg(
             evento = raiz.optString("evento", "LIGA JFR"),
+            roster = roster,
             uno = jugador("j1"),
             dos = jugador("j2"),
             serieUno = raiz.optInt("s1", 0),
@@ -7900,6 +7916,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         val raiz = org.json.JSONObject().apply {
             put("evento", estadoTcg.evento)
+            put("roster", org.json.JSONArray().apply {
+                estadoTcg.roster.forEach { j ->
+                    put(org.json.JSONObject().apply {
+                        put("nombre", j.nombre)
+                        put("g", j.ganadas)
+                        put("e", j.empatadas)
+                        put("p", j.perdidas)
+                    })
+                }
+            })
             put("j1", jugador(estadoTcg.uno))
             put("j2", jugador(estadoTcg.dos))
             put("s1", estadoTcg.serieUno)
@@ -7992,7 +8018,26 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                         dos = dos.copy(empatadas = dos.empatadas + 1, debilitados = 0, chips = vacias),
                     )
                 }
-                cambiarEstadoTcg(nuevo)
+                // El récord se guarda en los jugadores inscritos del evento.
+                val roster = estadoTcg.roster.map { j ->
+                    when (j.nombre) {
+                        uno.nombre -> when (resultado) {
+                            1 -> j.copy(ganadas = j.ganadas + 1)
+                            0 -> j.copy(empatadas = j.empatadas + 1)
+                            else -> j.copy(perdidas = j.perdidas + 1)
+                        }
+
+                        dos.nombre -> when (resultado) {
+                            2 -> j.copy(ganadas = j.ganadas + 1)
+                            0 -> j.copy(empatadas = j.empatadas + 1)
+                            else -> j.copy(perdidas = j.perdidas + 1)
+                        }
+
+                        else -> j
+                    }
+                }
+                val conRoster = nuevo.copy(roster = roster)
+                cambiarEstadoTcg(conRoster)
                 toast(
                     when (resultado) {
                         1 -> "Partida para ${uno.nombre} · serie ${nuevo.serieUno}-${nuevo.serieDos}"
@@ -8033,6 +8078,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
 
             override fun onAlternarAmbiente() = alternarAmbienteTcg()
+
+            override fun onAbrirEvento() = abrirDialogoEvento()
         })
         panel.refrescar(estadoTcg)
         panelTcg = panel
@@ -8117,6 +8164,155 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         b.cuerpo.postDelayed({ runCatching { aplicarEscenaTcg() } }, 300)
     }
 
+    /** Ventana del evento: nombre, jugadores inscritos con su récord y quién va en la mesa. */
+    private fun abrirDialogoEvento() {
+        val inscritos = estadoTcg.roster.toMutableList()
+        if (inscritos.isEmpty()) {
+            inscritos.add(JugadorEvento(estadoTcg.uno.nombre.ifBlank { "Jugador 1" }))
+            inscritos.add(JugadorEvento(estadoTcg.dos.nombre.ifBlank { "Jugador 2" }))
+        }
+
+        val columna = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20.dp, 4.dp, 20.dp, 0)
+        }
+
+        fun rotulo(t: String): TextView = TextView(this).apply {
+            text = t
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextColor(ContextCompat.getColor(context, R.color.text_dim))
+            setPadding(0, 14.dp, 0, 4.dp)
+        }
+
+        columna.addView(rotulo("NOMBRE DEL EVENTO"))
+        val campoEvento = EditText(this).apply {
+            setText(estadoTcg.evento)
+            setSingleLine()
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+        }
+        columna.addView(campoEvento)
+
+        columna.addView(rotulo("JUGADORES INSCRITOS · RÉCORD V-E-D"))
+        val lista = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        columna.addView(lista)
+
+        val spUno = android.widget.Spinner(this)
+        val spDos = android.widget.Spinner(this)
+
+        fun refrescar() {
+            lista.removeAllViews()
+            inscritos.forEach { j ->
+                val fila = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, 5.dp, 0, 5.dp)
+                }
+                fila.addView(
+                    TextView(this).apply {
+                        text = j.nombre
+                        setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f)
+                        setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                    },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                )
+                fila.addView(TextView(this).apply {
+                    text = j.record
+                    setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13f)
+                    setTextColor(ContextCompat.getColor(context, R.color.accent))
+                    setPadding(0, 0, 16.dp, 0)
+                })
+                fila.addView(TextView(this).apply {
+                    text = "X"
+                    setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13f)
+                    setTextColor(ContextCompat.getColor(context, R.color.text_dim))
+                    setPadding(8.dp, 4.dp, 8.dp, 4.dp)
+                    setOnClickListener { inscritos.remove(j); refrescar() }
+                })
+                lista.addView(fila)
+            }
+            val nombres = inscritos.map { it.nombre }
+            listOf(spUno, spDos).forEach { sp ->
+                val adaptador = android.widget.ArrayAdapter(
+                    this, android.R.layout.simple_spinner_item, nombres
+                )
+                adaptador.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                sp.adapter = adaptador
+            }
+            spUno.setSelection(nombres.indexOf(estadoTcg.uno.nombre).coerceAtLeast(0), false)
+            spDos.setSelection(nombres.indexOf(estadoTcg.dos.nombre).coerceAtLeast(0), false)
+        }
+        refrescar()
+
+        columna.addView(TextView(this).apply {
+            text = "+ Agregar jugador"
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(ContextCompat.getColor(context, R.color.accent))
+            setPadding(0, 10.dp, 0, 2.dp)
+            setOnClickListener {
+                val campo = EditText(this@StudioActivity).apply {
+                    setSingleLine()
+                    setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                    hint = "Nombre del jugador"
+                }
+                AlertDialog.Builder(this@StudioActivity)
+                    .setTitle("Jugador nuevo")
+                    .setView(campo)
+                    .setPositiveButton("Agregar") { _, _ ->
+                        val n = campo.text.toString().trim()
+                        if (n.isNotEmpty()) {
+                            inscritos.add(JugadorEvento(n))
+                            refrescar()
+                        }
+                    }
+                    .setNegativeButton("Cancelar", null)
+                    .show()
+            }
+        })
+
+        columna.addView(rotulo("MESA ACTUAL"))
+        val filaMesa = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        filaMesa.addView(spUno, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        filaMesa.addView(TextView(this).apply {
+            text = "vs"
+            setTextColor(ContextCompat.getColor(context, R.color.text_dim))
+            setPadding(10.dp, 0, 10.dp, 0)
+        })
+        filaMesa.addView(spDos, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        columna.addView(filaMesa)
+
+        AlertDialog.Builder(this)
+            .setTitle("Evento")
+            .setView(android.widget.ScrollView(this).apply { addView(columna) })
+            .setPositiveButton("Guardar") { _, _ ->
+                val n1 = spUno.selectedItem?.toString() ?: estadoTcg.uno.nombre
+                val n2 = spDos.selectedItem?.toString() ?: estadoTcg.dos.nombre
+                val r1 = inscritos.firstOrNull { it.nombre == n1 } ?: JugadorEvento(n1)
+                val r2 = inscritos.firstOrNull { it.nombre == n2 } ?: JugadorEvento(n2)
+                if (inscritos.none { it.nombre == n1 }) inscritos.add(r1)
+                if (inscritos.none { it.nombre == n2 }) inscritos.add(r2)
+                cambiarEstadoTcg(
+                    estadoTcg.copy(
+                        evento = campoEvento.text.toString().trim().ifEmpty { "LIGA JFR" },
+                        roster = inscritos.toList(),
+                        uno = estadoTcg.uno.copy(
+                            nombre = n1, ganadas = r1.ganadas, empatadas = r1.empatadas, perdidas = r1.perdidas
+                        ),
+                        dos = estadoTcg.dos.copy(
+                            nombre = n2, ganadas = r2.ganadas, empatadas = r2.empatadas, perdidas = r2.perdidas
+                        ),
+                        serieUno = 0,
+                        serieDos = 0,
+                        turno = 0,
+                    )
+                )
+                toast("Evento guardado · $n1 vs $n2")
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
     /** Cámara de ambiente: ocupa la pantalla completa cuando está activa. */
     private var ambienteTcg = false
 

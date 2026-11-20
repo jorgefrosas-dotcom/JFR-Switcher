@@ -1,4 +1,4 @@
-package com.jfrmedia.switcher.studio.tcg
+﻿package com.jfrmedia.switcher.studio.tcg
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -41,8 +41,19 @@ data class JugadorTcg(
     }
 }
 
+data class JugadorEvento(
+    val nombre: String,
+    val ganadas: Int = 0,
+    val empatadas: Int = 0,
+    val perdidas: Int = 0,
+) {
+    val record: String get() = "$ganadas - $empatadas - $perdidas"
+}
+
 data class EstadoTcg(
     val evento: String = "LIGA JFR",
+    /** Jugadores inscritos en el evento: de aquí salen los récords. */
+    val roster: List<JugadorEvento> = emptyList(),
     val uno: JugadorTcg = JugadorTcg("Jugador 1"),
     val dos: JugadorTcg = JugadorTcg("Jugador 2"),
     val serieUno: Int = 0,
