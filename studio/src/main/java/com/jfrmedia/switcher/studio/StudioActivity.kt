@@ -3189,6 +3189,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (modoTcg) {
             val nombres = listOf("Jugador 1", "Jugador 2", "Mesa", "Ambiente")
             tiles.forEachIndexed { i, t -> t.ponerNombre(nombres.getOrElse(i) { "Cámara ${i + 1}" }) }
+            // Cámara 4: botón para usar la cámara de la tablet (frontal/trasera) en su lugar.
+            tiles.getOrNull(3)?.botonEsquina(if (localCam.encendida) "Lente" else "Tablet") {
+                cicloCamaraAmbiente()
+            }
         }
 
         // Volver a enganchar los videos: las tarjetas son nuevas y sin esto se quedaban en negro
@@ -7189,12 +7193,29 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         aplicarRectangulosTcg()
     }
 
+    /** Cámara 4 = cámara de la tablet: la enciende o cambia entre frontal y trasera. */
+    private var ambienteFrontal = true
+
+    private fun cicloCamaraAmbiente() {
+        if (!localCam.encendida) {
+            ambienteFrontal = true
+            encenderCamaraTablet()
+            toast("Cámara 4: cámara de la tablet (frontal)")
+            return
+        }
+        ambienteFrontal = !ambienteFrontal
+        runCatching { localCam.cambiarCamara(ambienteFrontal) }
+        toast("Cámara 4: tablet " + if (ambienteFrontal) "frontal" else "trasera")
+    }
+
     /** Coloca las cámaras en su rectángulo del modo (mesa al fondo, jugadores como PiP). */
     private fun aplicarRectangulosTcg() {
         val escena = b.canvas.scene
         aplicandoRectTcg = true
         try {
             escena.camAt(2)?.rect?.set(0f, 0f, 1f, 1f)
+            // La cámara de la tablet, cuando se usa como cámara 4, va en el mismo hueco.
+            escena.camAt(LocalCam.SLOT)?.rect?.set(0.805f, 0.78f, 0.975f, 0.95f)
             escena.camAt(0)?.rect?.set(0.015f, 0.03f, 0.185f, 0.20f)
             escena.camAt(1)?.rect?.set(0.815f, 0.03f, 0.985f, 0.20f)
             escena.selectedId = null
@@ -8257,6 +8278,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }, 700)
         // La escena del modo: mesa al fondo, PiPs de los jugadores y el banner encima.
         b.cuerpo.postDelayed({ runCatching { aplicarEscenaTcg() } }, 300)
+        // Si una cámara llega después, se le devuelve su hueco (y su video).
+        listOf(1500L, 3000L, 6000L).forEach { espera ->
+            b.cuerpo.postDelayed({
+                runCatching {
+                    aplicarRectangulosTcg()
+                    hub.all().forEach { s -> s.videoTrack?.let { t -> runCatching { adjuntar(s.slot, t) } } }
+                }
+            }, espera)
+        }
     }
 
     /** Ventana del evento: nombre, jugadores inscritos con su récord y quién va en la mesa. */

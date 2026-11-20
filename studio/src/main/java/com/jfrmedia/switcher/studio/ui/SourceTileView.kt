@@ -159,6 +159,31 @@ class SourceTileView @JvmOverloads constructor(
         txtName.text = t
     }
 
+    /** Botón pequeño en la esquina de la tarjeta (Modo TCG: la lente de la cámara 4). */
+    fun botonEsquina(texto: String, accion: () -> Unit): TextView {
+        val b = TextView(context).apply {
+            text = texto
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextColor(0xFFECEEF2.toInt())
+            setPadding(dp(8f), dp(3f), dp(8f), dp(3f))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xDD1A1C22.toInt())
+                cornerRadius = dp(10f).toFloat()
+                setStroke(dp(1f).toInt().coerceAtLeast(1), 0xFF4A4F5C.toInt())
+            }
+            setOnClickListener { accion() }
+        }
+        val p = android.widget.FrameLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        p.gravity = android.view.Gravity.TOP or android.view.Gravity.END
+        p.setMargins(0, dp(6f), dp(6f), 0)
+        addView(b, p)
+        return b
+    }
+
+    private fun dp(v: Float): Int = (v * resources.displayMetrics.density).toInt()
     fun setup(index: Int, onClick: () -> Unit) {
         slotIndex = index
         txtNumber.text = (index + 1).toString()
