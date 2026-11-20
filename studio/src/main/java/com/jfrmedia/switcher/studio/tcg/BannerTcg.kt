@@ -228,6 +228,18 @@ object Banners {
         }
         return bmp
     }
+    /** Las 6 pokebolas de un jugador para la banda de control (encendidas = premios vivos). */
+    fun dibujarPokebolas(debilitados: Int, ancho: Int = 420, alto: Int = 64): Bitmap {
+        val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(bmp)
+        val r = alto / 2f - 3f
+        val paso = (ancho - 6f) / 6f
+        val vivas = (6 - debilitados).coerceIn(0, 6)
+        for (i in 0 until 6) {
+            pokebola(cv, 3f + paso * i + paso / 2f, alto / 2f, r, i < vivas, Color.rgb(18, 18, 20))
+        }
+        return bmp
+    }
     private fun pokebola(cv: Canvas, cx: Float, cy: Float, r: Float, encendida: Boolean, borde: Int) {
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
         val arriba = if (encendida) Color.rgb(227, 53, 13) else Color.rgb(58, 59, 64)

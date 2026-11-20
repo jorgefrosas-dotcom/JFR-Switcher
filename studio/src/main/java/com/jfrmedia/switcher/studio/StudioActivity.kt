@@ -8197,7 +8197,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (::mediosContainer.isInitialized) mediosContainer.visibility = View.GONE
         if (::bibliotecaContainer.isInitialized) bibliotecaContainer.visibility = View.GONE
         // Columna de cámaras angosta y monitor grande, como el diseño.
-        (b.panelFuentes.layoutParams as? LinearLayout.LayoutParams)?.let { it.weight = 0.19f }
+        (b.panelFuentes.layoutParams as? LinearLayout.LayoutParams)?.let { it.weight = 0.195f }
         (b.panelPrograma.layoutParams as? LinearLayout.LayoutParams)?.let { it.weight = 0.81f }
         b.llGrid.requestLayout()
         b.cuerpo.requestLayout()

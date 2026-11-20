@@ -55,7 +55,7 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
         )
         fila.addView(
             centro,
-            LinearLayout.LayoutParams(dp(contexto, 400f), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            LinearLayout.LayoutParams(dp(contexto, 330f), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 rightMargin = dp(contexto, 8f)
             }
         )
@@ -116,13 +116,12 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
             escucha.onCambiarDebilitados(lado, -1)
         })
         premios.addView(
-            TextView(contexto).apply {
-                text = pokebolasTexto(jugador.debilitados)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setTextColor(0xFFECEEF2.toInt())
-                gravity = Gravity.CENTER
+            // Pokebolas dibujadas (iconos), no círculos de texto.
+            android.widget.ImageView(contexto).apply {
+                setImageBitmap(Banners.dibujarPokebolas(jugador.debilitados, 420, dp(contexto, 30f)))
+                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             },
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            LinearLayout.LayoutParams(0, dp(contexto, 30f), 1f)
         )
         premios.addView(boton(contexto, "+", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) {
             escucha.onCambiarDebilitados(lado, +1)
@@ -222,11 +221,6 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
     }
 
     // ------------------------------------------------------------------ ayudas
-
-    private fun pokebolasTexto(debilitados: Int): String {
-        val vivas = (6 - debilitados).coerceIn(0, 6)
-        return "●".repeat(vivas) + "○".repeat(6 - vivas)
-    }
 
     private fun etiqueta(contexto: Context, t: String, color: Int): TextView = TextView(contexto).apply {
         text = t
