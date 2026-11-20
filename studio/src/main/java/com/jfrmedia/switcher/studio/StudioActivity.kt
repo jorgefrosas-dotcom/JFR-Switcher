@@ -1,4 +1,4 @@
-package com.jfrmedia.switcher.studio
+﻿package com.jfrmedia.switcher.studio
 
 import android.Manifest
 import android.content.ClipData
@@ -7987,6 +7987,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             return item
         }
 
+        b.canvas.slotResaltado = if (estadoTcg.turno == 0) 0 else 1
         chipsTcgUno = pintar(chipsTcgUno, 0, 0.015f)
         chipsTcgDos = pintar(chipsTcgDos, 1, 0.815f)
         runCatching { b.canvas.requestRender() }
@@ -8036,8 +8037,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 cambiarEstadoTcg(
                     estadoTcg.copy(
                         turno = 1 - estadoTcg.turno,
-                        uno = estadoTcg.uno.copy(chips = booleanArrayOf(false, false, false)),
-                        dos = estadoTcg.dos.copy(chips = booleanArrayOf(false, false, false)),
+                        uno = estadoTcg.uno.copy(chips = booleanArrayOf(true, true, true)),
+                        dos = estadoTcg.dos.copy(chips = booleanArrayOf(true, true, true)),
                     )
                 )
             }
@@ -8045,7 +8046,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             override fun onResultado(resultado: Int) {
                 val uno = estadoTcg.uno
                 val dos = estadoTcg.dos
-                val vacias = booleanArrayOf(false, false, false)
+                val vacias = booleanArrayOf(true, true, true)
                 val nuevo = when (resultado) {
                     1 -> estadoTcg.copy(
                         serieUno = estadoTcg.serieUno + 1,
@@ -8099,8 +8100,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 cambiarEstadoTcg(
                     estadoTcg.copy(
                         turno = 0,
-                        uno = estadoTcg.uno.copy(debilitados = 0, chips = booleanArrayOf(false, false, false)),
-                        dos = estadoTcg.dos.copy(debilitados = 0, chips = booleanArrayOf(false, false, false)),
+                        uno = estadoTcg.uno.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
+                        dos = estadoTcg.dos.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
                     )
                 )
                 toast("Partida nueva: pokebolas y chips en cero")
@@ -8112,8 +8113,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                         serieUno = 0,
                         serieDos = 0,
                         turno = 0,
-                        uno = estadoTcg.uno.copy(debilitados = 0, chips = booleanArrayOf(false, false, false)),
-                        dos = estadoTcg.dos.copy(debilitados = 0, chips = booleanArrayOf(false, false, false)),
+                        uno = estadoTcg.uno.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
+                        dos = estadoTcg.dos.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
                     )
                 )
                 toast("Marcador de la serie en 0 - 0")

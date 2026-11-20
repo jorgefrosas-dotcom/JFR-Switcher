@@ -1,4 +1,4 @@
-package com.jfrmedia.switcher.studio.canvas
+﻿package com.jfrmedia.switcher.studio.canvas
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -325,6 +325,9 @@ class CompositorView @JvmOverloads constructor(
         ZOOM_IN("zoom_in", "Acercar (zoom in)"),
         ZOOM_OUT("zoom_out", "Alejar (zoom out)")
     }
+
+    /** Slot de la cámara que va resaltada en el programa (el jugador en turno). -1 = ninguna. */
+    @Volatile var slotResaltado: Int = -1
 
     @Volatile var transicion: Transicion = Transicion.FUNDIDO
     @Volatile var transicionMs: Int = 420

@@ -19,7 +19,7 @@ data class JugadorTcg(
     /** Pokebolas apagadas = Pokémon debilitados (0 a 6). */
     val debilitados: Int = 0,
     /** Energy, Supporter, Retreat (solo del jugador en turno). */
-    val chips: BooleanArray = booleanArrayOf(false, false, false),
+    val chips: BooleanArray = booleanArrayOf(true, true, true),
 ) {
     val record: String get() = "$ganadas - $empatadas - $perdidas"
 
@@ -167,9 +167,13 @@ object Banners {
         texto.textSize = 22f * u
         texto.color = p.record
         texto.textAlign = Paint.Align.LEFT
-        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 196f * u, texto)
+        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 186f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
-        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 196f * u, texto)
+        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 186f * u, texto)
+
+        // Chips Energy / Supporter / Retreat de cada jugador, debajo de sus pokebolas.
+        filaChips(cv, estado.uno, estado.turno == 0, 34f * u, 208f * u, 470f * u, u, alDerecha = false, p)
+        filaChips(cv, estado.dos, estado.turno == 1, ancho - 34f * u - 470f * u, 208f * u, 470f * u, u, alDerecha = true, p)
 
         // marcador central
         val caja = RectF(ancho / 2f - 150f * u, 64f * u, ancho / 2f + 150f * u, 250f * u)
@@ -198,17 +202,17 @@ object Banners {
      * Chips Energy / Supporter / Retreat de un jugador, para dibujarlos **dentro del video**
      * debajo de su cámara. Si no es su turno, van apagados.
      */
-    fun dibujarChips(jugador: JugadorTcg, enTurno: Boolean, ancho: Int = 700, alto: Int = 120): Bitmap {
+    fun dibujarChips(jugador: JugadorTcg, enTurno: Boolean, ancho: Int = 760, alto: Int = 150): Bitmap {
         val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
         val cv = Canvas(bmp)
-        val u = alto / 120f
+        val u = alto / 150f
         val nombres = listOf("ENERGY", "SUPPORTER", "RETREAT")
         val colores = listOf(Color.rgb(88, 200, 140), Color.rgb(122, 152, 244), Color.rgb(242, 172, 82))
         val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
         val texto = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
-            textSize = 34f * u
+            textSize = 44f * u
         }
         var x = 4f * u
         for (i in 0 until 3) {
@@ -239,6 +243,44 @@ object Banners {
             pokebola(cv, 3f + paso * i + paso / 2f, alto / 2f, r, i < vivas, Color.rgb(18, 18, 20))
         }
         return bmp
+    }
+    /** Tres chips de un jugador dentro del banner (rellenos si están disponibles). */
+    private fun filaChips(
+        cv: Canvas,
+        jugador: JugadorTcg,
+        enTurno: Boolean,
+        x0: Float,
+        y0: Float,
+        ancho: Float,
+        u: Float,
+        alDerecha: Boolean,
+        p: PaletaBanner,
+    ) {
+        val nombres = listOf("ENERGY", "SUPPORTER", "RETREAT")
+        val colores = listOf(Color.rgb(88, 200, 140), Color.rgb(122, 152, 244), Color.rgb(242, 172, 82))
+        val alto = 42f * u
+        val paso = ancho / 3f
+        val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
+        val texto = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+            textSize = 20f * u
+        }
+        for (i in 0 until 3) {
+            val disponible = enTurno && jugador.chips[i]
+            val w = paso - 8f * u
+            val x = if (alDerecha) x0 + paso * i else x0 + paso * i
+            val caja = RectF(x, y0, x + w, y0 + alto)
+            pintura.color = if (disponible) colores[i] else Color.argb(70, 40, 46, 58)
+            cv.drawRoundRect(caja, alto / 2f, alto / 2f, pintura)
+            pintura.style = Paint.Style.STROKE
+            pintura.strokeWidth = 2f * u
+            pintura.color = if (disponible) Color.WHITE else Color.argb(90, 120, 132, 150)
+            cv.drawRoundRect(caja, alto / 2f, alto / 2f, pintura)
+            pintura.style = Paint.Style.FILL
+            texto.color = if (disponible) Color.rgb(16, 16, 18) else Color.argb(120, 210, 216, 224)
+            cv.drawText(nombres[i], caja.centerX(), caja.centerY() + 7f * u, texto)
+        }
     }
     private fun pokebola(cv: Canvas, cx: Float, cy: Float, r: Float, encendida: Boolean, borde: Int) {
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
