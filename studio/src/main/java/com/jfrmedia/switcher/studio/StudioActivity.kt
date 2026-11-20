@@ -3096,6 +3096,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      */
     /** En vertical las tarjetas son verticales (9:16) y entran más por fila. */
     private fun columnasFuentes(): Int = when {
+        // Modo Pokémon TCG: las 4 cámaras en una sola columna, como el diseño aprobado.
+        modoTcg -> 1
         // En celular la columna es más ancha: 2 tarjetas por fila, más grandes. Para ver el resto se
         // desliza la columna (pedido de Jorge, 29/10).
         esPantallaCelular() -> 2
@@ -8188,6 +8190,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         b.btnOrientacion.visibility = View.GONE
         b.btnPhoto.visibility = View.GONE
         b.scrollControles.visibility = View.GONE
+        // Fuera overlays y medios: en este modo solo van las 4 cámaras.
+        etiquetaOverlays?.visibility = View.GONE
+        overlayContainer.visibility = View.GONE
+        etiquetaMedios?.visibility = View.GONE
+        if (::mediosContainer.isInitialized) mediosContainer.visibility = View.GONE
+        if (::bibliotecaContainer.isInitialized) bibliotecaContainer.visibility = View.GONE
+        // Columna de cámaras angosta y monitor grande, como el diseño.
+        (b.panelFuentes.layoutParams as? LinearLayout.LayoutParams)?.let { it.weight = 0.19f }
+        (b.panelPrograma.layoutParams as? LinearLayout.LayoutParams)?.let { it.weight = 0.81f }
+        b.llGrid.requestLayout()
+        b.cuerpo.requestLayout()
         b.cajaVideo.visibility = View.GONE
         b.panelAjuste.visibility = View.GONE
         zonaControles?.let { z ->
