@@ -1,4 +1,4 @@
-package com.jfrmedia.switcher.studio
+﻿package com.jfrmedia.switcher.studio
 
 import android.Manifest
 import android.content.ClipData
@@ -5788,7 +5788,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             v.gravity = Gravity.CENTER
             b.filaVideo.addView(v)
         }
-        b.panelAjuste.visibility = View.VISIBLE
+        b.panelAjuste.visibility = if (modoTcg) View.GONE else View.VISIBLE
         b.panelAjuste.orientation = LinearLayout.HORIZONTAL
         (b.sbAjuste.parent as? ViewGroup)?.removeView(b.sbAjuste)
         b.sbAjuste.rotation = 0f
@@ -6065,7 +6065,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val estado = panelEstado
         (estado?.parent as? ViewGroup)?.removeView(estado)
         if (vertical) {
-            b.cajaVideo.visibility = View.VISIBLE
+            b.cajaVideo.visibility = if (modoTcg) View.GONE else View.VISIBLE
             caja.visibility = View.VISIBLE
             txtFormatoAudio?.visibility = View.GONE
             txtAyudaAudio?.text = "Verde < −12 · naranja −12 a −3 · rojo > −3"
@@ -6130,7 +6130,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 if (!audio && !esPantallaCelular()) View.VISIBLE else View.GONE
             panelAudio?.visibility = if (audio) View.VISIBLE else View.GONE
         } else {
-            b.cajaVideo.visibility = View.VISIBLE
+            b.cajaVideo.visibility = if (modoTcg) View.GONE else View.VISIBLE
             panelAudio?.visibility = View.VISIBLE
         }
         btnVistaControles?.text = if (audio) "Imagen" else "♪ Audio"
@@ -6165,6 +6165,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Mete la banda en el panel del programa, justo debajo de la fila de controles. */
     private fun montarZonaControles() {
+        // En Modo Pokémon TCG la banda de controles no existe: le roba el alto al monitor.
+        if (modoTcg) {
+            zonaControles?.let { z ->
+                (z.parent as? ViewGroup)?.removeView(z)
+                z.visibility = View.GONE
+            }
+            return
+        }
         val zona = asegurarZonaControles()
         if (zona.parent is ViewGroup) zona.requestLayout()
         val panel = b.panelPrograma
@@ -7126,6 +7134,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     override fun onSelectionChanged(item: CanvasItem?) {
         val has = item != null
         refrescarPanelAjuste()
+        // En Modo Pokémon TCG no hay ajustes de imagen: si se muestran, le roban alto al monitor.
+        if (modoTcg) {
+            b.cajaVideo.visibility = View.GONE
+            b.panelAjuste.visibility = View.GONE
+        }
         // Mantiene sincronizadas las miniaturas (seleccionado / oculto) con el lienzo.
         refreshOverlayTiles()
     }
@@ -7571,7 +7584,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )
         )
         (b.cajaVideo.parent as? ViewGroup)?.removeView(b.cajaVideo)
-        b.cajaVideo.visibility = View.VISIBLE
+        b.cajaVideo.visibility = if (modoTcg) View.GONE else View.VISIBLE
         // En Modo Studio los ajustes de imagen van siempre en una fila, en 9:16 y en 16:9: antes
         // se quedaba el acomodo que traía del otro diseño y al girar la tablet salía a medias.
         ajustesEnUnaFila()
@@ -8075,16 +8088,22 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         b.scrollControles.visibility = View.GONE
         b.cajaVideo.visibility = View.GONE
         b.panelAjuste.visibility = View.GONE
+        zonaControles?.let { z ->
+            (z.parent as? ViewGroup)?.removeView(z)
+            z.visibility = View.GONE
+        }
         dibujarBannerTcg()
         montarPanelTcg()
         // Al ocultar los controles viejos el lienzo debe volver a medirse (si no, queda chico).
-        b.cuerpo.post {
+        b.cuerpo.postDelayed({
             runCatching {
                 b.cuerpo.requestLayout()
                 b.canvasHost.requestLayout()
                 b.canvas.requestLayout()
+                L.i("tcg", "alto cuerpo=${b.cuerpo.height} programa=${b.panelPrograma.height} canvasHost=${b.canvasHost.height} slotControles=${b.slotControles.height} anchoHost=${b.canvasHost.width}")
+
             }
-        }
+        }, 1200)
     }
 
     companion object {
