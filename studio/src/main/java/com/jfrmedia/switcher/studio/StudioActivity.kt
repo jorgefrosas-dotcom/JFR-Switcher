@@ -7972,33 +7972,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     /** Dibuja los chips de cada jugador dentro del video, debajo de su cámara. */
+    /** Ya no se dibujan chips bajo las cámaras: van dentro del banner. */
     private fun dibujarChipsTcg() {
         val escena = b.canvas.scene
-        val alto = 0.17f * (16f / 9f) / (700f / 120f)
-
-        fun pintar(actual: CanvasItem?, lado: Int, x0: Float): CanvasItem {
-            val rect = actual?.rect?.let { RectF(it) } ?: RectF(x0, 0.205f, x0 + 0.17f, 0.205f + alto)
-            actual?.let { runCatching { escena.remove(it) } }
-            val jugador = if (lado == 0) estadoTcg.uno else estadoTcg.dos
-            val imagen = Banners.dibujarChips(jugador, estadoTcg.turno == lado)
-            val item = escena.addImage(imagen, "Chips TCG", null, rect)
-            item.radiusDp = 6f
-            escena.selectedId = null
-            return item
-        }
-
-        b.canvas.slotResaltado = if (estadoTcg.turno == 0) 0 else 1
-        chipsTcgUno = pintar(chipsTcgUno, 0, 0.015f)
-        chipsTcgDos = pintar(chipsTcgDos, 1, 0.815f)
-        runCatching { b.canvas.requestRender() }
+        listOfNotNull(chipsTcgUno, chipsTcgDos).forEach { runCatching { escena.remove(it) } }
+        chipsTcgUno = null
+        chipsTcgDos = null
     }
-
-    /** Vuelve a pintar el banner y lo deja como capa del programa (así se graba y se transmite). */
     private fun dibujarBannerTcg() {
-        val imagen = Banners.dibujar(estadoTcg, 1600, 320)
+        val imagen = Banners.dibujar(estadoTcg, 1600, 360)
         val previo = bannerTcg
         // Franja centrada arriba: aspecto 5:1 dentro de un lienzo 16:9.
-        val alto = 0.60f * (16f / 9f) / 5f
+        val alto = 0.60f * (16f / 9f) / (1600f / 360f)
         val rect = previo?.let { RectF(it.rect) } ?: RectF(0.20f, 0.02f, 0.80f, 0.02f + alto)
         previo?.let { runCatching { b.canvas.scene.remove(it) } }
         val item = b.canvas.scene.addImage(imagen, "Banner TCG", null, rect)
@@ -8423,6 +8408,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             escena.items.add(item)
         }
         dibujarChipsTcg()
+        escena.selectedId = null   // sin marco de selección: el resaltado es del turno
+        b.canvas.slotResaltado = if (estadoTcg.turno == 0) 0 else 1
         escena.touch()
         runCatching { b.canvas.requestRender() }
     }

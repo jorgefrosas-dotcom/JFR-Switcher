@@ -107,11 +107,11 @@ object Banners {
      * Dibuja el banner completo y devuelve el bitmap listo para el compositor.
      * El tamaño es fijo (1600x320) y el compositor lo estira al rectángulo del programa.
      */
-    fun dibujar(estado: EstadoTcg, ancho: Int = 1600, alto: Int = 320): Bitmap {
+    fun dibujar(estado: EstadoTcg, ancho: Int = 1600, alto: Int = 360): Bitmap {
         val p = paleta(estado.paleta)
         val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
         val cv = Canvas(bmp)
-        val u = alto / 320f                      // escala de todo el dibujo
+        val u = alto / 360f                      // escala de todo el dibujo
         val radio = 26f * u
 
         val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -126,7 +126,7 @@ object Banners {
         pintura.style = Paint.Style.FILL
 
         // franja del evento
-        val franja = RectF(0f, 0f, ancho.toFloat(), 56f * u)
+        val franja = RectF(0f, 0f, ancho.toFloat(), 60f * u)
         pintura.color = p.franja
         cv.save()
         cv.clipRect(franja)
@@ -139,7 +139,7 @@ object Banners {
         }
         texto.color = p.franjaTexto
         texto.textSize = 26f * u
-        cv.drawText(estado.evento.uppercase(), ancho / 2f, 38f * u, texto)
+        cv.drawText(estado.evento.uppercase(), ancho / 2f, 40f * u, texto)
 
         // nombres
         texto.textAlign = Paint.Align.LEFT
@@ -147,36 +147,36 @@ object Banners {
         texto.textSize = 46f * u
         val nombreUno = estado.uno.nombre.uppercase()
         val nombreDos = estado.dos.nombre.uppercase()
-        cv.drawText(nombreUno, 34f * u, 110f * u, texto)
+        cv.drawText(nombreUno, 34f * u, 122f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
-        cv.drawText(nombreDos, ancho - 34f * u, 110f * u, texto)
+        cv.drawText(nombreDos, ancho - 34f * u, 122f * u, texto)
 
         // pokebolas (6 por lado)
-        var x = 40f * u
+        var x = 44f * u
         repeat(6) { i ->
-            pokebola(cv, x + 12f * u, 150f * u, 12f * u, i >= estado.uno.debilitados, p.pokebolaBorde)
-            x += 33f * u
+            pokebola(cv, x + 16f * u, 172f * u, 16f * u, i >= estado.uno.debilitados, p.pokebolaBorde)
+            x += 44f * u
         }
-        x = ancho - 40f * u
+        x = ancho - 44f * u
         repeat(6) { i ->
-            pokebola(cv, x - 12f * u, 150f * u, 12f * u, i >= estado.dos.debilitados, p.pokebolaBorde)
-            x -= 33f * u
+            pokebola(cv, x - 16f * u, 172f * u, 16f * u, i >= estado.dos.debilitados, p.pokebolaBorde)
+            x -= 44f * u
         }
 
         // récord
         texto.textSize = 22f * u
         texto.color = p.record
         texto.textAlign = Paint.Align.LEFT
-        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 186f * u, texto)
+        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 214f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
-        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 186f * u, texto)
+        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 214f * u, texto)
 
         // Chips Energy / Supporter / Retreat de cada jugador, debajo de sus pokebolas.
-        filaChips(cv, estado.uno, estado.turno == 0, 34f * u, 208f * u, 470f * u, u, alDerecha = false, p)
-        filaChips(cv, estado.dos, estado.turno == 1, ancho - 34f * u - 470f * u, 208f * u, 470f * u, u, alDerecha = true, p)
+        filaChips(cv, estado.uno, estado.turno == 0, 34f * u, 240f * u, 500f * u, u, alDerecha = false, p)
+        filaChips(cv, estado.dos, estado.turno == 1, ancho - 34f * u - 500f * u, 240f * u, 500f * u, u, alDerecha = true, p)
 
         // marcador central
-        val caja = RectF(ancho / 2f - 150f * u, 64f * u, ancho / 2f + 150f * u, 250f * u)
+        val caja = RectF(ancho / 2f - 160f * u, 70f * u, ancho / 2f + 160f * u, 300f * u)
         pintura.color = p.marcadorFondo
         cv.drawRoundRect(caja, 18f * u, 18f * u, pintura)
         p.marcadorBorde?.let {
@@ -189,11 +189,11 @@ object Banners {
         texto.color = p.marcador
         texto.textSize = 92f * u
         texto.textAlign = Paint.Align.CENTER
-        cv.drawText("${estado.serieUno}", ancho / 2f - 74f * u, 178f * u, texto)
-        cv.drawText("${estado.serieDos}", ancho / 2f + 74f * u, 178f * u, texto)
+        cv.drawText("${estado.serieUno}", ancho / 2f - 78f * u, 206f * u, texto)
+        cv.drawText("${estado.serieDos}", ancho / 2f + 78f * u, 206f * u, texto)
         texto.textSize = 66f * u
         texto.color = p.dosPuntos
-        cv.drawText(":", ancho / 2f, 174f * u, texto)
+        cv.drawText(":", ancho / 2f, 202f * u, texto)
 
         return bmp
     }
@@ -258,13 +258,13 @@ object Banners {
     ) {
         val nombres = listOf("ENERGY", "SUPPORTER", "RETREAT")
         val colores = listOf(Color.rgb(88, 200, 140), Color.rgb(122, 152, 244), Color.rgb(242, 172, 82))
-        val alto = 42f * u
+        val alto = 62f * u
         val paso = ancho / 3f
         val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
         val texto = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
-            textSize = 20f * u
+            textSize = 27f * u
         }
         for (i in 0 until 3) {
             val disponible = enTurno && jugador.chips[i]
