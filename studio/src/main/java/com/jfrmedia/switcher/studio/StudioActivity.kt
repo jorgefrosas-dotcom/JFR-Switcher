@@ -695,6 +695,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         super.onConfigurationChanged(newConfig)
         // La tablet gira: al pasar a vertical entra el Modo Studio y al volver a horizontal sale.
         evaluarModoStudio()
+        // Modo Pokémon TCG: el manifiesto se queda con el cambio de configuración, así que la
+        // pantalla NO se recrea sola. Hay que volver a armar el modo con las medidas nuevas (si la
+        // app se abrió con la tablet vertical, la primera medida sale en vertical y no sirve).
+        if (modoTcg) {
+            uiHandler.postDelayed({ runCatching { aplicarModoTcg() } }, 450)
+        }
         // En el celular, al girar (por el botón 9:16) hay que reacomodar con las medidas nuevas.
         if (esPantallaCelular() && !modoStudio) {
             uiHandler.post {
@@ -7355,6 +7361,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * Se llama al abrir, al girar la tablet y al terminar una sesión.
      */
     private fun evaluarModoStudio() {
+        // El Modo Pokémon TCG tiene su propio diseño y **siempre** va en horizontal: aquí no entra el
+        // Modo Studio. Sin este corte, al abrir la app con la tablet vertical el modo se metía un
+        // momento en Studio y, al girar, se restauraba el diseño de siempre: el modo quedaba
+        // «desarmado» hasta salir a Modo Studio y volver (Jorge, 21/11/2026).
+        if (modoTcg) {
+            if (modoStudio) salirModoStudio()
+            return
+        }
         val tablet = !esPantallaCelular()
         val verticalFisico =
             resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
@@ -8093,6 +8107,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     private fun montarPanelTcg() {
+        // Si ya había un panel (porque el modo se está volviendo a armar después de girar la
+        // tablet), se quita antes de crear el nuevo: si no, quedarían dos columnas de botones.
+        panelTcg?.let { viejo ->
+            (viejo.vista.parent as? ViewGroup)?.removeView(viejo.vista)
+            (viejo.vistaHerramientas.parent as? ViewGroup)?.removeView(viejo.vistaHerramientas)
+        }
         val panel = PanelTcg(this, object : PanelTcg.Escucha {
             override fun onEditarNombre(lado: Int) = editarNombreTcg(lado)
 
@@ -8297,44 +8317,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // Al ocultar los controles viejos el lienzo debe volver a medirse (si no, queda chico).
         // Monitor con tamaño EXACTO y la columna de herramientas a su derecha.
         // (El contenedor del monitor no admite "ancho 0 + peso": mide 0 y desaparece.)
-        b.cuerpo.postDelayed({
-            runCatching {
-                if (b.canvasHost.parent === b.panelPrograma) {
-                    val anchoTotal = b.panelPrograma.width - 8.dp
-                    val altoTotal = b.panelPrograma.height - b.cabeceraPrograma.height -
-                        b.slotControles.height - 8.dp
-                    val anchoHerramientas = 208.dp
-                    var anchoC = anchoTotal - anchoHerramientas
-                    var altoC = anchoC * 9 / 16
-                    if (altoC > altoTotal) {
-                        altoC = altoTotal
-                        anchoC = altoC * 16 / 9
-                    }
-                    L.i("tcg", "monitor ancho=$anchoC alto=$altoC (total $anchoTotal x $altoTotal)")
-                    if (anchoC > 320 && altoC > 220) {
-                        val padre = b.panelPrograma
-                        val indice = padre.indexOfChild(b.canvasHost)
-                        padre.removeView(b.canvasHost)
-                        val fila = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                        fila.addView(b.canvasHost, LinearLayout.LayoutParams(anchoC, altoC))
-                        panelTcg?.let { p ->
-                            fila.addView(
-                                p.vistaHerramientas,
-                                LinearLayout.LayoutParams(anchoHerramientas, altoC)
-                            )
-                        }
-                        padre.addView(
-                            fila,
-                            indice.coerceAtLeast(0),
-                            LinearLayout.LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT
-                            )
-                        )
-                    }
-                }
-            }
-        }, 700)
+        b.cuerpo.postDelayed({ runCatching { acomodarMonitorTcg() } }, 700)
         // La escena del modo: mesa al fondo, PiPs de los jugadores y el banner encima.
         b.cuerpo.postDelayed({ runCatching { aplicarEscenaTcg() } }, 300)
         // Si una cámara llega después, se le devuelve su hueco (y su video).
@@ -8346,6 +8329,71 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
             }, espera)
         }
+    }
+
+    /**
+     * Monitor del modo con tamaño EXACTO y la columna de herramientas a su derecha.
+     *
+     * Se puede llamar varias veces: al entrar al modo, al girar la tablet y en los reintentos. Si ya
+     * hay una fila armada, la desarma y la vuelve a armar con las medidas nuevas.
+     *
+     * **Por qué existe este reintento:** antes era un `postDelayed` de una sola vez. Si la app se
+     * abría con la tablet **vertical**, medía la pantalla en vertical (monitor de 678×381 en vez de
+     * 1170×658), el modo entraba un momento en Modo Studio y, al girar a horizontal, el diseño se
+     * restauraba sin volver a aplicar el modo: quedaba «desarmado» hasta salir a Modo Studio y
+     * regresar (Jorge, 21/11/2026). En este modo la tablet siempre va horizontal, así que medir en
+     * vertical nunca es válido: se reintenta hasta que las medidas sirvan.
+     */
+    private fun acomodarMonitorTcg(intento: Int = 0) {
+        if (!modoTcg) return
+        val verticalAhora =
+            resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        val anchoTotal = b.panelPrograma.width - 8.dp
+        val altoTotal = b.panelPrograma.height - b.cabeceraPrograma.height -
+            b.slotControles.height - 8.dp
+        val anchoHerramientas = 208.dp
+        var anchoC = anchoTotal - anchoHerramientas
+        var altoC = anchoC * 9 / 16
+        if (altoC > altoTotal) {
+            altoC = altoTotal
+            anchoC = altoC * 16 / 9
+        }
+        L.i("tcg", "monitor ancho=$anchoC alto=$altoC (total $anchoTotal x $altoTotal) intento=$intento")
+        if (verticalAhora || anchoC <= 320 || altoC <= 220) {
+            if (intento < 16) {
+                b.cuerpo.postDelayed({ runCatching { acomodarMonitorTcg(intento + 1) } }, 250)
+            }
+            return
+        }
+        val padre = b.panelPrograma
+        // Desarmar la fila anterior (si la hay) para poder reacomodar con las medidas nuevas.
+        var indice = -1
+        val contenedorActual = b.canvasHost.parent
+        if (contenedorActual is LinearLayout && contenedorActual !== padre) {
+            indice = padre.indexOfChild(contenedorActual)
+            panelTcg?.let { p ->
+                if (p.vistaHerramientas.parent === contenedorActual) {
+                    contenedorActual.removeView(p.vistaHerramientas)
+                }
+            }
+            contenedorActual.removeView(b.canvasHost)
+            padre.removeView(contenedorActual)
+        }
+        if (indice < 0) indice = padre.indexOfChild(b.canvasHost)
+        if (b.canvasHost.parent === padre) padre.removeView(b.canvasHost)
+        val fila = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fila.addView(b.canvasHost, LinearLayout.LayoutParams(anchoC, altoC))
+        panelTcg?.let { p ->
+            fila.addView(p.vistaHerramientas, LinearLayout.LayoutParams(anchoHerramientas, altoC))
+        }
+        padre.addView(
+            fila,
+            indice.coerceAtLeast(0),
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
     }
 
     /** Ventana del evento: nombre, jugadores inscritos con su récord y quién va en la mesa. */
