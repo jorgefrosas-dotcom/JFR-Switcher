@@ -30,3 +30,9 @@ que se ve).
   ese hueco y la cámara se quedaba en negro en el programa aunque la tarjeta sí la mostrara.
 - **Al apagarse una cámara**, su hueco del modo se queda en negro y, si se fue la de ambiente, el
   monitor vuelve solo a la mesa con los jugadores (antes quedaba la pantalla en negro).
+- **Modo Pokémon TCG: ya no aparece «desarmado» al reabrir la app** con la tablet en vertical. Antes, al
+  abrirla vertical, el modo entraba un momento al Modo Studio y al girar a horizontal se restauraba el
+  diseño de siempre, con el monitor chico y las tarjetas enormes; había que salir a Modo Studio y
+  regresar para que se acomodara. Ahora el modo no entra nunca a Modo Studio, el acomodo del monitor se
+  reintenta hasta tener medidas en horizontal y se vuelve a armar solo cuando la pantalla cambia de
+  configuración.

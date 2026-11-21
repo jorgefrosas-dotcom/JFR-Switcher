@@ -566,6 +566,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // al ponerla en vertical entra el Modo Studio.
         if (esPantallaCelular()) {
             requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+        } else if (!getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_MODO_TCG, false)) {
+            // La tablet tiene que poder girar para entrar al Modo Studio. Se fija AQUÍ porque el
+            // Modo Pokémon deja la pantalla trabada en horizontal y ese bloqueo se guarda en la
+            // pantalla: al volver a Modo Studio no se soltaba solo (Jorge, 21/11/2026).
+            requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER
         }
         // Segundo compositor (programa) para el Modo Studio: se crea siempre y solo se engancha
         // al layout cuando la tablet está en vertical.
@@ -7085,6 +7090,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             if (pedidoTcg != modoTcg) {
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                     .putBoolean(CLAVE_MODO_TCG, pedidoTcg).apply()
+                // El Modo Pokémon fija la pantalla en horizontal; al salir de él hay que volver a
+                // permitir el giro, o la tablet se queda trabada y no entra al Modo Studio.
+                requestedOrientation = if (pedidoTcg) {
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                } else {
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER
+                }
                 dialog.dismiss()
                 toast(if (pedidoTcg) "Modo Pokémon TCG" else "Modo Studio")
                 recreate()
