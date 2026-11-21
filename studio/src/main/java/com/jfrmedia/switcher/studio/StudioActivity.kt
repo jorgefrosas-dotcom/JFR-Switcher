@@ -8652,9 +8652,53 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             toast("Esa cámara no está conectada")
             return false
         }
-        vistaTcg = slot
-        aplicarEscenaTcg()
+        cambiarVistaTcg(slot)
         return true
+    }
+
+    /** Duración del fundido al cambiar de cámara en el modo (Jorge: 1.5 s, que se sienta suave). */
+    private val FUNDIDO_TCG_MS = 1500
+
+    /** Hay una foto de la pantalla en camino: evita dos cambios encimados si se toca muy rápido. */
+    private var fundiendoTcg = false
+
+    /**
+     * Cambia la cámara al aire con un **fundido** en vez de un corte seco: se congela el cuadro que
+     * está al aire (PixelCopy) y se retira encima del nuevo durante [FUNDIDO_TCG_MS].
+     *
+     * Es el mismo mecanismo que usa el Modo Studio para pasar de preview a programa
+     * (`prepararVelo` + pedir cuadros mientras dura), no uno nuevo.
+     */
+    private fun cambiarVistaTcg(nueva: Int) {
+        if (nueva == vistaTcg) return
+        val vista = b.canvas
+        if (fundiendoTcg || vista.width <= 0 || vista.height <= 0) return
+        fundiendoTcg = true
+        val foto = Bitmap.createBitmap(vista.width, vista.height, Bitmap.Config.ARGB_8888)
+        android.view.PixelCopy.request(
+            vista, foto,
+            { resultado ->
+                runCatching {
+                    fundiendoTcg = false
+                    // El velo se arma ANTES de cambiar la escena: si se pide el cuadro primero, el
+                    // hilo de dibujo puede pintar la escena nueva sin el velo y se ve un parpadeo.
+                    if (resultado == android.view.PixelCopy.SUCCESS) {
+                        vista.prepararVelo(foto, CompositorView.Transicion.FUNDIDO, FUNDIDO_TCG_MS)
+                    }
+                    vistaTcg = nueva
+                    aplicarEscenaTcg()
+                    // El lienzo se dibuja bajo demanda: se le piden cuadros mientras dura el fundido.
+                    val paso = object : Runnable {
+                        override fun run() {
+                            vista.requestRender()
+                            if (vista.veloActivo) uiHandler.postDelayed(this, 16)
+                        }
+                    }
+                    uiHandler.postDelayed(paso, 16)
+                }
+            },
+            uiHandler
+        )
     }
 
     /**
