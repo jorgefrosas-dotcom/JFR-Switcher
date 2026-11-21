@@ -877,6 +877,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             runCatching { aplicarRectangulosTcg() }
             b.canvas.requestRender()
             refreshUi()
+            // Si llegó el cuarto celular mientras la cámara de la tablet está encendida, se avisa:
+            // la 4 es de la tablet hasta que se apague con el botón de su tarjeta.
+            if (session.slot == 3 && localCam.encendida) {
+                toast("Conectó el 4.º celular: toca «${etiquetaBotonCamara4()}» en la tarjeta 4 hasta apagarla para usarlo")
+            }
             return
         }
         if (camA == null && camB == null) {
@@ -3234,13 +3239,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (modoTcg) {
             val nombres = listOf("Jugador 1", "Jugador 2", "Mesa", "Ambiente")
             tiles.forEachIndexed { i, t -> t.ponerNombre(nombres.getOrElse(i) { "Cámara ${i + 1}" }) }
-            // Cámara 4: botón para usar la cámara de la tablet (frontal/trasera) en su lugar.
-            tiles.getOrNull(3)?.botonEsquina(if (localCam.encendida) "Lente" else "Tablet") {
+            // Cámara 4: botón de tres pasos para la cámara de la tablet
+            // (Tablet → frontal → trasera → apagada). Apagada, la cámara 4 es la del cuarto celular.
+            botonCamara4 = tiles.getOrNull(3)?.botonEsquina(etiquetaBotonCamara4()) {
                 cicloCamaraAmbiente()
             }
             // La parrilla se rehace cada vez que cambia una cámara y eso limpia la tarjeta:
             // si la cámara de la tablet está en uso, se le devuelve su vista a la tarjeta 4.
-            if (modoTcg && localCam.encendida) {
+            if (localCam.encendida) {
                 localCam.track?.let { t ->
                     runCatching { tiles.getOrNull(3)?.bindLocal(t, "Tablet · ambiente") }
                 }
@@ -5598,8 +5604,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (vertical && !esPantallaCelular()) {
             if (localCam.encendida) apagarCamaraTablet()
         } else {
-            // Solo se enciende sola si el usuario la dejó encendida la última vez.
-            if (getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_TABLET_CAM, false) &&
+            // Solo se enciende sola si el usuario la dejó encendida la última vez. En Modo Pokémon
+            // NO: ahí la cámara de la tablet es opcional (cámara 4) y si se encendiera sola le
+            // quitaría el lugar al cuarto celular (Jorge, 21/11/2026).
+            if (!modoTcg &&
+                getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_TABLET_CAM, false) &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
                 PackageManager.PERMISSION_GRANTED
             ) {
@@ -7252,31 +7261,63 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         aplicarRectangulosTcg()
     }
 
-    /** Cámara 4 = cámara de la tablet: la enciende o cambia entre frontal y trasera. */
-    private var ambienteFrontal = true
+    /** Botón de la esquina de la tarjeta 4 (para poder cambiarle el texto sin crear otro). */
+    private var botonCamara4: android.widget.TextView? = null
 
+    /**
+     * Botón de la cámara 4 (tarjeta de ambiente). Ciclo de tres pasos, igual que el botón de la
+     * lente en Modo Studio: `Tablet → frontal`, `frontal → trasera`, `trasera → apagada`.
+     *
+     * Apagada, la cámara 4 vuelve a ser la del **cuarto celular** si hay uno conectado: así se usa
+     * la cámara de la tablet cuando conviene, o se apaga y se usa un celular extra (Jorge, 21/11).
+     */
     private fun cicloCamaraAmbiente() {
-        if (!localCam.encendida) {
-            ambienteFrontal = true
-            encenderCamaraTablet()
-            // La tarjeta 4 muestra la cámara de la tablet.
-            localCam.track?.let { t -> runCatching { tiles.getOrNull(3)?.bindLocal(t, "Tablet") } }
-            toast("Cámara 4: cámara de la tablet (frontal)")
-            // Al encenderla se ve a pantalla completa («Cámara general»): en la escena del modo
-            // no se mete como ventanita.
-            if (localCam.track != null && !ambienteTcg) alternarAmbienteTcg()
-            return
+        when {
+            !localCam.encendida -> {
+                encenderCamaraTablet()
+                if (localCam.track == null) return   // sin permiso o la tablet no la dio
+                // Se ve a pantalla completa («Cámara general»): la escena del modo no la mete como
+                // ventanita. La parrilla se rehace para que la tarjeta 4 la muestre con su nombre.
+                if (!ambienteTcg) alternarAmbienteTcg()
+                runCatching { buildSourcesGrid() }
+                toast("Cámara 4: cámara de la tablet (" + if (localCam.frontal) "frontal" else "trasera" + ")")
+            }
+
+            localCam.frontal -> {
+                if (localCam.cambiarCamara(false)) {
+                    localCam.track?.let { t ->
+                        runCatching { tiles.getOrNull(3)?.bindLocal(t, "Tablet · trasera") }
+                    }
+                    actualizarBotonCamara4()
+                    toast("Cámara 4: tablet trasera")
+                } else {
+                    toast("Esta tablet no tiene cámara trasera")
+                }
+            }
+
+            else -> {
+                // Apagada: la cámara 4 vuelve a ser la del cuarto celular, si hay uno conectado.
+                apagarCamaraTablet()
+                runCatching { buildSourcesGrid() }
+                toast(
+                    if (hub.session(3) != null) "Cámara 4: ahora la del celular conectado"
+                    else "Cámara 4 apagada · conecta un cuarto celular o toca «Tablet» para volver"
+                )
+            }
         }
-        // La tarjeta 4 muestra siempre la cámara de la tablet cuando se está usando.
-        localCam.track?.let { t -> runCatching { tiles.getOrNull(3)?.bindLocal(t, "Tablet") } }
-        // Encendida pero fuera de pantalla: su toque la pone a pantalla completa.
-        if (!ambienteTcg) {
-            alternarAmbienteTcg()
-            return
-        }
-        ambienteFrontal = !ambienteFrontal
-        runCatching { localCam.cambiarCamara(ambienteFrontal) }
-        toast("Cámara 4: tablet " + if (ambienteFrontal) "frontal" else "trasera")
+        actualizarBotonCamara4()
+    }
+
+    /** Pone el texto que toca al botón de la cámara 4 (no crea otro botón). */
+    private fun actualizarBotonCamara4() {
+        runCatching { botonCamara4?.text = etiquetaBotonCamara4() }
+    }
+
+    /** Texto corto del botón de la cámara 4 (tarjeta de ambiente). */
+    private fun etiquetaBotonCamara4(): String = when {
+        !localCam.encendida -> "Tablet"
+        localCam.frontal -> "Frontal"
+        else -> "Trasera"
     }
 
     /** Coloca las cámaras en su rectángulo del modo (mesa al fondo, jugadores como PiP). */
@@ -8637,7 +8678,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (!ambienteTcg) {
             val slot = slotAmbienteTcg()
             if (slot == null) {
-                toast("Conecta la cámara de ambiente (o usa la de la tablet con «Lente»)")
+                toast("Conecta la cámara de ambiente (o usa la de la tablet con «Tablet» en la tarjeta 4)")
                 return
             }
             val ambiente = escena.camAt(slot) ?: escena.addCam(slot)

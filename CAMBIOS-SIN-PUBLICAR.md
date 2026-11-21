@@ -36,3 +36,15 @@ que se ve).
   regresar para que se acomodara. Ahora el modo no entra nunca a Modo Studio, el acomodo del monitor se
   reintenta hasta tener medidas en horizontal y se vuelve a armar solo cuando la pantalla cambia de
   configuración.
+- **Modo Pokémon TCG: la cámara 4 ahora es «la tablet **o** un cuarto celular».** La cámara de la
+  tablet ya **no se enciende sola** al entrar al modo (antes le quitaba el lugar al cuarto celular), y
+  el botón de su tarjeta hace un ciclo de tres pasos, igual que el de la lente en Modo Studio:
+  **Tablet → Frontal → Trasera → apagada**. Apagada, la cámara 4 es la del **cuarto celular** conectado
+  y la tarjeta vuelve a llamarse «Ambiente».
+- **Modo Pokémon TCG: la tarjeta 4 ya recupera su nombre.** Después de usar la cámara de la tablet y
+  apagarla, la tarjeta vuelve a decir «Ambiente» (antes se quedaba en «Tablet · ambiente» para siempre).
+- **Modo Pokémon TCG: al volver a Modo Studio ya se suelta el bloqueo de rotación.** El modo fija la
+  pantalla en horizontal y ese bloqueo se quedaba guardado, así que la tablet **no giraba** y no
+  entraba al vertical del switcher (PREVIEW·PROGRAMA); solo se arreglaba reiniciando la app. Ahora el
+  modo se cambia con la orientación correcta y, al arrancar, la tablet vuelve a girar libremente cuando
+  no está en Modo Pokémon.
