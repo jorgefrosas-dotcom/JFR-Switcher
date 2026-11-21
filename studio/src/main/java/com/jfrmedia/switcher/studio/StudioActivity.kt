@@ -974,13 +974,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     // ------------------------------------------------------------------ asignación de capas
 
     private fun onTileTap(slot: Int) {
-        // En Modo Pokémon TCG la escena es fija: tocar una cámara NO puede sacar las otras tres del
-        // monitor (antes se borraban y el programa quedaba con una sola cámara). La tarjeta 4 es la
-        // de ambiente: su toque la pone (o la quita) a pantalla completa.
+        // En Modo Pokémon TCG tocar una tarjeta pone esa cámara a pantalla completa (para ver la cara
+        // del jugador o el ambiente), y la mesa devuelve la composición con el marcador. Tocar otra
+        // vez la misma cámara vuelve a la mesa (Jorge, 21/11/2026).
         if (modoTcg) {
             when (slot) {
+                0, 1 -> {
+                    if (vistaTcg == slot) {
+                        mostrarCamaraTcg(VISTA_MESA)
+                    } else if (mostrarCamaraTcg(slot)) {
+                        toast(if (slot == 0) "Jugador 1 a pantalla completa" else "Jugador 2 a pantalla completa")
+                    }
+                }
+
+                2 -> {
+                    mostrarCamaraTcg(VISTA_MESA)
+                    toast("Mesa con el marcador y los dos jugadores")
+                }
+
                 3 -> alternarAmbienteTcg()
-                in 0..2 -> toast("En Modo Pokémon las cámaras ya están en su lugar")
                 else -> {}
             }
             return
@@ -7278,7 +7290,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 if (localCam.track == null) return   // sin permiso o la tablet no la dio
                 // Se ve a pantalla completa («Cámara general»): la escena del modo no la mete como
                 // ventanita. La parrilla se rehace para que la tarjeta 4 la muestre con su nombre.
-                if (!ambienteTcg) alternarAmbienteTcg()
+                if (vistaTcg == VISTA_MESA) mostrarCamaraTcg(LocalCam.SLOT)
                 runCatching { buildSourcesGrid() }
                 toast("Cámara 4: cámara de la tablet (" + if (localCam.frontal) "frontal" else "trasera" + ")")
             }
@@ -7328,13 +7340,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             escena.camAt(2)?.rect?.set(0f, 0f, 1f, 1f)
             escena.camAt(0)?.rect?.set(0.015f, 0.03f, 0.185f, 0.20f)
             escena.camAt(1)?.rect?.set(0.815f, 0.03f, 0.985f, 0.20f)
-            // La cámara de ambiente solo va a pantalla completa, con «Cámara general».
-            if (ambienteTcg) slotAmbienteTcg()?.let { escena.camAt(it)?.rect?.set(0f, 0f, 1f, 1f) }
+            // La cámara que está al aire va a pantalla completa (jugador, mesa o ambiente).
+            if (vistaTcg != VISTA_MESA) escena.camAt(vistaTcg)?.rect?.set(0f, 0f, 1f, 1f)
             // Y cualquier cámara que se haya colado en la escena del modo se saca (así no queda
             // grabada una ventanita que Jorge no pidió).
-            val ambiente = if (ambienteTcg) slotAmbienteTcg() else null
             escena.cams()
-                .filter { it.slot != 0 && it.slot != 1 && it.slot != 2 && it.slot != ambiente }
+                .filter { it.slot != 0 && it.slot != 1 && it.slot != 2 && it.slot != vistaTcg }
                 .forEach { runCatching { quitarCamaraDelLienzo(it) } }
             escena.selectedId = null
             b.canvas.slotResaltado = if (estadoTcg.turno == 0) 0 else 1
@@ -8154,6 +8165,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         previo?.let { runCatching { b.canvas.scene.remove(it) } }
         val item = b.canvas.scene.addImage(imagen, "Banner TCG", null, rect)
         item.radiusDp = 8f
+        // El banner va con la vista de mesa: si hay una cámara a pantalla completa, el banner nuevo
+        // nace oculto (si no, al cambiar de paleta se dibujaría encima de la cara del jugador).
+        item.visible = vistaTcg == VISTA_MESA
+        if (item.visible) {
+            b.canvas.scene.items.remove(item)
+            b.canvas.scene.items.add(item)
+        }
         b.canvas.scene.selectedId = null
         bannerTcg = item
         runCatching { b.canvas.requestRender() }
@@ -8598,12 +8616,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .setNegativeButton("Cancelar", null)
             .show()
     }
-    /** Cámara de ambiente: ocupa la pantalla completa cuando está activa. */
-    private var ambienteTcg = false
+    /**
+     * Qué cámara está al aire en el monitor del modo:
+     * [VISTA_MESA] = composición de mesa (mesa + PiPs + banner), o la ranura de una cámara a pantalla
+     * completa (Jugador 1 = 0, Jugador 2 = 1, Ambiente = 3 o la cámara de la tablet).
+     */
+    private var vistaTcg: Int = VISTA_MESA
 
     /**
      * Qué cámara hace de «ambiente» (la 4): la de la propia tablet si está encendida —se elige con
-     * el botón «Lente» de su tarjeta— y, si no, la cámara 4 conectada por WiFi.
+     * el botón de su tarjeta— y, si no, la cámara 4 conectada por WiFi.
      */
     private fun slotAmbienteTcg(): Int? = when {
         localCam.encendida -> LocalCam.SLOT
@@ -8611,21 +8633,46 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         else -> null
     }
 
+    /** ¿Esa cámara se puede poner al aire ahora mismo? */
+    private fun camaraTcgDisponible(slot: Int): Boolean = when {
+        slot == VISTA_MESA -> true
+        slot == LocalCam.SLOT -> localCam.encendida
+        else -> hub.session(slot) != null
+    }
+
     /**
-     * Escena del modo: la mesa al fondo, las dos cámaras de jugador como PiP arriba y el banner
-     * encima de todo (así se graba igual que se ve).
+     * Pone **una cámara a pantalla completa** en el monitor del modo, o vuelve a la composición de
+     * mesa con [VISTA_MESA] (mesa al fondo, los dos jugadores en PiP y el banner con el marcador).
      *
-     * La cámara de ambiente **no entra en esta escena**: solo aparece a pantalla completa con
-     * «Cámara general». Antes se agregaba como un cuadrito en la esquina inferior derecha y se
-     * grababa ahí sin querer (Jorge, 21/11/2026).
+     * Así el operador puede cortar a la cara de un jugador o al ambiente sin quedarse con la ventanita
+     * chica, igual que ya pasaba con la cámara general (Jorge, 21/11/2026).
+     */
+    private fun mostrarCamaraTcg(slot: Int): Boolean {
+        if (!camaraTcgDisponible(slot)) {
+            toast("Esa cámara no está conectada")
+            return false
+        }
+        vistaTcg = slot
+        aplicarEscenaTcg()
+        return true
+    }
+
+    /**
+     * Escena del modo. Dos formas:
+     *
+     * - **Mesa** ([VISTA_MESA]): la mesa al fondo, las dos cámaras de jugador como PiP arriba y el
+     *   banner encima de todo (así se graba igual que se ve).
+     * - **Una cámara a pantalla completa**: sin PiPs y sin banner, para ver la cara del jugador o el
+     *   ambiente. Antes solo se podía hacer con la cámara de ambiente (Jorge, 21/11/2026).
      */
     private fun aplicarEscenaTcg() {
         val escena = b.canvas.scene
         escena.cams().forEach { runCatching { quitarCamaraDelLienzo(it) } }
-        // Sin cámara de ambiente no hay nada que enseñar a pantalla completa.
-        if (ambienteTcg && slotAmbienteTcg() == null) ambienteTcg = false
-        if (estadoTcg.generalActivo != ambienteTcg) {
-            estadoTcg = estadoTcg.copy(generalActivo = ambienteTcg)
+        // Si la cámara que estaba al aire ya no está (se desconectó o se apagó), vuelve la mesa.
+        if (!camaraTcgDisponible(vistaTcg)) vistaTcg = VISTA_MESA
+        val enMesa = vistaTcg == VISTA_MESA
+        if (estadoTcg.generalActivo != !enMesa) {
+            estadoTcg = estadoTcg.copy(generalActivo = !enMesa)
             guardarEstadoTcg()
         }
 
@@ -8636,20 +8683,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val dos = escena.addCam(1)
         dos?.rect?.set(0.815f, 0.03f, 0.985f, 0.20f)
 
-        if (ambienteTcg) {
-            val ambiente = slotAmbienteTcg()?.let { s -> escena.camAt(s) ?: escena.addCam(s) }
-            if (ambiente != null) {
-                // Pantalla completa y sin nada encima: ni jugadores, ni mesa, ni banner.
-                ambiente.rect.set(0f, 0f, 1f, 1f)
-                ambiente.visible = true
-                escena.items.remove(ambiente)
-                escena.items.add(ambiente)
-            }
-            uno?.visible = false
-            dos?.visible = false
-            mesa?.visible = false
-            bannerTcg?.visible = false
-        } else {
+        if (enMesa) {
             uno?.visible = true
             dos?.visible = true
             mesa?.visible = true
@@ -8658,6 +8692,19 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             bannerTcg?.let { item ->
                 escena.items.remove(item)
                 escena.items.add(item)
+            }
+        } else {
+            // Pantalla completa y sin nada encima: ni jugadores, ni mesa, ni banner.
+            uno?.visible = false
+            dos?.visible = false
+            mesa?.visible = false
+            bannerTcg?.visible = false
+            val alAire = escena.camAt(vistaTcg) ?: escena.addCam(vistaTcg)
+            if (alAire != null) {
+                alAire.rect.set(0f, 0f, 1f, 1f)
+                alAire.visible = true
+                escena.items.remove(alAire)
+                escena.items.add(alAire)
             }
         }
         dibujarChipsTcg()
@@ -8672,57 +8719,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         runCatching { panelTcg?.refrescar(estadoTcg) }
     }
 
-    /** Prende o apaga la cámara de ambiente a pantalla completa. */
+    /**
+     * Botón «Cámara general» del panel (y toque de la tarjeta 4): pone el ambiente a pantalla completa
+     * o, si ya hay una cámara al aire, vuelve a la mesa con el marcador.
+     */
     private fun alternarAmbienteTcg() {
-        val escena = b.canvas.scene
-        if (!ambienteTcg) {
-            val slot = slotAmbienteTcg()
-            if (slot == null) {
-                toast("Conecta la cámara de ambiente (o usa la de la tablet con «Tablet» en la tarjeta 4)")
-                return
-            }
-            val ambiente = escena.camAt(slot) ?: escena.addCam(slot)
-            if (ambiente == null) {
-                toast("No se pudo poner la cámara de ambiente")
-                return
-            }
-            ambienteTcg = true
-            // Pantalla completa y sin nada encima: ni jugadores, ni mesa, ni banner.
-            ambiente.rect.set(0f, 0f, 1f, 1f)
-            ambiente.visible = true
-            escena.camAt(0)?.visible = false
-            escena.camAt(1)?.visible = false
-            escena.camAt(2)?.visible = false
-            bannerTcg?.visible = false
-            escena.items.remove(ambiente)
-            escena.items.add(ambiente)
-            runCatching { engancharFuente(slot) }
-        } else {
-            ambienteTcg = false
-            // La cámara de ambiente sale de la escena: en este modo no va como ventanita.
-            val slot = slotAmbienteTcg()
-            if (slot != null) {
-                escena.cams().filter { it.slot == slot }
-                    .forEach { runCatching { quitarCamaraDelLienzo(it) } }
-            }
-            escena.camAt(0)?.visible = true
-            escena.camAt(1)?.visible = true
-            escena.camAt(2)?.visible = true
-            bannerTcg?.visible = true
-            bannerTcg?.let { itm ->
-                escena.items.remove(itm)
-                escena.items.add(itm)
-            }
+        if (vistaTcg != VISTA_MESA) {
+            mostrarCamaraTcg(VISTA_MESA)
+            return
         }
-        escena.selectedId = null
-        b.canvas.slotResaltado = if (estadoTcg.turno == 0) 0 else 1
-        escena.touch()
-        runCatching { b.canvas.requestRender() }
-        // El botón cambia de nombre según el estado (no se redibuja el banner para no revivir el oculto).
-        estadoTcg = estadoTcg.copy(generalActivo = ambienteTcg)
-        guardarEstadoTcg()
-        panelTcg?.refrescar(estadoTcg)
-        toast(if (ambienteTcg) "Cámara general a pantalla completa" else "Vuelve la mesa con los jugadores")
+        val slot = slotAmbienteTcg()
+        if (slot == null) {
+            toast("Conecta la cámara de ambiente (o usa la de la tablet con «Tablet» en la tarjeta 4)")
+            return
+        }
+        if (mostrarCamaraTcg(slot)) {
+            toast(if (slot == LocalCam.SLOT) "Cámara general: tablet" else "Cámara general: celular 4")
+        }
     }
 
     companion object {
@@ -8768,6 +8781,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         private const val CLAVE_TRANSICION_MS = "transicion_ms"
         private const val CLAVE_MODO_TCG = "modo_tcg"
         private const val CLAVE_TCG_ESTADO = "tcg_estado"
+
+        /** Valor de [vistaTcg] para la composición de mesa (mesa + PiPs de jugadores + banner). */
+        private const val VISTA_MESA = -1
     }
 }
 
