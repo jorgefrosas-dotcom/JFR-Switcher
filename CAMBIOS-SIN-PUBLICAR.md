@@ -26,6 +26,10 @@ la rotación se suelta al volver a Modo Studio y la tarjeta 4 recupera su nombre
   «Quitar»).
 - **El mazo se ve en el video**: debajo del nombre de cada jugador en el banner, con su icono y el
   nombre; y en la tarjeta de control, arriba de las pokebolas.
+- **Los mazos con dos Pokémon muestran los dos iconos** (en el banner, en la tarjeta y en la mesa).
+- **Iconos grandes debajo de la cámara de cada jugador** en la vista de mesa: cada icono mide **la mitad
+  del ancho del recuadro de la cámara**, van centrados debajo y sin texto, para identificar de un golpe
+  qué mazo juega cada quien.
 
 - **Modo Pokémon TCG: se puede conectar una cámara sin salir del modo.** Hay un botón **«＋ Conectar
   cámara»** al final de la columna de herramientas, y tocar la tarjeta de un jugador **sin cámara**
