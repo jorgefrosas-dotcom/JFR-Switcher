@@ -7337,23 +7337,26 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     /**
-     * Ancho del banner del modo (en fracción del lienzo). Se bajó de 0.60 a 0.54 para dejarle lugar a
-     * las cámaras de los jugadores, que ahora **tienen la misma altura** que el banner: así la franja de
-     * arriba se ve pareja (Jorge, 22/11/2026).
+     * Ancho del banner del modo (fracción del lienzo). Con las cámaras de los jugadores en 4:3 queda
+     * lugar para que el banner sea más ancho: **58.75 %** (antes 60 % con cámaras 16:9 y 54 % con 16:10).
+     *
+     * Sale de repartir el ancho: `2·anchoCamara + anchoBanner + 4·margen = 1`, con las cámaras a
+     * `0.75 × alto` (4:3) y el banner a `alto / 0.4` (su formato 1600×360). El alto de la franja que
+     * resulta es **23.5 %** del lienzo (Jorge, 22/11/2026).
      */
-    private fun anchoBannerTcg(): Float = 0.54f
+    private fun anchoBannerTcg(): Float = 0.5875f
 
     /**
      * Alto de la franja de arriba: el banner se dibuja a 1600×360, así que su alto sale de su ancho.
-     * Las cámaras de los jugadores usan este mismo alto (~0.216 del lienzo).
+     * Las cámaras de los jugadores usan este mismo alto (≈0.235 del lienzo).
      */
     private fun altoTiraTcg(): Float = anchoBannerTcg() * (16f / 9f) / (1600f / 360f)
 
     /**
-     * Ancho de las cámaras de jugador: un poco menos que el alto × 1.0 para que queden **más cuadradas**
-     * (~16:10) y se vean más grandes. El lado que sobra del cuadro se recorta a los lados.
+     * Ancho de las cámaras de jugador en **4:3**: el cuadro 16:9 del celular se recorta a los lados
+     * (~25 % del ancho) para que la cámara se vea más grande y cuadrada.
      */
-    private fun anchoPipTcg(): Float = altoTiraTcg() * 0.9f
+    private fun anchoPipTcg(): Float = altoTiraTcg() * 0.75f
 
     /**
      * Coloca el banner del modo: **arriba** con la vista de mesa, **abajo** cuando hay un jugador a

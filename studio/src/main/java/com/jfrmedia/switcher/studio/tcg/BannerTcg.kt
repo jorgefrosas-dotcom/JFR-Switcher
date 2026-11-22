@@ -1,4 +1,4 @@
-﻿package com.jfrmedia.switcher.studio.tcg
+package com.jfrmedia.switcher.studio.tcg
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -146,33 +146,33 @@ object Banners {
         // nombres (a la izquierda del bloque) y pokebolas grandes en dos filas de 3 al lado
         texto.textAlign = Paint.Align.LEFT
         texto.color = p.nombre
-        texto.textSize = 33f * u
-        cv.drawText(estado.uno.nombre.uppercase(), 34f * u, 132f * u, texto)
+        texto.textSize = 35f * u
+        cv.drawText(estado.uno.nombre.uppercase(), 34f * u, 134f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
-        cv.drawText(estado.dos.nombre.uppercase(), ancho - 34f * u, 132f * u, texto)
+        cv.drawText(estado.dos.nombre.uppercase(), ancho - 34f * u, 134f * u, texto)
 
         // 6 pokebolas en 2 filas de 3, a la derecha (jugador 1) y a la izquierda (jugador 2)
-        val r = 22f * u
+        val r = 23f * u
         for (i in 0 until 6) {
             val fila = i / 3
             val col = i % 3
-            val xIzq = 300f * u + col * 62f * u
-            pokebola(cv, xIzq, 92f * u + fila * 56f * u, r, i >= estado.uno.debilitados, p.pokebolaBorde)
-            val xDer = ancho - 300f * u - col * 62f * u
-            pokebola(cv, xDer, 92f * u + fila * 56f * u, r, i >= estado.dos.debilitados, p.pokebolaBorde)
+            val xIzq = 304f * u + col * 64f * u
+            pokebola(cv, xIzq, 94f * u + fila * 58f * u, r, i >= estado.uno.debilitados, p.pokebolaBorde)
+            val xDer = ancho - 304f * u - col * 64f * u
+            pokebola(cv, xDer, 94f * u + fila * 58f * u, r, i >= estado.dos.debilitados, p.pokebolaBorde)
         }
 
         // récord
-        texto.textSize = 34f * u
+        texto.textSize = 36f * u
         texto.color = p.record
         texto.textAlign = Paint.Align.LEFT
-        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 216f * u, texto)
+        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 220f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
-        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 216f * u, texto)
+        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 220f * u, texto)
 
         // Chips Energy / Supporter / Retreat de cada jugador, debajo de sus pokebolas.
-        filaChips(cv, estado.uno, estado.turno == 0, 34f * u, 240f * u, 500f * u, u, alDerecha = false, p)
-        filaChips(cv, estado.dos, estado.turno == 1, ancho - 34f * u - 500f * u, 240f * u, 500f * u, u, alDerecha = true, p)
+        filaChips(cv, estado.uno, estado.turno == 0, 34f * u, 240f * u, 524f * u, u, alDerecha = false, p)
+        filaChips(cv, estado.dos, estado.turno == 1, ancho - 34f * u - 524f * u, 240f * u, 524f * u, u, alDerecha = true, p)
 
         // marcador central
         val caja = RectF(ancho / 2f - 160f * u, 70f * u, ancho / 2f + 160f * u, 300f * u)
@@ -257,13 +257,13 @@ object Banners {
     ) {
         val nombres = listOf("ENERGY", "SUPPORTER", "RETREAT")
         val colores = listOf(Color.rgb(88, 200, 140), Color.rgb(122, 152, 244), Color.rgb(242, 172, 82))
-        val alto = 62f * u
+        val alto = 64f * u
         val paso = ancho / 3f
         val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
         val texto = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
-            textSize = 27f * u
+            textSize = 28f * u
         }
         for (i in 0 until 3) {
             val disponible = enTurno && jugador.chips[i]
