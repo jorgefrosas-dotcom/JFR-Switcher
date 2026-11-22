@@ -29,6 +29,7 @@ la rotación se suelta al volver a Modo Studio y la tarjeta 4 recupera su nombre
 - **Con un jugador a pantalla completa el banner se queda, abajo** (antes desaparecía). Con la cámara de
   ambiente sigue oculto y con la mesa va arriba, como estaba.
 - **La franja de arriba del modo quedó pareja**: el banner y las **cámaras de los jugadores tienen la
-  misma altura** (21.6 % del lienzo) y arrancan a la misma altura. El banner se hizo **más angosto**
-  (54 % del ancho en vez de 60 %) y las cámaras **más cuadradas** (16:10 recortando 10 % de los lados),
-  así que se ven ~45 % más grandes en área sin tapar el marcador.
+  misma altura** y arrancan a la misma altura. Las cámaras quedaron en **4:3** (se recorta ~25 % del
+  ancho del cuadro del celular) y eso deja el banner más ancho: **58.75 % del lienzo** (antes 60 % con
+  cámaras 16:9 y 54 % con 16:10), con **los nombres, el récord, las pokebolas y los chips un poco más
+  grandes**. La franja mide 23.5 % del alto del video.
