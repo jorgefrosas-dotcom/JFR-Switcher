@@ -24,8 +24,8 @@ import android.widget.TextView
 class PanelTcg(
     contexto: Context,
     private val escucha: Escucha,
-    /** Devuelve el icono ya bajado de un mazo (por id); null si no hay. */
-    private val icono: (String) -> Bitmap? = { null },
+    /** Devuelve los iconos ya bajados de un mazo (por id); vacío si no hay. */
+    private val iconos: (String) -> List<Bitmap> = { emptyList() },
 ) {
 
     interface Escucha {
@@ -130,14 +130,14 @@ class PanelTcg(
             background = caja(contexto, 0xFF1E222A.toInt(), 0xFF2C303A.toInt(), 10f)
             setOnClickListener { escucha.onElegirMazo(lado) }
         }
-        val iconoMazo = if (jugador.mazoId.isNotBlank()) icono(jugador.mazoId) else null
-        if (iconoMazo != null && !iconoMazo.isRecycled) {
+        val iconosMazo = if (jugador.mazoId.isNotBlank()) iconos(jugador.mazoId) else emptyList()
+        iconosMazo.filter { !it.isRecycled }.take(2).forEach { bmp ->
             filaMazo.addView(
                 ImageView(contexto).apply {
-                    setImageBitmap(iconoMazo)
+                    setImageBitmap(bmp)
                     scaleType = ImageView.ScaleType.FIT_CENTER
                 },
-                LinearLayout.LayoutParams(dp(contexto, 22f), dp(contexto, 22f)).apply {
+                LinearLayout.LayoutParams(dp(contexto, 24f), dp(contexto, 24f)).apply {
                     rightMargin = dp(contexto, 6f)
                 }
             )

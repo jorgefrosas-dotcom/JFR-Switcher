@@ -7280,6 +7280,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** Botón de la esquina de la tarjeta 4 (para poder cambiarle el texto sin crear otro). */
     private var botonCamara4: android.widget.TextView? = null
 
+    /** Iconos grandes del mazo debajo de la cámara de cada jugador (vista de mesa). */
+    private var iconosMazoUno: List<ImageItem> = emptyList()
+    private var iconosMazoDos: List<ImageItem> = emptyList()
+
     /**
      * Botón de la cámara 4 (tarjeta de ambiente). Ciclo de tres pasos, igual que el botón de la
      * lente en Modo Studio: `Tablet → frontal`, `frontal → trasera`, `trasera → apagada`.
@@ -7393,6 +7397,51 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val color = if (vistaTcg == VISTA_MESA) Banners.paleta(estadoTcg.paleta).franjaTexto else 0
         b.canvas.scene.camAt(0)?.marcoColor = color
         b.canvas.scene.camAt(1)?.marcoColor = color
+        runCatching { b.canvas.requestRender() }
+    }
+
+    /**
+     * Iconos del mazo **debajo de la cámara de cada jugador**, solo en la vista de mesa.
+     * Cada icono mide la **mitad del alto del recuadro de la cámara** (50 %), van centrados bajo la
+     * cámara y sin texto: así se ve de un golpe qué mazo juega cada quien (Jorge, 22/11/2026).
+     */
+    private fun actualizarIconosMazo() {
+        val escena = b.canvas.scene
+        (iconosMazoUno + iconosMazoDos).forEach { runCatching { escena.remove(it) } }
+        iconosMazoUno = emptyList()
+        iconosMazoDos = emptyList()
+        if (vistaTcg != VISTA_MESA) {
+            runCatching { b.canvas.requestRender() }
+            return
+        }
+        val altoCam = altoTiraTcg()
+        val anchoCam = anchoPipTcg()
+        val arriba = 0.02f + altoCam + 0.012f
+        val entre = anchoCam * 0.08f
+        listOf(estadoTcg.uno to 0.015f, estadoTcg.dos to (0.985f - anchoCam)).forEach { par ->
+            val jugador = par.first
+            val xCam = par.second
+            val dibujos = com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, jugador.mazoId)
+                .filter { !it.isRecycled }.take(2)
+            if (dibujos.isEmpty()) return@forEach
+            // El icono mide la MITAD del ancho del recuadro de la cámara (con dos, un poco menos
+            // cada uno para que la pareja no se salga del ancho de la cámara).
+            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.5f else 0.44f
+            val altoIcono = anchoIcono * (16f / 9f)     // cuadrado de verdad en un lienzo 16:9
+            val abajo = arriba + altoIcono
+            val anchoTotal = anchoIcono * dibujos.size + entre * (dibujos.size - 1)
+            var x = xCam + anchoCam / 2f - anchoTotal / 2f
+            val items = ArrayList<ImageItem>()
+            dibujos.forEach { bmp ->
+                val item = ImageItem(escena.nextId(), bmp, "Mazo " + jugador.nombre, null)
+                item.rect.set(x, arriba, x + anchoIcono, abajo)
+                escena.agregar(item)
+                items.add(item)
+                x += anchoIcono + entre
+            }
+            if (jugador === estadoTcg.uno) iconosMazoUno = items else iconosMazoDos = items
+        }
+        L.i("mazos", "iconos en la mesa: uno=${iconosMazoUno.size} dos=${iconosMazoDos.size}")
         runCatching { b.canvas.requestRender() }
     }
 
@@ -8217,6 +8266,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         dibujarBannerTcg()
         // El marco de las cámaras de jugador toma el color del banner: se repinta con cada cambio.
         actualizarMarcosTcg()
+        // Y los iconos grandes del mazo debajo de la cámara, por si cambió el mazo elegido.
+        actualizarIconosMazo()
         dibujarChipsTcg()
         panelTcg?.refrescar(nuevo)
     }
@@ -8231,12 +8282,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
     private fun dibujarBannerTcg() {
         // Iconos de los mazos que están en uso (el banner los dibuja junto al nombre del jugador).
-        val iconos = HashMap<String, Bitmap>()
+        val iconos = HashMap<String, List<Bitmap>>()
         listOf(estadoTcg.uno, estadoTcg.dos).forEach { jugador ->
             if (jugador.mazoId.isNotBlank()) {
-                com.jfrmedia.switcher.studio.tcg.Mazos.icono(this, jugador.mazoId)?.let {
-                    iconos[jugador.mazoId] = it
-                }
+                com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, jugador.mazoId)
+                    .takeIf { it.isNotEmpty() }?.let { iconos[jugador.mazoId] = it }
             }
         }
         val imagen = Banners.dibujar(estadoTcg, 1600, 360, iconos)
@@ -8389,7 +8439,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
             /** Elegir el mazo del jugador de la lista del formato (Limitless). */
             override fun onElegirMazo(lado: Int) = abrirSelectorMazo(lado)
-        }, { mazoId -> com.jfrmedia.switcher.studio.tcg.Mazos.icono(this, mazoId) })
+        }, { mazoId -> com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, mazoId) })
         panel.refrescar(estadoTcg)
         panelTcg = panel
         b.slotControles.addView(panel.vista, 0)
@@ -8499,14 +8549,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 background = ContextCompat.getDrawable(this@StudioActivity, R.drawable.bg_pill_accent)
             }
         }
-        val icono = com.jfrmedia.switcher.studio.tcg.Mazos.icono(this, mazo.id)
-        if (icono != null && !icono.isRecycled) {
+        val iconosMazo = com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, mazo.id)
+        iconosMazo.filter { !it.isRecycled }.take(2).forEach { bmp ->
             fila.addView(
                 ImageView(this).apply {
-                    setImageBitmap(icono)
+                    setImageBitmap(bmp)
                     scaleType = ImageView.ScaleType.FIT_CENTER
                 },
-                LinearLayout.LayoutParams(34.dp, 34.dp).apply { rightMargin = 10.dp }
+                LinearLayout.LayoutParams(34.dp, 34.dp).apply { rightMargin = 6.dp }
             )
         }
         fila.addView(
@@ -8610,7 +8660,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         dibujarBannerTcg()
         montarPanelTcg()
         // Lista de los mazos más usados del formato: se refresca al entrar al modo, una vez al día.
-        if (com.jfrmedia.switcher.studio.tcg.Mazos.vieja(this)) actualizarMazos()
+        // También si la caché de iconos es de una versión anterior (por ejemplo al pasar a dos iconos).
+        if (com.jfrmedia.switcher.studio.tcg.Mazos.vieja(this) ||
+            com.jfrmedia.switcher.studio.tcg.Mazos.esquemaViejo(this)
+        ) {
+            actualizarMazos()
+        }
         // Al ocultar los controles viejos el lienzo debe volver a medirse (si no, queda chico).
         // Monitor con tamaño EXACTO y la columna de herramientas a su derecha.
         // (El contenedor del monitor no admite "ancho 0 + peso": mide 0 y desaparece.)
@@ -8974,7 +9029,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
         }
         // El banner va donde toque (arriba con la mesa, abajo con un jugador al aire) y siempre
-        // encima de las cámaras; y las de los jugadores llevan marco del color del banner.
+        // encima de las cámaras; las de los jugadores llevan marco del color del banner.
+        actualizarIconosMazo()
         acomodarBannerTcg()
         actualizarMarcosTcg()
         dibujarChipsTcg()

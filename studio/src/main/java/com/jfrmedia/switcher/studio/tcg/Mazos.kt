@@ -39,10 +39,17 @@ object Mazos {
     private const val PREFS = "jfr_studio"
     private const val CLAVE_LISTA = "mazos_top"
     private const val CLAVE_CUANDO = "mazos_cuando"
+    private const val CLAVE_ESQUEMA = "mazos_esquema"
     private const val UN_DIA_MS = 24L * 60 * 60 * 1000
 
+    /**
+     * Versión de la caché de iconos. Se sube cuando cambia cómo se guardan (por ejemplo al pasar de
+     * uno a dos iconos por mazo) para forzar una descarga nueva una sola vez.
+     */
+    private const val ESQUEMA_ICONOS = 2
+
     /** Iconos ya cargados en memoria (por id de mazo). */
-    private val memoriaIconos = HashMap<String, Bitmap>()
+    private val memoriaIconos = HashMap<String, List<Bitmap>>()
 
     // ------------------------------------------------------------------ consulta
 
@@ -56,22 +63,36 @@ object Mazos {
         return System.currentTimeMillis() - cuando > UN_DIA_MS
     }
 
+    /** ¿La caché de iconos es de una versión anterior? (hay que volver a bajarlos) */
+    fun esquemaViejo(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(CLAVE_ESQUEMA, 0) < ESQUEMA_ICONOS
+
     /** Cuándo se bajó por última vez (para mostrarlo en el selector). */
     fun cuando(ctx: Context): Long =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(CLAVE_CUANDO, 0L)
 
     fun porId(ctx: Context, id: String): Mazo? = leer(ctx).firstOrNull { it.id == id }
 
-    /** Icono ya bajado de un mazo (null si no hay archivo). Se cachea en memoria. */
-    fun icono(ctx: Context, mazoId: String): Bitmap? {
-        if (mazoId.isBlank()) return null
-        memoriaIconos[mazoId]?.let { if (!it.isRecycled) return it }
-        val archivo = archivoIcono(ctx, mazoId)
-        if (!archivo.exists()) return null
-        val bmp = runCatching { BitmapFactory.decodeFile(archivo.absolutePath) }.getOrNull() ?: return null
-        memoriaIconos[mazoId] = bmp
-        return bmp
+    /** Iconos ya bajados de un mazo (0, 1 o 2). Se cachean en memoria. */
+    fun iconos(ctx: Context, mazoId: String): List<Bitmap> {
+        if (mazoId.isBlank()) return emptyList()
+        memoriaIconos[mazoId]?.let { guardados ->
+            if (guardados.isNotEmpty() && guardados.none { it.isRecycled }) return guardados
+        }
+        val lista = ArrayList<Bitmap>(2)
+        for (n in 1..2) {
+            val archivo = archivoIcono(ctx, mazoId, n)
+            if (!archivo.exists()) continue
+            val bmp = runCatching { BitmapFactory.decodeFile(archivo.absolutePath) }.getOrNull() ?: continue
+            lista.add(bmp)
+        }
+        memoriaIconos[mazoId] = lista
+        return lista
     }
+
+    /** El primer icono del mazo (para donde solo cabe uno). */
+    fun icono(ctx: Context, mazoId: String): Bitmap? = iconos(ctx, mazoId).firstOrNull()
 
     // ------------------------------------------------------------------ descarga
 
@@ -90,14 +111,19 @@ object Mazos {
         }
         guardar(ctx, nueva)
         // Los iconos se bajan después de guardar: si alguno falla, la lista ya quedó.
+        // Se guardan hasta dos por mazo (algunos llevan dos Pokémon y se muestran los dos).
         nueva.forEach { mazo ->
-            val url = mazo.iconoPrincipal ?: return@forEach
-            val archivo = archivoIcono(ctx, mazo.id)
-            if (archivo.exists() && archivo.length() > 0) return@forEach
-            runCatching { descargarIcono(url, archivo) }
-                .onFailure { L.w("mazos", "icono de ${mazo.nombre}: ${it.message}") }
+            mazo.iconos.take(2).forEachIndexed { indice, url ->
+                val archivo = archivoIcono(ctx, mazo.id, indice + 1)
+                if (archivo.exists() && archivo.length() > 0) return@forEachIndexed
+                runCatching { descargarIcono(url, archivo) }
+                    .onFailure { L.w("mazos", "icono de ${mazo.nombre}: ${it.message}") }
+            }
         }
         memoriaIconos.clear()
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(CLAVE_ESQUEMA, ESQUEMA_ICONOS)
+            .apply()
         L.i("mazos", "lista actualizada: ${nueva.size} mazos (primero: ${nueva.first().nombre})")
         return nueva
     }
@@ -181,8 +207,8 @@ object Mazos {
 
     // ------------------------------------------------------------------ guardado
 
-    private fun archivoIcono(ctx: Context, mazoId: String): File =
-        File(File(ctx.filesDir, "mazos"), "mazo_$mazoId.png")
+    private fun archivoIcono(ctx: Context, mazoId: String, numero: Int): File =
+        File(File(ctx.filesDir, "mazos"), "mazo_${mazoId}_$numero.png")
 
     private fun leer(ctx: Context): List<Mazo> = runCatching {
         val texto = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

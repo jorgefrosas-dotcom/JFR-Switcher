@@ -119,7 +119,7 @@ object Banners {
         estado: EstadoTcg,
         ancho: Int = 1600,
         alto: Int = 360,
-        iconos: Map<String, Bitmap> = emptyMap(),
+        iconos: Map<String, List<Bitmap>> = emptyMap(),
     ): Bitmap {
         val p = paleta(estado.paleta)
         val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
@@ -259,9 +259,9 @@ object Banners {
         return bmp
     }
     /**
-     * Mazo del jugador dentro del banner: el icono del Pokémon principal (el mismo sprite que usa
-     * Limitless) y el nombre del mazo, debajo del nombre del jugador. Si el nombre no cabe, se corta
-     * con «…» para no invadir las pokebolas.
+     * Mazo del jugador dentro del banner: el icono (o los dos, si el mazo lleva dos Pokémon) y el
+     * nombre del mazo, debajo del nombre del jugador. Si el nombre no cabe, se corta con «…» para no
+     * invadir las pokebolas.
      */
     private fun dibujarMazo(
         cv: Canvas,
@@ -270,14 +270,18 @@ object Banners {
         y: Float,
         u: Float,
         alDerecha: Boolean,
-        iconos: Map<String, Bitmap>,
+        iconos: Map<String, List<Bitmap>>,
         p: PaletaBanner,
     ) {
         val nombreMazo = jugador.mazo.trim()
         if (nombreMazo.isEmpty()) return
-        val lado = 32f * u
+        val dibujos = iconos[jugador.mazoId].orEmpty().filter { !it.isRecycled }.take(2)
+        val lado = 30f * u
+        val entreIconos = 4f * u
         val separacion = 8f * u
-        val topeTexto = 226f * u            // deja libres las pokebolas (empiezan en 304u)
+        val anchoIconos =
+            if (dibujos.isEmpty()) 0f else lado * dibujos.size + entreIconos * (dibujos.size - 1) + separacion
+        val topeTexto = 250f * u - anchoIconos    // deja libres las pokebolas (empiezan en 304u)
         val pintura = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textSize = 28f * u
@@ -288,14 +292,14 @@ object Banners {
         while (texto.length > 1 && pintura.measureText(texto) > topeTexto) {
             texto = texto.dropLast(2) + "…"
         }
-        val xTexto = if (alDerecha) x - lado - separacion else x + lado + separacion
+        val xTexto = if (alDerecha) x - anchoIconos else x + anchoIconos
         cv.drawText(texto, xTexto, y + lado * 0.82f, pintura)
-        // El icono, del lado del borde (izquierda para el jugador 1, derecha para el 2).
-        val icono = iconos[jugador.mazoId]
-        if (icono != null && !icono.isRecycled) {
-            val izq = if (alDerecha) x - lado else x
-            val destino = RectF(izq, y, izq + lado, y + lado)
-            cv.drawBitmap(icono, null, destino, Paint(Paint.FILTER_BITMAP_FLAG))
+        // Los iconos, del lado del borde (izquierda para el jugador 1, derecha para el 2).
+        val filtro = Paint(Paint.FILTER_BITMAP_FLAG)
+        var cursor = if (alDerecha) x - lado else x
+        dibujos.forEach { icono ->
+            cv.drawBitmap(icono, null, RectF(cursor, y, cursor + lado, y + lado), filtro)
+            cursor += if (alDerecha) -(lado + entreIconos) else lado + entreIconos
         }
     }
 
