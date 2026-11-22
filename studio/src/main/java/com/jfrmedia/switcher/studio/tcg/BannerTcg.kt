@@ -20,6 +20,10 @@ data class JugadorTcg(
     val debilitados: Int = 0,
     /** Energy, Supporter, Retreat (solo del jugador en turno). */
     val chips: BooleanArray = booleanArrayOf(true, true, true),
+    /** Nombre del mazo que está jugando (de la lista del formato; vacío = sin asignar). */
+    val mazo: String = "",
+    /** Id del mazo en Limitless, para encontrar su icono. */
+    val mazoId: String = "",
 ) {
     val record: String get() = "$ganadas - $empatadas - $perdidas"
 
@@ -27,7 +31,7 @@ data class JugadorTcg(
         if (other !is JugadorTcg) return false
         return nombre == other.nombre && ganadas == other.ganadas && empatadas == other.empatadas &&
             perdidas == other.perdidas && debilitados == other.debilitados &&
-            chips.contentEquals(other.chips)
+            chips.contentEquals(other.chips) && mazo == other.mazo && mazoId == other.mazoId
     }
 
     override fun hashCode(): Int {
@@ -37,6 +41,8 @@ data class JugadorTcg(
         r = 31 * r + perdidas
         r = 31 * r + debilitados
         r = 31 * r + chips.contentHashCode()
+        r = 31 * r + mazo.hashCode()
+        r = 31 * r + mazoId.hashCode()
         return r
     }
 }
@@ -109,7 +115,12 @@ object Banners {
      * Dibuja el banner completo y devuelve el bitmap listo para el compositor.
      * El tamaño es fijo (1600x320) y el compositor lo estira al rectángulo del programa.
      */
-    fun dibujar(estado: EstadoTcg, ancho: Int = 1600, alto: Int = 360): Bitmap {
+    fun dibujar(
+        estado: EstadoTcg,
+        ancho: Int = 1600,
+        alto: Int = 360,
+        iconos: Map<String, Bitmap> = emptyMap(),
+    ): Bitmap {
         val p = paleta(estado.paleta)
         val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
         val cv = Canvas(bmp)
@@ -169,6 +180,10 @@ object Banners {
         cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 220f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
         cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 220f * u, texto)
+
+        // Mazo de cada jugador (icono + nombre), justo debajo de su nombre.
+        dibujarMazo(cv, estado.uno, 34f * u, 150f * u, u, alDerecha = false, iconos, p)
+        dibujarMazo(cv, estado.dos, ancho - 34f * u, 150f * u, u, alDerecha = true, iconos, p)
 
         // Chips Energy / Supporter / Retreat de cada jugador, debajo de sus pokebolas.
         filaChips(cv, estado.uno, estado.turno == 0, 34f * u, 240f * u, 524f * u, u, alDerecha = false, p)
@@ -243,6 +258,47 @@ object Banners {
         }
         return bmp
     }
+    /**
+     * Mazo del jugador dentro del banner: el icono del Pokémon principal (el mismo sprite que usa
+     * Limitless) y el nombre del mazo, debajo del nombre del jugador. Si el nombre no cabe, se corta
+     * con «…» para no invadir las pokebolas.
+     */
+    private fun dibujarMazo(
+        cv: Canvas,
+        jugador: JugadorTcg,
+        x: Float,
+        y: Float,
+        u: Float,
+        alDerecha: Boolean,
+        iconos: Map<String, Bitmap>,
+        p: PaletaBanner,
+    ) {
+        val nombreMazo = jugador.mazo.trim()
+        if (nombreMazo.isEmpty()) return
+        val lado = 32f * u
+        val separacion = 8f * u
+        val topeTexto = 226f * u            // deja libres las pokebolas (empiezan en 304u)
+        val pintura = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 28f * u
+            color = p.franjaTexto
+            textAlign = if (alDerecha) Paint.Align.RIGHT else Paint.Align.LEFT
+        }
+        var texto = nombreMazo
+        while (texto.length > 1 && pintura.measureText(texto) > topeTexto) {
+            texto = texto.dropLast(2) + "…"
+        }
+        val xTexto = if (alDerecha) x - lado - separacion else x + lado + separacion
+        cv.drawText(texto, xTexto, y + lado * 0.82f, pintura)
+        // El icono, del lado del borde (izquierda para el jugador 1, derecha para el 2).
+        val icono = iconos[jugador.mazoId]
+        if (icono != null && !icono.isRecycled) {
+            val izq = if (alDerecha) x - lado else x
+            val destino = RectF(izq, y, izq + lado, y + lado)
+            cv.drawBitmap(icono, null, destino, Paint(Paint.FILTER_BITMAP_FLAG))
+        }
+    }
+
     /** Tres chips de un jugador dentro del banner (rellenos si están disponibles). */
     private fun filaChips(
         cv: Canvas,

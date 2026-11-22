@@ -8146,6 +8146,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 perdidas = o.optInt("p", 0),
                 debilitados = o.optInt("deb", 0),
                 chips = fichas,
+                mazo = o.optString("mazo", ""),
+                mazoId = o.optString("mazoId", ""),
             )
         }
 
@@ -8182,6 +8184,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             put("e", j.empatadas)
             put("p", j.perdidas)
             put("deb", j.debilitados)
+            put("mazo", j.mazo)
+            put("mazoId", j.mazoId)
             put("chips", org.json.JSONArray().apply { j.chips.forEach { put(it) } })
         }
         val raiz = org.json.JSONObject().apply {
@@ -8226,7 +8230,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         chipsTcgDos = null
     }
     private fun dibujarBannerTcg() {
-        val imagen = Banners.dibujar(estadoTcg, 1600, 360)
+        // Iconos de los mazos que están en uso (el banner los dibuja junto al nombre del jugador).
+        val iconos = HashMap<String, Bitmap>()
+        listOf(estadoTcg.uno, estadoTcg.dos).forEach { jugador ->
+            if (jugador.mazoId.isNotBlank()) {
+                com.jfrmedia.switcher.studio.tcg.Mazos.icono(this, jugador.mazoId)?.let {
+                    iconos[jugador.mazoId] = it
+                }
+            }
+        }
+        val imagen = Banners.dibujar(estadoTcg, 1600, 360, iconos)
         val previo = bannerTcg
         // Franja centrada arriba con el mismo alto que las cámaras de los jugadores.
         val ancho = anchoBannerTcg()
@@ -8373,15 +8386,157 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
             /** Conectar otra cámara sin salir del modo (antes había que ir a Modo Studio por el QR). */
             override fun onConectarCamara() = showPairing()
-        })
+
+            /** Elegir el mazo del jugador de la lista del formato (Limitless). */
+            override fun onElegirMazo(lado: Int) = abrirSelectorMazo(lado)
+        }, { mazoId -> com.jfrmedia.switcher.studio.tcg.Mazos.icono(this, mazoId) })
         panel.refrescar(estadoTcg)
         panelTcg = panel
         b.slotControles.addView(panel.vista, 0)
     }
 
+    // ------------------------------------------------ mazos del formato (Limitless)
+
+    /**
+     * Baja la lista de los mazos más usados (y sus iconos) en un hilo aparte y avisa al terminar.
+     * Se llama al entrar al modo (una vez al día) y desde el selector de mazos.
+     */
+    private fun actualizarMazos(despues: ((Boolean) -> Unit)? = null) {
+        Thread {
+            val lista = com.jfrmedia.switcher.studio.tcg.Mazos.actualizar(this)
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                val ok = lista.isNotEmpty()
+                if (ok) {
+                    dibujarBannerTcg()
+                    panelTcg?.refrescar(estadoTcg)
+                }
+                despues?.invoke(ok)
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /** Selector del mazo de un jugador: la lista del formato con icono, nombre y % de uso. */
+    private fun abrirSelectorMazo(lado: Int, reintentando: Boolean = false) {
+        val jugador = if (lado == 0) estadoTcg.uno else estadoTcg.dos
+        val lista = com.jfrmedia.switcher.studio.tcg.Mazos.guardados(this)
+        if (lista.isEmpty()) {
+            if (reintentando) {
+                toast("No se pudo bajar la lista de mazos (revisa la conexión)")
+                return
+            }
+            toast("Bajando la lista de mazos…")
+            actualizarMazos { ok ->
+                if (ok) abrirSelectorMazo(lado, reintentando = true)
+                else toast("No se pudo bajar la lista de mazos (revisa la conexión)")
+            }
+            return
+        }
+
+        val cuando = com.jfrmedia.switcher.studio.tcg.Mazos.cuando(this)
+        val fecha = if (cuando > 0L) {
+            java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.getDefault())
+                .format(java.util.Date(cuando))
+        } else {
+            "sin fecha"
+        }
+
+        val columna = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(12.dp, 4.dp, 12.dp, 0)
+        }
+        columna.addView(TextView(this).apply {
+            text = "Top del formato · actualizado $fecha"
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextColor(ContextCompat.getColor(context, R.color.text_dim))
+            setPadding(6.dp, 0, 6.dp, 6.dp)
+        })
+
+        val dialogo = AlertDialog.Builder(this)
+            .setTitle("Mazo de ${jugador.nombre}")
+            .setView(ScrollView(this).apply { addView(columna) })
+            .setNegativeButton("Quitar", null)
+            .setNeutralButton("Actualizar", null)
+            .create()
+
+        fun asignar(mazo: com.jfrmedia.switcher.studio.tcg.Mazo?) {
+            val nuevo = if (mazo == null) jugador.copy(mazo = "", mazoId = "")
+            else jugador.copy(mazo = mazo.nombre, mazoId = mazo.id)
+            cambiarEstadoTcg(if (lado == 0) estadoTcg.copy(uno = nuevo) else estadoTcg.copy(dos = nuevo))
+            runCatching { dialogo.dismiss() }
+            toast(if (mazo == null) "Mazo quitado" else "Mazo: ${mazo.nombre}")
+        }
+
+        lista.forEach { mazo ->
+            columna.addView(filaMazoDialogo(mazo, mazo.id == jugador.mazoId) { asignar(mazo) })
+        }
+        dialogo.setOnShowListener {
+            dialogo.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener { asignar(null) }
+            dialogo.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                runCatching { dialogo.dismiss() }
+                toast("Actualizando la lista…")
+                actualizarMazos { ok ->
+                    if (ok) abrirSelectorMazo(lado)
+                    else toast("No se pudo actualizar: se queda la lista anterior")
+                }
+            }
+        }
+        dialogo.show()
+    }
+
+    /** Una fila del selector de mazos: icono, nombre, uso y resaltado si es el actual. */
+    private fun filaMazoDialogo(
+        mazo: com.jfrmedia.switcher.studio.tcg.Mazo,
+        actual: Boolean,
+        alTocar: () -> Unit,
+    ): View {
+        val fila = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(8.dp, 5.dp, 8.dp, 5.dp)
+            setOnClickListener { alTocar() }
+            if (actual) {
+                background = ContextCompat.getDrawable(this@StudioActivity, R.drawable.bg_pill_accent)
+            }
+        }
+        val icono = com.jfrmedia.switcher.studio.tcg.Mazos.icono(this, mazo.id)
+        if (icono != null && !icono.isRecycled) {
+            fila.addView(
+                ImageView(this).apply {
+                    setImageBitmap(icono)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                },
+                LinearLayout.LayoutParams(34.dp, 34.dp).apply { rightMargin = 10.dp }
+            )
+        }
+        fila.addView(
+            TextView(this).apply {
+                text = mazo.nombre
+                setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f)
+                setTextColor(
+                    ContextCompat.getColor(
+                        this@StudioActivity,
+                        if (actual) R.color.bg_root else R.color.text_primary
+                    )
+                )
+                isSingleLine = true
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        if (mazo.uso.isNotBlank()) {
+            fila.addView(TextView(this).apply {
+                text = mazo.uso
+                setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f)
+                setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.accent))
+                setPadding(10.dp, 0, 0, 0)
+            })
+        }
+        return fila
+    }
+
     /** Escribe el nombre del jugador. */
-    private fun editarNombreTcg(lado: Int) {
-        val actual = if (lado == 0) estadoTcg.uno else estadoTcg.dos
+    private fun editarNombreTcg(lado: Int) {        val actual = if (lado == 0) estadoTcg.uno else estadoTcg.dos
         val campo = EditText(this).apply {
             setText(actual.nombre)
             setSingleLine()
@@ -8454,6 +8609,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         dibujarBannerTcg()
         montarPanelTcg()
+        // Lista de los mazos más usados del formato: se refresca al entrar al modo, una vez al día.
+        if (com.jfrmedia.switcher.studio.tcg.Mazos.vieja(this)) actualizarMazos()
         // Al ocultar los controles viejos el lienzo debe volver a medirse (si no, queda chico).
         // Monitor con tamaño EXACTO y la columna de herramientas a su derecha.
         // (El contenedor del monitor no admite "ancho 0 + peso": mide 0 y desaparece.)

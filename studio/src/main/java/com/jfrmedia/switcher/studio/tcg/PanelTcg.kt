@@ -1,11 +1,14 @@
 package com.jfrmedia.switcher.studio.tcg
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -14,11 +17,16 @@ import android.widget.TextView
  *
  *     [ Jugador 1 ] [ turno · resultado · herramientas ] [ Jugador 2 ]
  *
- * Cada tarjeta lleva el nombre, el récord del evento, las 6 pokebolas con −/+ y los chips de la
- * mesa. El centro lleva de quién es el turno, el botón de pasar turno, el resultado por nombre y
- * las herramientas de la partida.
+ * Cada tarjeta lleva el nombre, el récord del evento, **el mazo que está jugando**, las 6 pokebolas
+ * con −/+ y los chips de la mesa. El centro lleva de quién es el turno, el botón de pasar turno, el
+ * resultado por nombre y las herramientas de la partida.
  */
-class PanelTcg(contexto: Context, private val escucha: Escucha) {
+class PanelTcg(
+    contexto: Context,
+    private val escucha: Escucha,
+    /** Devuelve el icono ya bajado de un mazo (por id); null si no hay. */
+    private val icono: (String) -> Bitmap? = { null },
+) {
 
     interface Escucha {
         fun onEditarNombre(lado: Int)
@@ -34,6 +42,9 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
 
         /** Abre el cuadro del QR / IP para conectar otra cámara sin salir del modo. */
         fun onConectarCamara()
+
+        /** Abre la lista de mazos del formato para asignarle uno a ese jugador. */
+        fun onElegirMazo(lado: Int)
     }
 
     val vista: View
@@ -109,6 +120,46 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
             }
         )
         fila.addView(cabecera)
+
+        // Mazo del jugador: icono + nombre, arriba de las pokebolas. Se toca para elegirlo de la
+        // lista de los mazos más usados del formato.
+        val filaMazo = LinearLayout(contexto).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(contexto, 6f), dp(contexto, 3f), dp(contexto, 6f), dp(contexto, 3f))
+            background = caja(contexto, 0xFF1E222A.toInt(), 0xFF2C303A.toInt(), 10f)
+            setOnClickListener { escucha.onElegirMazo(lado) }
+        }
+        val iconoMazo = if (jugador.mazoId.isNotBlank()) icono(jugador.mazoId) else null
+        if (iconoMazo != null && !iconoMazo.isRecycled) {
+            filaMazo.addView(
+                ImageView(contexto).apply {
+                    setImageBitmap(iconoMazo)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                },
+                LinearLayout.LayoutParams(dp(contexto, 22f), dp(contexto, 22f)).apply {
+                    rightMargin = dp(contexto, 6f)
+                }
+            )
+        }
+        filaMazo.addView(
+            TextView(contexto).apply {
+                val sinMazo = jugador.mazo.isBlank()
+                text = if (sinMazo) "＋ Elegir mazo" else jugador.mazo
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                setTextColor(if (sinMazo) 0xFF9AA0AA.toInt() else 0xFFECEEF2.toInt())
+                isSingleLine = true
+                ellipsize = TextUtils.TruncateAt.END
+            },
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        fila.addView(
+            filaMazo,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(contexto, 5f) }
+        )
 
         // Pokebolas: − ●●●●●● +
         val premios = LinearLayout(contexto).apply {
