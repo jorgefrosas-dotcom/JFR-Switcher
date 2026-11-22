@@ -984,6 +984,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                         mostrarCamaraTcg(VISTA_MESA)
                     } else if (mostrarCamaraTcg(slot)) {
                         toast(if (slot == 0) "Jugador 1 a pantalla completa" else "Jugador 2 a pantalla completa")
+                    } else {
+                        // No hay cámara en ese hueco: se abre el QR para conectar una, sin salir
+                        // del modo (Jorge, 22/11/2026).
+                        showPairing()
                     }
                 }
 
@@ -7332,6 +7336,45 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         else -> "Trasera"
     }
 
+    /** Alto del banner dentro del lienzo (la franja se dibuja a 1600×360 y ocupa 60 % del ancho). */
+    private fun altoBannerTcg(): Float = 0.60f * (16f / 9f) / (1600f / 360f)
+
+    /**
+     * Coloca el banner del modo: **arriba** con la vista de mesa, **abajo** cuando hay un jugador a
+     * pantalla completa y oculto con el ambiente. Siempre queda encima de las cámaras.
+     */
+    private fun acomodarBannerTcg() {
+        val escena = b.canvas.scene
+        val banner = bannerTcg ?: return
+        val alto = altoBannerTcg()
+        when {
+            vistaTcg == VISTA_MESA -> {
+                banner.visible = true
+                banner.rect.set(0.20f, 0.02f, 0.80f, 0.02f + alto)
+            }
+
+            vistaTcg == 0 || vistaTcg == 1 -> {
+                banner.visible = true
+                banner.rect.set(0.20f, 0.98f - alto, 0.80f, 0.98f)
+            }
+
+            else -> banner.visible = false
+        }
+        if (banner.visible) {
+            escena.items.remove(banner)
+            escena.items.add(banner)
+        }
+        runCatching { b.canvas.requestRender() }
+    }
+
+    /** Marco de las cámaras de jugador: el color de acento del banner en uso (solo en la mesa). */
+    private fun actualizarMarcosTcg() {
+        val color = if (vistaTcg == VISTA_MESA) Banners.paleta(estadoTcg.paleta).franjaTexto else 0
+        b.canvas.scene.camAt(0)?.marcoColor = color
+        b.canvas.scene.camAt(1)?.marcoColor = color
+        runCatching { b.canvas.requestRender() }
+    }
+
     /** Coloca las cámaras en su rectángulo del modo (mesa al fondo, jugadores como PiP). */
     private fun aplicarRectangulosTcg() {
         val escena = b.canvas.scene
@@ -8144,6 +8187,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         estadoTcg = nuevo
         guardarEstadoTcg()
         dibujarBannerTcg()
+        // El marco de las cámaras de jugador toma el color del banner: se repinta con cada cambio.
+        actualizarMarcosTcg()
         dibujarChipsTcg()
         panelTcg?.refrescar(nuevo)
     }
@@ -8165,16 +8210,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         previo?.let { runCatching { b.canvas.scene.remove(it) } }
         val item = b.canvas.scene.addImage(imagen, "Banner TCG", null, rect)
         item.radiusDp = 8f
-        // El banner va con la vista de mesa: si hay una cámara a pantalla completa, el banner nuevo
-        // nace oculto (si no, al cambiar de paleta se dibujaría encima de la cara del jugador).
-        item.visible = vistaTcg == VISTA_MESA
-        if (item.visible) {
-            b.canvas.scene.items.remove(item)
-            b.canvas.scene.items.add(item)
-        }
         b.canvas.scene.selectedId = null
         bannerTcg = item
-        runCatching { b.canvas.requestRender() }
+        // Se coloca donde toca según la vista (arriba en la mesa, abajo con un jugador al aire,
+        // oculto con el ambiente) para que un cambio de paleta no lo dibuje sobre la cara.
+        acomodarBannerTcg()
     }
 
     private fun montarPanelTcg() {
@@ -8304,6 +8344,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             override fun onAlternarAmbiente() = alternarAmbienteTcg()
 
             override fun onAbrirEvento() = abrirDialogoEvento()
+
+            /** Conectar otra cámara sin salir del modo (antes había que ir a Modo Studio por el QR). */
+            override fun onConectarCamara() = showPairing()
         })
         panel.refrescar(estadoTcg)
         panelTcg = panel
@@ -8731,18 +8774,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             uno?.visible = true
             dos?.visible = true
             mesa?.visible = true
-            bannerTcg?.visible = true
-            // El banner siempre al final: tiene que quedar por encima.
-            bannerTcg?.let { item ->
-                escena.items.remove(item)
-                escena.items.add(item)
-            }
         } else {
-            // Pantalla completa y sin nada encima: ni jugadores, ni mesa, ni banner.
+            // Pantalla completa: ni PiPs ni mesa. El banner sí se queda si es un jugador (abajo).
             uno?.visible = false
             dos?.visible = false
             mesa?.visible = false
-            bannerTcg?.visible = false
             val alAire = escena.camAt(vistaTcg) ?: escena.addCam(vistaTcg)
             if (alAire != null) {
                 alAire.rect.set(0f, 0f, 1f, 1f)
@@ -8751,6 +8787,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 escena.items.add(alAire)
             }
         }
+        // El banner va donde toque (arriba con la mesa, abajo con un jugador al aire) y siempre
+        // encima de las cámaras; y las de los jugadores llevan marco del color del banner.
+        acomodarBannerTcg()
+        actualizarMarcosTcg()
         dibujarChipsTcg()
         // Reenganchar el video de las cámaras que ya estaban conectadas (al rehacer la escena
         // se suelta la pista y sin esto el PiP quedaba en negro).

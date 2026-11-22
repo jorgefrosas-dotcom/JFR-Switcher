@@ -1,4 +1,4 @@
-﻿package com.jfrmedia.switcher.studio.canvas
+package com.jfrmedia.switcher.studio.canvas
 
 import android.graphics.Bitmap
 import android.graphics.RectF
@@ -55,6 +55,13 @@ class CamItem(id: Long, val slot: Int) : CanvasItem(id) {
 
     /** Posterización: reduce la cantidad de niveles de color, 0..1. */
     var poster: Float = 0f
+
+    /**
+     * Color (ARGB) del marco que se dibuja alrededor de la cámara; 0 = sin marco.
+     * En el Modo Pokémon TCG marca las cámaras de los jugadores con el color del banner en uso,
+     * para que no se confundan con la imagen de la mesa.
+     */
+    var marcoColor: Int = 0
 
     fun resetImagen() {
         luz = 0f

@@ -1,4 +1,4 @@
-﻿package com.jfrmedia.switcher.studio.tcg
+package com.jfrmedia.switcher.studio.tcg
 
 import android.content.Context
 import android.graphics.Typeface
@@ -31,6 +31,9 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
         fun onCambiarPaleta()
         fun onAlternarAmbiente()
         fun onAbrirEvento()
+
+        /** Abre el cuadro del QR / IP para conectar otra cámara sin salir del modo. */
+        fun onConectarCamara()
     }
 
     val vista: View
@@ -114,8 +117,10 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
             setPadding(0, dp(contexto, 6f), 0, 0)
         }
         premios.addView(etiqueta(contexto, "Pokémon", 0xFF9AA0AA.toInt()))
+        // `debilitados` cuenta las pokebolas ya gastadas, así que quitar una bola con el «−» suma
+        // uno. Antes estaban al revés y había que apretar «+» para gastar (Jorge, 22/11/2026).
         premios.addView(boton(contexto, "−", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) {
-            escucha.onCambiarDebilitados(lado, -1)
+            escucha.onCambiarDebilitados(lado, +1)
         })
         premios.addView(
             // Pokebolas dibujadas (iconos), no círculos de texto.
@@ -126,7 +131,8 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
             LinearLayout.LayoutParams(0, dp(contexto, 30f), 1f)
         )
         premios.addView(boton(contexto, "+", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) {
-            escucha.onCambiarDebilitados(lado, +1)
+            // Poner una pokebola de vuelta (un Pokémon menos debilitado).
+            escucha.onCambiarDebilitados(lado, -1)
         })
         fila.addView(premios)
 
@@ -222,6 +228,8 @@ class PanelTcg(contexto: Context, private val escucha: Escucha) {
             if (estado.generalActivo) 0xFFFF6B35.toInt() else 0xFF9AA0AA.toInt()
         ) { escucha.onAlternarAmbiente() }
         agregar("Banner", 0xFF23262E.toInt(), 0xFF96BEFF.toInt()) { escucha.onCambiarPaleta() }
+        // Conectar otra cámara (QR / IP) sin tener que salir a Modo Studio.
+        agregar("＋ Conectar cámara", 0xFF23262E.toInt(), 0xFF58C88C.toInt()) { escucha.onConectarCamara() }
     }
     // ------------------------------------------------------------------ ayudas
 

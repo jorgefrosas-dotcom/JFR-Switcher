@@ -1,4 +1,4 @@
-﻿package com.jfrmedia.switcher.studio.canvas
+package com.jfrmedia.switcher.studio.canvas
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -329,6 +329,11 @@ class CompositorView @JvmOverloads constructor(
     /** Slot de la cámara que va resaltada en el programa (el jugador en turno). -1 = ninguna. */
     @Volatile var slotResaltado: Int = -1
 
+    companion object {
+        /** Grosor (en px de referencia) del marco de color de una cámara. */
+        private const val MARCO_CAMARA_PX = 5f
+    }
+
     @Volatile var transicion: Transicion = Transicion.FUNDIDO
     @Volatile var transicionMs: Int = 420
 
@@ -524,7 +529,13 @@ class CompositorView @JvmOverloads constructor(
             if (!item.visible || item.opacity <= 0.01f) continue
             if (item === enTransicion && animAlpha <= 0.01f) continue
             when (item) {
-                is CamItem -> drawCam(item, outW, outH)
+                is CamItem -> {
+                    drawCam(item, outW, outH)
+                    // Marco de color alrededor de la cámara (Modo Pokémon: marca las de los
+                    // jugadores con el color del banner para separarlas de la mesa).
+                    dibujarMarco(item, outW, outH)
+                }
+
                 is ImageItem -> drawImage(item, outW, outH)
                 is MediaItem -> drawVideo(item, outW, outH)
             }
@@ -846,6 +857,21 @@ class CompositorView @JvmOverloads constructor(
         solid?.draw(normalized(r.left, r.bottom - ny, r.right, r.bottom), cr, cg, cb, ca)
         solid?.draw(normalized(r.left, r.top, r.left + nx, r.bottom), cr, cg, cb, ca)
         solid?.draw(normalized(r.right - nx, r.top, r.right, r.bottom), cr, cg, cb, ca)
+    }
+
+    /**
+     * Marco de color opcional alrededor de una cámara ([CamItem.marcoColor]).
+     * En el Modo Pokémon TCG marca las cámaras de los jugadores con el color del banner en uso.
+     */
+    private fun dibujarMarco(item: CamItem, outW: Int, outH: Int) {
+        val color = item.marcoColor
+        if (color == 0) return
+        val a = android.graphics.Color.alpha(color) / 255f
+        if (a <= 0.01f) return
+        val r = android.graphics.Color.red(color) / 255f
+        val g = android.graphics.Color.green(color) / 255f
+        val bl = android.graphics.Color.blue(color) / 255f
+        drawBorder(rectPara(item), outW, outH, r, g, bl, a, MARCO_CAMARA_PX)
     }
 
     private fun normalized(l: Float, t: Float, rr: Float, b: Float): FloatArray {
