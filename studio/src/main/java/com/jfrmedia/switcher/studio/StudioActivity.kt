@@ -7416,18 +7416,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         val altoCam = altoTiraTcg()
         val anchoCam = anchoPipTcg()
-        val arriba = 0.02f + altoCam + 0.012f
-        val entre = anchoCam * 0.08f
+        val entre = anchoCam * 0.06f
         listOf(estadoTcg.uno to 0.015f, estadoTcg.dos to (0.985f - anchoCam)).forEach { par ->
             val jugador = par.first
             val xCam = par.second
             val dibujos = com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, jugador.mazoId)
                 .filter { !it.isRecycled }.take(2)
             if (dibujos.isEmpty()) return@forEach
-            // El icono mide la MITAD del ancho del recuadro de la cámara (con dos, un poco menos
-            // cada uno para que la pareja no se salga del ancho de la cámara).
-            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.5f else 0.44f
+            // El icono mide el 60 % del ancho del recuadro de la cámara (con dos, la mitad cada uno
+            // para que la pareja quepa). Un 30 % del icono queda MONTADO sobre la cámara.
+            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.60f else 0.50f
             val altoIcono = anchoIcono * (16f / 9f)     // cuadrado de verdad en un lienzo 16:9
+            val arriba = (0.02f + altoCam) - altoIcono * 0.30f
             val abajo = arriba + altoIcono
             val anchoTotal = anchoIcono * dibujos.size + entre * (dibujos.size - 1)
             var x = xCam + anchoCam / 2f - anchoTotal / 2f
