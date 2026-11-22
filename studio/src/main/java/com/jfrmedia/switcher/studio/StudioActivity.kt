@@ -7336,8 +7336,24 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         else -> "Trasera"
     }
 
-    /** Alto del banner dentro del lienzo (la franja se dibuja a 1600×360 y ocupa 60 % del ancho). */
-    private fun altoBannerTcg(): Float = 0.60f * (16f / 9f) / (1600f / 360f)
+    /**
+     * Ancho del banner del modo (en fracción del lienzo). Se bajó de 0.60 a 0.54 para dejarle lugar a
+     * las cámaras de los jugadores, que ahora **tienen la misma altura** que el banner: así la franja de
+     * arriba se ve pareja (Jorge, 22/11/2026).
+     */
+    private fun anchoBannerTcg(): Float = 0.54f
+
+    /**
+     * Alto de la franja de arriba: el banner se dibuja a 1600×360, así que su alto sale de su ancho.
+     * Las cámaras de los jugadores usan este mismo alto (~0.216 del lienzo).
+     */
+    private fun altoTiraTcg(): Float = anchoBannerTcg() * (16f / 9f) / (1600f / 360f)
+
+    /**
+     * Ancho de las cámaras de jugador: un poco menos que el alto × 1.0 para que queden **más cuadradas**
+     * (~16:10) y se vean más grandes. El lado que sobra del cuadro se recorta a los lados.
+     */
+    private fun anchoPipTcg(): Float = altoTiraTcg() * 0.9f
 
     /**
      * Coloca el banner del modo: **arriba** con la vista de mesa, **abajo** cuando hay un jugador a
@@ -7346,16 +7362,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun acomodarBannerTcg() {
         val escena = b.canvas.scene
         val banner = bannerTcg ?: return
-        val alto = altoBannerTcg()
+        val alto = altoTiraTcg()
+        val x1 = (1f - anchoBannerTcg()) / 2f
+        val x2 = x1 + anchoBannerTcg()
         when {
             vistaTcg == VISTA_MESA -> {
                 banner.visible = true
-                banner.rect.set(0.20f, 0.02f, 0.80f, 0.02f + alto)
+                banner.rect.set(x1, 0.02f, x2, 0.02f + alto)
             }
 
             vistaTcg == 0 || vistaTcg == 1 -> {
                 banner.visible = true
-                banner.rect.set(0.20f, 0.98f - alto, 0.80f, 0.98f)
+                banner.rect.set(x1, 0.98f - alto, x2, 0.98f)
             }
 
             else -> banner.visible = false
@@ -7381,8 +7399,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         aplicandoRectTcg = true
         try {
             escena.camAt(2)?.rect?.set(0f, 0f, 1f, 1f)
-            escena.camAt(0)?.rect?.set(0.015f, 0.03f, 0.185f, 0.20f)
-            escena.camAt(1)?.rect?.set(0.815f, 0.03f, 0.985f, 0.20f)
+            // Jugadores: misma altura que el banner y un poco más cuadrados (se recortan los lados).
+            val alto = altoTiraTcg()
+            val ancho = anchoPipTcg()
+            escena.camAt(0)?.rect?.set(0.015f, 0.02f, 0.015f + ancho, 0.02f + alto)
+            escena.camAt(1)?.rect?.set(0.985f - ancho, 0.02f, 0.985f, 0.02f + alto)
             // La cámara que está al aire va a pantalla completa (jugador, mesa o ambiente).
             if (vistaTcg != VISTA_MESA) escena.camAt(vistaTcg)?.rect?.set(0f, 0f, 1f, 1f)
             // Y cualquier cámara que se haya colado en la escena del modo se saca (así no queda
@@ -8204,9 +8225,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun dibujarBannerTcg() {
         val imagen = Banners.dibujar(estadoTcg, 1600, 360)
         val previo = bannerTcg
-        // Franja centrada arriba: aspecto 5:1 dentro de un lienzo 16:9.
-        val alto = 0.60f * (16f / 9f) / (1600f / 360f)
-        val rect = previo?.let { RectF(it.rect) } ?: RectF(0.20f, 0.02f, 0.80f, 0.02f + alto)
+        // Franja centrada arriba con el mismo alto que las cámaras de los jugadores.
+        val ancho = anchoBannerTcg()
+        val alto = altoTiraTcg()
+        val x1 = (1f - ancho) / 2f
+        val rect = previo?.let { RectF(it.rect) } ?: RectF(x1, 0.02f, x1 + ancho, 0.02f + alto)
         previo?.let { runCatching { b.canvas.scene.remove(it) } }
         val item = b.canvas.scene.addImage(imagen, "Banner TCG", null, rect)
         item.radiusDp = 8f
@@ -8765,10 +8788,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         val mesa = escena.addCam(2)
         mesa?.rect?.set(0f, 0f, 1f, 1f)
+        // Jugadores: misma altura que el banner y un poco más cuadrados (se recortan los lados).
+        val altoTira = altoTiraTcg()
+        val anchoPip = anchoPipTcg()
         val uno = escena.addCam(0)
-        uno?.rect?.set(0.015f, 0.03f, 0.185f, 0.20f)
+        uno?.rect?.set(0.015f, 0.02f, 0.015f + anchoPip, 0.02f + altoTira)
         val dos = escena.addCam(1)
-        dos?.rect?.set(0.815f, 0.03f, 0.985f, 0.20f)
+        dos?.rect?.set(0.985f - anchoPip, 0.02f, 0.985f, 0.02f + altoTira)
 
         if (enMesa) {
             uno?.visible = true
