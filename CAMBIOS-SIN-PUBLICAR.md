@@ -28,3 +28,7 @@ la rotación se suelta al volver a Modo Studio y la tarjeta 4 recupera su nombre
   cambiar el diseño del banner.
 - **Con un jugador a pantalla completa el banner se queda, abajo** (antes desaparecía). Con la cámara de
   ambiente sigue oculto y con la mesa va arriba, como estaba.
+- **La franja de arriba del modo quedó pareja**: el banner y las **cámaras de los jugadores tienen la
+  misma altura** (21.6 % del lienzo) y arrancan a la misma altura. El banner se hizo **más angosto**
+  (54 % del ancho en vez de 60 %) y las cámaras **más cuadradas** (16:10 recortando 10 % de los lados),
+  así que se ven ~45 % más grandes en área sin tapar el marcador.
