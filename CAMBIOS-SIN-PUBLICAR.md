@@ -18,6 +18,15 @@ la rotación se suelta al volver a Modo Studio y la tarjeta 4 recupera su nombre
 
 ## Pendiente de publicar (sin versión todavía) — ajustes de la primera partida real
 
+- **Lista de los mazos más usados del formato, con sus iconos (de Limitless).** El modo trae el
+  **top 25 de `limitlesstcg.com/decks`** con el nombre del mazo, su **icono** (los mismos sprites que usa
+  la página) y el % de uso. Se baja **una vez al día** al entrar al modo, se guarda en la tablet (la
+  lista y los iconos, así que se ve **sin internet**) y si falla la descarga **se queda la última lista
+  buena**. Tocar la fila del mazo en la tarjeta del jugador abre el selector (con botón «Actualizar» y
+  «Quitar»).
+- **El mazo se ve en el video**: debajo del nombre de cada jugador en el banner, con su icono y el
+  nombre; y en la tarjeta de control, arriba de las pokebolas.
+
 - **Modo Pokémon TCG: se puede conectar una cámara sin salir del modo.** Hay un botón **«＋ Conectar
   cámara»** al final de la columna de herramientas, y tocar la tarjeta de un jugador **sin cámara**
   también abre el cuadro del QR/IP. Antes había que irse a Modo Studio a buscar el QR.
