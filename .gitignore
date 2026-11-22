@@ -20,3 +20,6 @@ keystore.properties
 
 # Respaldos y capturas de trabajo
 _material/
+
+# Volcados de memoria de Java (los deja un fallo de compilacion; nunca van al repo)
+*.hprof
