@@ -303,6 +303,7 @@ class SourceTexture {
 
     private var lastW = -1
     private var lastH = -1
+    private var lastRot = -1
     var hasData = false
         private set
 
@@ -343,9 +344,10 @@ class SourceTexture {
             // reorienta los píxeles, así que hay que quedarse con el metadato.
             val rot = ((frame.rotation % 360) + 360) % 360
             rotation = rot
-            if (w != lastW || h != lastH) {
+            if (w != lastW || h != lastH || rot != lastRot) {
                 lastW = w
                 lastH = h
+                lastRot = rot
                 // Se registra el giro porque de eso depende la proporción real del cuadro: un celular
                 // vertical manda 1280x720 con giro 90 (o sea, vertical), y uno acostado manda giro 0.
                 com.jfrmedia.switcher.core.util.L.i("gl", "cuadro ${w}x$h giro=$rot (${"%.3f".format(

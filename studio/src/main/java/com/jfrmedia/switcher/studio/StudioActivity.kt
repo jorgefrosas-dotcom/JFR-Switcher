@@ -853,6 +853,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 // El decodificador ya entrega los píxeles orientados: solo se avisa a la
                 // tarjeta para que no vuelva a girar el cuadro.
                 tiles.getOrNull(session.slot)?.fijarRotacion(grados)
+                // Se deja en el log: es el único dato de orientación que manda el celular (el video
+                // viaja sin giro), y de eso depende la proporción real del cuadro en el programa.
+                com.jfrmedia.switcher.core.util.L.i("rot", "camara ${session.slot}: giro reportado $grados")
             }
         }
         hub.onCountChanged = {
@@ -3214,10 +3217,21 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // 7 fuentes: 6 cámaras remotas + la cámara del equipo (que rota entre frontal y trasera).
         // En Modo Pokémon TCG son 4 fuentes fijas: Jugador 1, Jugador 2, Mesa y Ambiente.
         val total = if (modoTcg) 4 else if (vertical && !modoStudio && !esPantallaCelular()) 6 else 7
+        // Modo Pokémon TCG: los dos jugadores arriba (verticales, media columna cada uno), la **mesa
+        // a todo lo ancho** en la segunda fila y **el ambiente debajo** en la tercera, las dos
+        // horizontales como estaban antes (Jorge, 23/11/2026). Los demás modos siguen con la parrilla
+        // pareja de siempre.
+        val plan: List<List<Int>> = if (modoTcg) {
+            listOf(listOf(0, 1), listOf(2), listOf(3))
+        } else {
+            (0 until (total + cols - 1) / cols).map { fila ->
+                (0 until cols).map { col -> fila * cols + col }
+            }
+        }
         // En celular las pestañas necesitan saber dónde terminan las cámaras y empiezan los grupos.
-        filasCamaras = (total + cols - 1) / cols
+        filasCamaras = plan.size
 
-        for (fila in 0 until (total + cols - 1) / cols) {
+        for (celdas in plan) {
             val filaView = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             grid.addView(
                 filaView,
@@ -3226,8 +3240,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 )
             )
-            for (col in 0 until cols) {
-                val index = fila * cols + col
+            for (index in celdas) {
                 if (index >= total) {
                     filaView.addView(Space(this), celdaParams())
                     continue
@@ -3235,8 +3248,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 val tile = SourceTileView(this)
                 // Las tarjetas siguen la forma del lienzo (en Modo Studio vertical van a 3:4).
                 // En Modo Pokémon TCG cada tarjeta tiene la forma de su cámara en el programa: los
-                // jugadores verticales (3:4, no 9:16 para que las cuatro quepan) y la mesa y el
-                // ambiente horizontales (Jorge, 23/11/2026).
+                // jugadores verticales (3:4) y la mesa y el ambiente horizontales (16:9).
                 tile.modoAspecto(
                     if (!modoTcg) aspectoFuente
                     else if (index <= 1) 3f / 4f
@@ -3244,8 +3256,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 )
                 // Con 6 cámaras en una fila hacen falta letras más chicas; en el celular vertical
                 // las tarjetas son angostas y también (Jorge, 29/10: «sí caben si son más chicos»).
-                // En Modo Pokémon TCG la tarjeta va a media columna (dos por fila), así que las letras
-                // también se achican: si no, «Sin conectar» y «Jugador 1» salen cortados (23/11/2026).
+                // En Modo Pokémon TCG los jugadores van a media columna, así que las letras también se
+                // achican: si no, «Sin conectar» y «Jugador 1» salen cortados (23/11/2026).
                 tile.modoCompacto(
                     modoTcg || (modoStudio && studioVertical) || (esPantallaCelular() && vertical)
                 )
@@ -3261,6 +3273,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
                 filaView.addView(tile, celdaParams())
                 tiles.add(tile)
+            }
+            // La última fila de la parrilla pareja se completa con huecos para que las tarjetas no se
+            // estiren (en Modo TCG cada fila va con las que le tocan y sí ocupan todo el ancho).
+            if (!modoTcg) {
+                repeat(cols - celdas.size) { filaView.addView(Space(this), celdaParams()) }
             }
         }
 
