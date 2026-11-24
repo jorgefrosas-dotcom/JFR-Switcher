@@ -56,6 +56,73 @@ object FacebookLive {
     }.getOrNull()
 
     /**
+     * Escucha los comentarios **en tiempo real** por Server-Sent Events
+     * (`streaming-graph.facebook.com/{id}/live_comments`).
+     *
+     * Es **una sola conexión abierta**, no una consulta cada tantos segundos: por eso no gasta el cupo
+     * de la aplicación (el `(#4)` que nos tumbó las consultas). Bloqueante: se llama desde su propio
+     * hilo y vuelve cuando la conexión se corta; el llamador decide si reconecta.
+     */
+    fun escucharComentarios(videoId: String, token: String, alLlegar: (ComentarioFb) -> Unit) {
+        val url = "https://streaming-graph.facebook.com/$videoId/live_comments?access_token=$token"
+        val conexion = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 15_000
+            // Es un chorro continuo: puede pasar mucho rato sin mandar nada entre comentario y ping.
+            readTimeout = 0
+            setRequestProperty("Accept", "text/event-stream")
+        }
+        ultimaConexion = conexion
+        try {
+            if (conexion.responseCode !in 200..299) {
+                val texto = conexion.errorStream?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
+                throw IllegalStateException("HTTP ${conexion.responseCode} ${texto.take(200)}")
+            }
+            conexion.inputStream.bufferedReader().use { lector ->
+                val pendiente = StringBuilder()
+                while (true) {
+                    val linea = lector.readLine() ?: break
+                    when {
+                        linea.startsWith("data:") -> {
+                            val resto = linea.removePrefix("data:").trim()
+                            if (resto.startsWith("{")) pendiente.append(resto)
+                        }
+                        // Línea en blanco = fin del evento: ahí sí se procesa lo acumulado.
+                        linea.isBlank() && pendiente.isNotEmpty() -> {
+                            runCatching { parsearComentario(pendiente.toString()) }
+                                .getOrNull()?.let { alLlegar(it) }
+                            pendiente.setLength(0)
+                        }
+                        // «: ping» y demás líneas de control se ignoran.
+                    }
+                }
+            }
+        } finally {
+            ultimaConexion = null
+            runCatching { conexion.disconnect() }
+        }
+    }
+
+    /** Conexión abierta de comentarios, para poder cortarla desde fuera al terminar el directo. */
+    @Volatile
+    private var ultimaConexion: HttpURLConnection? = null
+
+    /** Corta la escucha en tiempo real (el hilo que la corre recibe la excepción y sale). */
+    fun cortarEscucha() {
+        runCatching { ultimaConexion?.disconnect() }
+        ultimaConexion = null
+    }
+
+    private fun parsearComentario(json: String): ComentarioFb? {
+        val o = JSONObject(json)
+        val texto = o.optString("message", "").trim()
+        if (texto.isEmpty()) return null
+        val autor = o.optJSONObject("from")?.optString("name", "")?.takeIf { it.isNotBlank() }
+            ?: "Alguien"
+        return ComentarioFb(autor, texto)
+    }
+
+    /**
      * Cuando la lista no trae el autor, se pregunta el comentario **por su id**: a veces ese camino sí
      * devuelve `from`. Devuelve el nombre o null.
      */
