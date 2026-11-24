@@ -144,7 +144,7 @@ class PanelTcg(
             c.addView(
                 TextView(contexto).apply {
                     text = if (espectadores.isBlank()) {
-                        "Conecta Facebook en «Ajustes» para ver aquí los comentarios del stream."
+                        "Toca «Conectar» y pega el token de la Página para ver aquí los espectadores y los comentarios del stream."
                     } else {
                         "Todavía no hay comentarios."
                     }

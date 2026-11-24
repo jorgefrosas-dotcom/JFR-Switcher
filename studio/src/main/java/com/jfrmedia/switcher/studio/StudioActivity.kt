@@ -801,6 +801,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     override fun onDestroy() {
         uiHandler.removeCallbacksAndMessages(null)
+        detenerConsultasFacebook()
         runCatching { unregisterReceiver(receptorSesion) }
         runCatching { audioVivo.detener() }
         runCatching { localCam.detener() }
@@ -5432,6 +5433,45 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         caja.addView(campoClave)
 
+        // --- Token de la Página (para espectadores y comentarios) ---
+        caja.addView(TextView(this).apply {
+            text = "Token de la Página (espectadores y comentarios)"
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+            setPadding(0, 14.dp, 0, 0)
+        })
+        val campoToken = EditText(this).apply {
+            setText(prefs.getString(CLAVE_FB_TOKEN, ""))
+            textSize = 12f
+            setSingleLine(true)
+            hint = "Token de Página de larga duración"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        caja.addView(campoToken)
+        caja.addView(TextView(this).apply {
+            text = "Se guarda solo en esta tablet. Necesita los permisos pages_read_engagement y read_insights."
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            setPadding(0, 4.dp, 0, 8.dp)
+        })
+        caja.addView(TextView(this).apply {
+            text = "Probar Facebook"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+            setBackgroundResource(R.drawable.bg_pill_ghost)
+            setPadding(16.dp, 12.dp, 16.dp, 12.dp)
+            setOnClickListener {
+                // Se guarda lo escrito y se consulta sin cerrar el cuadro.
+                prefs.edit()
+                    .putString(CLAVE_FB_PAGE_ID, campoPagina.text.toString().trim())
+                    .putString(CLAVE_FB_TOKEN, campoToken.text.toString().trim())
+                    .apply()
+                consultarFacebook(manual = true)
+            }
+        })
+
         // --- Live Producer en el navegador ---
         caja.addView(TextView(this).apply {
             text = "Elige primero el destino en el Producer (perfil o página): cada uno tiene su clave."
@@ -5461,6 +5501,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     .putString(CLAVE_FB_PAGE_ID, campoPagina.text.toString().trim())
                     .putString(CLAVE_FB_URL, campoUrl.text.toString().trim())
                     .putString(CLAVE_FB_CLAVE, campoClave.text.toString().trim())
+                    .putString(CLAVE_FB_TOKEN, campoToken.text.toString().trim())
                     .apply()
                 if (transmitiendo) cortarTransmision() else iniciarTransmision()
             }
@@ -8591,6 +8632,79 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         acomodarBannerTcg()
     }
 
+    // ---- Facebook: espectadores y comentarios del stream (panel de la derecha del modo TCG) ----
+
+    private val fbHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var fbConsultando = false
+
+    /** Cada cuánto se le pregunta a Facebook (los comentarios se pueden pedir cada pocos segundos). */
+    private val fbCada = 8_000L
+
+    private val fbTarea = object : Runnable {
+        override fun run() {
+            consultarFacebook(manual = false)
+            fbHandler.postDelayed(this, fbCada)
+        }
+    }
+
+    private fun iniciarConsultasFacebook() {
+        fbHandler.removeCallbacks(fbTarea)
+        fbHandler.postDelayed(fbTarea, 1_200L)
+    }
+
+    private fun detenerConsultasFacebook() = fbHandler.removeCallbacks(fbTarea)
+
+    /**
+     * Pregunta a Facebook cuántos están viendo y los últimos comentarios, y se lo pasa al panel.
+     * Bloqueante a propósito: se llama desde su propio hilo (o desde el botón «Probar»).
+     */
+    private fun consultarFacebook(manual: Boolean) {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val token = prefs.getString(CLAVE_FB_TOKEN, "").orEmpty().trim()
+        val pageId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
+        if (token.isBlank() || pageId.isBlank()) {
+            if (manual) toast("Falta el token de la Página o el ID de la Página")
+            return
+        }
+        if (fbConsultando) return
+        fbConsultando = true
+        Thread {
+            var espectadores: Int? = null
+            var comentarios: List<com.jfrmedia.switcher.studio.stream.ComentarioFb> = emptyList()
+            var error = ""
+            try {
+                val video = com.jfrmedia.switcher.studio.stream.FacebookLive.videoEnVivo(pageId, token)
+                if (video.isNullOrBlank()) {
+                    error = "la página no tiene un video en vivo"
+                } else {
+                    espectadores = com.jfrmedia.switcher.studio.stream.FacebookLive
+                        .espectadores(video, token)
+                    comentarios = com.jfrmedia.switcher.studio.stream.FacebookLive
+                        .comentarios(video, token, 4)
+                }
+            } catch (t: Throwable) {
+                error = t.message ?: "error de conexión"
+            }
+            runOnUiThread {
+                fbConsultando = false
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (error.isNotEmpty()) {
+                    if (manual) toast("Facebook: $error")
+                    else L.w("fb", "consulta: $error")
+                    return@runOnUiThread
+                }
+                val lista = comentarios.map { it.autor to it.texto }
+                panelTcg?.comentariosFacebook(espectadores?.toString().orEmpty(), lista)
+                if (manual) {
+                    toast(
+                        "Facebook OK · ${espectadores?.toString() ?: "sin dato"} viendo · " +
+                            "${lista.size} comentarios"
+                    )
+                }
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
     // ---- acciones del modo: las usan las tarjetas de jugador y los botones de abajo de la cámara 4
 
     /** Cierra la partida a favor de uno (1), empate (0) o a favor del otro (2). */
@@ -8738,6 +8852,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         panel.refrescar(estadoTcg)
         panelTcg = panel
         b.slotControles.addView(panel.vista, 0)
+        // Espectadores y comentarios del stream en el panel de la derecha.
+        iniciarConsultasFacebook()
     }
 
     // ------------------------------------------------ mazos del formato (Limitless)
@@ -9405,6 +9521,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         private const val CLAVE_FB_CLAVE = "fb_clave"
         private const val CLAVE_FB_GRABAR = "fb_grabar"
         private const val CLAVE_FB_PAGE_ID = "fb_page_id"
+
+        /** Token de la Página: solo para leer espectadores y comentarios (nunca se manda al canal). */
+        private const val CLAVE_FB_TOKEN = "fb_token"
         private const val CLAVE_PALETA = "paleta_colores"
         private const val FB_URL_POR_DEFECTO = "rtmps://live-api-s.facebook.com:443/rtmp/"
         private const val CLAVE_TABLET_FRONTAL = "tablet_cam_frontal"
