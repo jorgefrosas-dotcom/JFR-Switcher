@@ -149,8 +149,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private var estadoTcg = EstadoTcg()
     private var aplicandoRectTcg = false
     private var bannerTcg: CanvasItem? = null
-    private var chipsTcgUno: CanvasItem? = null
-    private var chipsTcgDos: CanvasItem? = null
+    /** Chips Energy / Supporter / Retreat dibujados dentro de la cámara de cada jugador. */
+    private var chipsTcgUno: List<ImageItem> = emptyList()
+    private var chipsTcgDos: List<ImageItem> = emptyList()
+    /** Última posición de cada chip, para animar el que se acaba de usar. */
+    private val posChipPrevia = HashMap<String, RectF>()
     private var panelTcg: PanelTcg? = null
 
     /** true = grabar en 1080p/1080x1920, false = 720p/720x1280. */
@@ -3722,8 +3725,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun refreshOverlayTiles() {
         if (!::overlayContainer.isInitialized) return
         overlayContainer.removeAllViews()
-        // El banner del torneo es del modo, no un overlay del usuario: no se lista.
-        val propios = setOfNotNull(bannerTcg?.id, chipsTcgUno?.id, chipsTcgDos?.id)
+        // El banner del torneo y los chips de las cámaras son del modo, no overlays del usuario.
+        val propios = setOfNotNull(bannerTcg?.id) +
+            chipsTcgUno.map { it.id } + chipsTcgDos.map { it.id }
         val imagenes = b.canvas.scene.images().filter { it.id !in propios }
         val cols = columnasFuentes()
         // Primera celda: crear texto. Después los overlays puestos y al final «+ Overlay».
@@ -7451,22 +7455,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             return
         }
         val anchoCam = anchoJugadorTcg()
-        val entre = anchoCam * 0.04f
-        listOf(estadoTcg.uno to 0f, estadoTcg.dos to (1f - anchoCam)).forEach { par ->
+        val entre = anchoCam * 0.05f
+        listOf(estadoTcg.uno to true, estadoTcg.dos to false).forEach { par ->
             val jugador = par.first
-            val xCam = par.second
+            val derecha = par.first === estadoTcg.uno
             val dibujos = com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, jugador.mazoId)
                 .filter { !it.isRecycled }.take(2)
             if (dibujos.isEmpty()) return@forEach
-            // Un icono mide el 36 % del ancho de la columna (la mitad de lo que medía antes); con dos,
-            // 22 % cada uno para que la pareja quepa con un respiro en medio. Cuadrados de verdad en
-            // un lienzo 16:9 (Jorge, 23/11/2026: «los quiero a la mitad de tamaño»).
-            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.36f else 0.22f
+            // El icono va **del lado de la cámara de mesa**: jugador 1 a la derecha de su columna y
+            // jugador 2 a la izquierda. Los chips se quedan del lado de afuera.
+            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.30f else 0.18f
             val altoIcono = anchoIcono * (16f / 9f)
-            val abajo = 0.975f                 // pie de la columna, con un pelín de aire
+            val abajo = 0.975f
             val arriba = abajo - altoIcono
             val anchoTotal = anchoIcono * dibujos.size + entre * (dibujos.size - 1)
-            var x = xCam + anchoCam / 2f - anchoTotal / 2f
+            var x = if (derecha) {
+                anchoCam - anchoCam * 0.06f - anchoTotal      // pegado a la mesa
+            } else {
+                1f - anchoCam + anchoCam * 0.06f
+            }
             val items = ArrayList<ImageItem>()
             dibujos.forEach { bmp ->
                 val item = ImageItem(escena.nextId(), bmp, "Mazo " + jugador.nombre, null)
@@ -8410,14 +8417,92 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         panelTcg?.refrescar(nuevo)
     }
 
-    /** Dibuja los chips de cada jugador dentro del video, debajo de su cámara. */
-    /** Ya no se dibujan chips bajo las cámaras: van dentro del banner. */
+    // ------------------------------------------------ chips de la mesa (dentro de la cámara)
+
+    /** Ancho de un chip: la mayor parte del ancho de la columna del jugador. */
+    private fun anchoChipTcg(): Float = anchoJugadorTcg() * 0.70f
+
+    /** Alto del chip (pastilla): el ancho en píxeles dividido entre 4.1, pasado a fracción. */
+    private fun altoChipTcg(): Float = anchoChipTcg() * (16f / 9f) / 4.1f
+
+    /** Cuánto se mete hacia afuera del monitor: el chip queda **asomando** en la orilla. */
+    private fun sangradoChipTcg(): Float = anchoChipTcg() * 0.14f
+
+    /** Lo que se corre hacia afuera al usarlo: deja solo la punta redondeada a la vista. */
+    private fun corridoChipUsadoTcg(): Float = anchoChipTcg() * 0.62f
+
+    /**
+     * Chips **Energy / Supporter / Retreat** dentro de la cámara de cada jugador (Jorge, 23/11/2026).
+     *
+     * Van en **columna** (Energy arriba, Supporter en medio, Retreat abajo) del lado de afuera de la
+     * columna, **asomando** por la orilla del monitor. Al usarlos se deslizan hacia afuera con una
+     * animación y **queda su punta redondeada a la vista**.
+     */
     private fun dibujarChipsTcg() {
         val escena = b.canvas.scene
-        listOfNotNull(chipsTcgUno, chipsTcgDos).forEach { runCatching { escena.remove(it) } }
-        chipsTcgUno = null
-        chipsTcgDos = null
+        (chipsTcgUno + chipsTcgDos).forEach { runCatching { escena.remove(it) } }
+        chipsTcgUno = emptyList()
+        chipsTcgDos = emptyList()
+        if (modoTcg && vistaTcg == VISTA_MESA) {
+            val ancho = anchoChipTcg()
+            val alto = altoChipTcg()
+            val hueco = alto * 0.24f
+            val abajo = 0.975f
+            val nombres = listOf("ENERGY", "SUPPORTER", "RETREAT")
+            val colores = listOf(0xFF58C88C.toInt(), 0xFF7A98F4.toInt(), 0xFFF2AC52.toInt())
+            listOf(estadoTcg.uno to true, estadoTcg.dos to false).forEach { par ->
+                val jugador = par.first
+                val izquierda = par.second
+                val items = ArrayList<ImageItem>(3)
+                for (i in 0 until 3) {
+                    val usado = !jugador.chips[i]
+                    val bmp = Banners.dibujarChip(nombres[i], colores[i], activo = !usado)
+                    val item = ImageItem(escena.nextId(), bmp, "Chip ${nombres[i]}", null)
+                    // Energy arriba, Supporter en medio y Retreat hasta abajo.
+                    val y2 = abajo - (2 - i) * (alto + hueco)
+                    val y1 = y2 - alto
+                    val fuera = sangradoChipTcg() + if (usado) corridoChipUsadoTcg() else 0f
+                    val destino = if (izquierda) {
+                        val x1 = -fuera
+                        RectF(x1, y1, x1 + ancho, y2)
+                    } else {
+                        val x2 = 1f + fuera
+                        RectF(x2 - ancho, y1, x2, y2)
+                    }
+                    val clave = (if (izquierda) "u" else "d") + i
+                    val previa = posChipPrevia[clave]
+                    item.rect.set(destino)
+                    escena.agregar(item)
+                    posChipPrevia[clave] = RectF(destino)
+                    if (previa != null && (previa.left != destino.left || previa.right != destino.right)) {
+                        animarChip(item, RectF(previa), RectF(destino))
+                    }
+                    items.add(item)
+                }
+                if (izquierda) chipsTcgUno = items else chipsTcgDos = items
+            }
+        }
+        runCatching { b.canvas.requestRender() }
     }
+
+    /** Desliza un chip de su lugar viejo al nuevo: al usarlo se va, dejando la punta a la vista. */
+    private fun animarChip(item: ImageItem, desde: RectF, hasta: RectF) {
+        val anim = android.animation.ValueAnimator.ofFloat(0f, 1f)
+        anim.duration = 280
+        anim.interpolator = android.view.animation.DecelerateInterpolator()
+        anim.addUpdateListener { a ->
+            val t = a.animatedValue as Float
+            item.rect.set(
+                desde.left + (hasta.left - desde.left) * t,
+                desde.top + (hasta.top - desde.top) * t,
+                desde.right + (hasta.right - desde.right) * t,
+                desde.bottom + (hasta.bottom - desde.bottom) * t
+            )
+            runCatching { b.canvas.requestRender() }
+        }
+        anim.start()
+    }
+
     private fun dibujarBannerTcg() {
         // Iconos de los mazos que están en uso (el banner los dibuja junto al nombre del jugador).
         val iconos = HashMap<String, List<Bitmap>>()

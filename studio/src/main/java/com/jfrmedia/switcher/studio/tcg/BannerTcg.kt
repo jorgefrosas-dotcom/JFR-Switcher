@@ -154,40 +154,41 @@ object Banners {
         texto.textSize = 26f * u
         cv.drawText(estado.evento.uppercase(), ancho / 2f, 40f * u, texto)
 
-        // nombres (a la izquierda del bloque) y pokebolas grandes en dos filas de 3 al lado
+        // nombres (arriba), después el mazo y el récord. Los chips ya no van aquí: ahora van dentro
+        // de la cámara de cada jugador, así que este lado queda libre para las pokebolas grandes.
         texto.textAlign = Paint.Align.LEFT
         texto.color = p.nombre
-        texto.textSize = 35f * u
-        cv.drawText(estado.uno.nombre.uppercase(), 34f * u, 134f * u, texto)
+        texto.textSize = 40f * u
+        cv.drawText(estado.uno.nombre.uppercase(), 34f * u, 128f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
-        cv.drawText(estado.dos.nombre.uppercase(), ancho - 34f * u, 134f * u, texto)
+        cv.drawText(estado.dos.nombre.uppercase(), ancho - 34f * u, 128f * u, texto)
 
-        // 6 pokebolas en 2 filas de 3, a la derecha (jugador 1) y a la izquierda (jugador 2)
-        val r = 23f * u
+        // 6 pokebolas grandes en **2 columnas × 3 filas**, pegadas al marcador: la del jugador 1 a la
+        // izquierda del 0:0 y la del jugador 2 a la derecha (Jorge, 23/11/2026).
+        val r = 30f * u
+        val pasoY = 74f * u
+        val pasoX = 70f * u
+        val yPokebolas = 118f * u
         for (i in 0 until 6) {
-            val fila = i / 3
-            val col = i % 3
-            val xIzq = 304f * u + col * 64f * u
-            pokebola(cv, xIzq, 94f * u + fila * 58f * u, r, i >= estado.uno.debilitados, p.pokebolaBorde)
-            val xDer = ancho - 304f * u - col * 64f * u
-            pokebola(cv, xDer, 94f * u + fila * 58f * u, r, i >= estado.dos.debilitados, p.pokebolaBorde)
+            val fila = i / 2
+            val col = i % 2
+            val xIzq = 520f * u + col * pasoX
+            pokebola(cv, xIzq, yPokebolas + fila * pasoY, r, i >= estado.uno.debilitados, p.pokebolaBorde)
+            val xDer = 1080f * u - col * pasoX
+            pokebola(cv, xDer, yPokebolas + fila * pasoY, r, i >= estado.dos.debilitados, p.pokebolaBorde)
         }
 
         // récord
-        texto.textSize = 36f * u
+        texto.textSize = 34f * u
         texto.color = p.record
         texto.textAlign = Paint.Align.LEFT
-        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 220f * u, texto)
+        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 232f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
-        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 220f * u, texto)
+        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 232f * u, texto)
 
-        // Mazo de cada jugador (icono + nombre), justo debajo de su nombre.
-        dibujarMazo(cv, estado.uno, 34f * u, 150f * u, u, alDerecha = false, iconos, p)
-        dibujarMazo(cv, estado.dos, ancho - 34f * u, 150f * u, u, alDerecha = true, iconos, p)
-
-        // Chips Energy / Supporter / Retreat de cada jugador, debajo de sus pokebolas.
-        filaChips(cv, estado.uno, estado.turno == 0, 34f * u, 240f * u, 524f * u, u, alDerecha = false, p)
-        filaChips(cv, estado.dos, estado.turno == 1, ancho - 34f * u - 524f * u, 240f * u, 524f * u, u, alDerecha = true, p)
+        // Mazo de cada jugador (icono + nombre), entre el nombre y el récord.
+        dibujarMazo(cv, estado.uno, 34f * u, 160f * u, u, alDerecha = false, iconos, p)
+        dibujarMazo(cv, estado.dos, ancho - 34f * u, 160f * u, u, alDerecha = true, iconos, p)
 
         // marcador central
         val caja = RectF(ancho / 2f - 160f * u, 70f * u, ancho / 2f + 160f * u, 300f * u)
@@ -246,6 +247,40 @@ object Banners {
         }
         return bmp
     }
+    /**
+     * Un chip (Energy / Supporter / Retreat) para dibujarlo **dentro de la cámara del jugador**.
+     * Apagado = ya se usó: se pinta translúcido, pero se sigue viendo su punta.
+     */
+    fun dibujarChip(
+        nombre: String,
+        color: Int,
+        activo: Boolean,
+        ancho: Int = 520,
+        alto: Int = 120,
+    ): Bitmap {
+        val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(bmp)
+        val u = alto / 120f
+        val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
+        val radio = alto / 2f
+        val caja = RectF(3f * u, 3f * u, ancho - 3f * u, alto - 3f * u)
+        pintura.color = if (activo) color else Color.argb(150, 26, 30, 40)
+        cv.drawRoundRect(caja, radio, radio, pintura)
+        pintura.style = Paint.Style.STROKE
+        pintura.strokeWidth = 5f * u
+        pintura.color = if (activo) Color.WHITE else Color.argb(150, 74, 80, 94)
+        cv.drawRoundRect(caja, radio, radio, pintura)
+        pintura.style = Paint.Style.FILL
+        val texto = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+            textSize = 52f * u
+            this.color = if (activo) Color.rgb(16, 16, 18) else Color.argb(170, 158, 166, 180)
+        }
+        cv.drawText(nombre, ancho / 2f, alto / 2f + 18f * u, texto)
+        return bmp
+    }
+
     /** Las 6 pokebolas de un jugador para la banda de control (encendidas = premios vivos). */
     fun dibujarPokebolas(debilitados: Int, ancho: Int = 420, alto: Int = 64): Bitmap {
         val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
@@ -276,15 +311,16 @@ object Banners {
         val nombreMazo = jugador.mazo.trim()
         if (nombreMazo.isEmpty()) return
         val dibujos = iconos[jugador.mazoId].orEmpty().filter { !it.isRecycled }.take(2)
-        val lado = 30f * u
-        val entreIconos = 4f * u
-        val separacion = 8f * u
+        val lado = 40f * u
+        val entreIconos = 5f * u
+        val separacion = 9f * u
         val anchoIconos =
             if (dibujos.isEmpty()) 0f else lado * dibujos.size + entreIconos * (dibujos.size - 1) + separacion
-        val topeTexto = 250f * u - anchoIconos    // deja libres las pokebolas (empiezan en 304u)
+        // Las pokebolas grandes empiezan en 490u: el nombre del mazo no puede pasar de ahí.
+        val topeTexto = 452f * u - anchoIconos
         val pintura = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            textSize = 28f * u
+            textSize = 32f * u
             color = p.franjaTexto
             textAlign = if (alDerecha) Paint.Align.RIGHT else Paint.Align.LEFT
         }
@@ -293,7 +329,7 @@ object Banners {
             texto = texto.dropLast(2) + "…"
         }
         val xTexto = if (alDerecha) x - anchoIconos else x + anchoIconos
-        cv.drawText(texto, xTexto, y + lado * 0.82f, pintura)
+        cv.drawText(texto, xTexto, y + lado * 0.78f, pintura)
         // Los iconos, del lado del borde (izquierda para el jugador 1, derecha para el 2).
         val filtro = Paint(Paint.FILTER_BITMAP_FLAG)
         var cursor = if (alDerecha) x - lado else x
