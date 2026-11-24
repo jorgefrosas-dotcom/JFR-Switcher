@@ -1001,8 +1001,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
 
                 2 -> {
-                    mostrarCamaraTcg(VISTA_MESA)
-                    toast("Mesa con el marcador y los dos jugadores")
+                    // La mesa no necesita botón «Cámara general»: se toca su tarjeta y alterna entre
+                    // la cámara de ambiente a pantalla completa y la mesa con el marcador.
+                    alternarAmbienteTcg()
                 }
 
                 3 -> alternarAmbienteTcg()
@@ -3288,6 +3289,38 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
 
         if (modoTcg) {
+            // **Debajo de la cámara 4**: los botones que antes estaban en la columna de la derecha,
+            // en 3 filas de 2 (Jorge, 24/11/2026). Esa columna ahora es de los comentarios.
+            val acciones: List<List<Pair<String, () -> Unit>>> = listOf(
+                listOf(
+                    "Evento" to { abrirDialogoEvento() },
+                    "Partida nueva" to { nuevaPartidaTcg() },
+                ),
+                listOf(
+                    "Empate" to { registrarResultadoTcg(0) },
+                    "Reiniciar" to { reiniciarMarcadorTcg() },
+                ),
+                listOf(
+                    "Banner" to { cambiarPaletaTcg() },
+                    "＋ Cámara" to { showPairing() },
+                ),
+            )
+            acciones.forEach { par ->
+                val filaBotones = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                grid.addView(
+                    filaBotones,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                )
+                par.forEach { (rotulo, accion) ->
+                    filaBotones.addView(botonAccionTcg(rotulo, accion), celdaParams())
+                }
+            }
+        }
+
+        if (modoTcg) {
             val nombres = listOf("Jugador 1", "Jugador 2", "Mesa", "Ambiente")
             tiles.forEachIndexed { i, t -> t.ponerNombre(nombres.getOrElse(i) { "Cámara ${i + 1}" }) }
             // Cámara 4: botón de tres pasos para la cámara de la tablet
@@ -3715,6 +3748,27 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
         }.apply { isDaemon = true }.start()
     }
+
+    /** Botón chico de la columna de cámaras (Modo Pokémon TCG): fondo oscuro y borde suave. */
+    private fun botonAccionTcg(rotulo: String, accion: () -> Unit): View =
+        TextView(this).apply {
+            text = rotulo
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            setTextColor(0xFFECEEF2.toInt())
+            gravity = Gravity.CENTER
+            isSingleLine = true
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(4.dp, 7.dp, 4.dp, 7.dp)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFF23262E.toInt())
+                cornerRadius = 10f * resources.displayMetrics.density
+                setStroke(
+                    (1f * resources.displayMetrics.density).toInt().coerceAtLeast(1),
+                    0xFF343A46.toInt()
+                )
+            }
+            setOnClickListener { accion() }
+        }
 
     private fun celdaParams(): LinearLayout.LayoutParams =
         LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -8537,6 +8591,91 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         acomodarBannerTcg()
     }
 
+    // ---- acciones del modo: las usan las tarjetas de jugador y los botones de abajo de la cámara 4
+
+    /** Cierra la partida a favor de uno (1), empate (0) o a favor del otro (2). */
+    private fun registrarResultadoTcg(resultado: Int) {
+        val uno = estadoTcg.uno
+        val dos = estadoTcg.dos
+        val vacias = booleanArrayOf(true, true, true)
+        val nuevo = when (resultado) {
+            1 -> estadoTcg.copy(
+                serieUno = estadoTcg.serieUno + 1,
+                uno = uno.copy(ganadas = uno.ganadas + 1, debilitados = 0, chips = vacias),
+                dos = dos.copy(perdidas = dos.perdidas + 1, debilitados = 0, chips = vacias),
+                turno = 0,
+            )
+
+            2 -> estadoTcg.copy(
+                serieDos = estadoTcg.serieDos + 1,
+                uno = uno.copy(perdidas = uno.perdidas + 1, debilitados = 0, chips = vacias),
+                dos = dos.copy(ganadas = dos.ganadas + 1, debilitados = 0, chips = vacias),
+                turno = 0,
+            )
+
+            else -> estadoTcg.copy(
+                uno = uno.copy(empatadas = uno.empatadas + 1, debilitados = 0, chips = vacias),
+                dos = dos.copy(empatadas = dos.empatadas + 1, debilitados = 0, chips = vacias),
+            )
+        }
+        // El récord se guarda en los jugadores inscritos del evento.
+        val roster = estadoTcg.roster.map { j ->
+            when (j.nombre) {
+                uno.nombre -> when (resultado) {
+                    1 -> j.copy(ganadas = j.ganadas + 1)
+                    0 -> j.copy(empatadas = j.empatadas + 1)
+                    else -> j.copy(perdidas = j.perdidas + 1)
+                }
+
+                dos.nombre -> when (resultado) {
+                    2 -> j.copy(ganadas = j.ganadas + 1)
+                    0 -> j.copy(empatadas = j.empatadas + 1)
+                    else -> j.copy(perdidas = j.perdidas + 1)
+                }
+
+                else -> j
+            }
+        }
+        cambiarEstadoTcg(nuevo.copy(roster = roster))
+        toast(
+            when (resultado) {
+                1 -> "Partida para ${uno.nombre} · serie ${nuevo.serieUno}-${nuevo.serieDos}"
+                2 -> "Partida para ${dos.nombre} · serie ${nuevo.serieUno}-${nuevo.serieDos}"
+                else -> "Empate · la serie queda ${nuevo.serieUno}-${nuevo.serieDos}"
+            }
+        )
+    }
+
+    private fun nuevaPartidaTcg() {
+        cambiarEstadoTcg(
+            estadoTcg.copy(
+                turno = 0,
+                uno = estadoTcg.uno.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
+                dos = estadoTcg.dos.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
+            )
+        )
+        toast("Partida nueva: pokebolas y chips en cero")
+    }
+
+    private fun reiniciarMarcadorTcg() {
+        cambiarEstadoTcg(
+            estadoTcg.copy(
+                serieUno = 0,
+                serieDos = 0,
+                turno = 0,
+                uno = estadoTcg.uno.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
+                dos = estadoTcg.dos.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
+            )
+        )
+        toast("Marcador de la serie en 0 - 0")
+    }
+
+    private fun cambiarPaletaTcg() {
+        val siguiente = if (estadoTcg.paleta >= Banners.PALETAS.size) 1 else estadoTcg.paleta + 1
+        cambiarEstadoTcg(estadoTcg.copy(paleta = siguiente))
+        toast("Banner $siguiente de ${Banners.PALETAS.size}")
+    }
+
     private fun montarPanelTcg() {
         // Si ya había un panel (porque el modo se está volviendo a armar después de girar la
         // tablet), se quita antes de crear el nuevo: si no, quedarían dos columnas de botones.
@@ -8578,88 +8717,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 )
             }
 
-            override fun onResultado(resultado: Int) {
-                val uno = estadoTcg.uno
-                val dos = estadoTcg.dos
-                val vacias = booleanArrayOf(true, true, true)
-                val nuevo = when (resultado) {
-                    1 -> estadoTcg.copy(
-                        serieUno = estadoTcg.serieUno + 1,
-                        uno = uno.copy(ganadas = uno.ganadas + 1, debilitados = 0, chips = vacias),
-                        dos = dos.copy(perdidas = dos.perdidas + 1, debilitados = 0, chips = vacias),
-                        turno = 0,
-                    )
+            override fun onResultado(resultado: Int) = registrarResultadoTcg(resultado)
 
-                    2 -> estadoTcg.copy(
-                        serieDos = estadoTcg.serieDos + 1,
-                        uno = uno.copy(perdidas = uno.perdidas + 1, debilitados = 0, chips = vacias),
-                        dos = dos.copy(ganadas = dos.ganadas + 1, debilitados = 0, chips = vacias),
-                        turno = 0,
-                    )
+            override fun onNuevaPartida() = nuevaPartidaTcg()
 
-                    else -> estadoTcg.copy(
-                        uno = uno.copy(empatadas = uno.empatadas + 1, debilitados = 0, chips = vacias),
-                        dos = dos.copy(empatadas = dos.empatadas + 1, debilitados = 0, chips = vacias),
-                    )
-                }
-                // El récord se guarda en los jugadores inscritos del evento.
-                val roster = estadoTcg.roster.map { j ->
-                    when (j.nombre) {
-                        uno.nombre -> when (resultado) {
-                            1 -> j.copy(ganadas = j.ganadas + 1)
-                            0 -> j.copy(empatadas = j.empatadas + 1)
-                            else -> j.copy(perdidas = j.perdidas + 1)
-                        }
+            override fun onReiniciarMarcador() = reiniciarMarcadorTcg()
 
-                        dos.nombre -> when (resultado) {
-                            2 -> j.copy(ganadas = j.ganadas + 1)
-                            0 -> j.copy(empatadas = j.empatadas + 1)
-                            else -> j.copy(perdidas = j.perdidas + 1)
-                        }
-
-                        else -> j
-                    }
-                }
-                val conRoster = nuevo.copy(roster = roster)
-                cambiarEstadoTcg(conRoster)
-                toast(
-                    when (resultado) {
-                        1 -> "Partida para ${uno.nombre} · serie ${nuevo.serieUno}-${nuevo.serieDos}"
-                        2 -> "Partida para ${dos.nombre} · serie ${nuevo.serieUno}-${nuevo.serieDos}"
-                        else -> "Empate · la serie queda ${nuevo.serieUno}-${nuevo.serieDos}"
-                    }
-                )
-            }
-
-            override fun onNuevaPartida() {
-                cambiarEstadoTcg(
-                    estadoTcg.copy(
-                        turno = 0,
-                        uno = estadoTcg.uno.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
-                        dos = estadoTcg.dos.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
-                    )
-                )
-                toast("Partida nueva: pokebolas y chips en cero")
-            }
-
-            override fun onReiniciarMarcador() {
-                cambiarEstadoTcg(
-                    estadoTcg.copy(
-                        serieUno = 0,
-                        serieDos = 0,
-                        turno = 0,
-                        uno = estadoTcg.uno.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
-                        dos = estadoTcg.dos.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
-                    )
-                )
-                toast("Marcador de la serie en 0 - 0")
-            }
-
-            override fun onCambiarPaleta() {
-                val siguiente = if (estadoTcg.paleta >= Banners.PALETAS.size) 1 else estadoTcg.paleta + 1
-                cambiarEstadoTcg(estadoTcg.copy(paleta = siguiente))
-                toast("Banner $siguiente de ${Banners.PALETAS.size}")
-            }
+            override fun onCambiarPaleta() = cambiarPaletaTcg()
 
             override fun onAlternarAmbiente() = alternarAmbienteTcg()
 

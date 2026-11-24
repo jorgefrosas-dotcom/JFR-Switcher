@@ -85,7 +85,105 @@ class PanelTcg(
     fun refrescar(estado: EstadoTcg) {
         pintarTarjeta(tarjetaUno, estado, 0)
         pintarTarjeta(tarjetaDos, estado, 1)
-        pintarCentro(centro, estado)
+        pintarComentarios()
+    }
+
+    // ------------------------------------------------------------------ comentarios
+
+    /** Cuántos están viendo en Facebook (texto ya formateado; vacío = sin conectar). */
+    private var espectadores: String = ""
+
+    /** Últimos comentarios: (autor, texto). */
+    private var comentarios: List<Pair<String, String>> = emptyList()
+
+    /** Lo llama la pantalla cuando llegan datos de Facebook. */
+    fun comentariosFacebook(espectadores: String, lista: List<Pair<String, String>>) {
+        this.espectadores = espectadores
+        this.comentarios = lista
+        pintarComentarios()
+    }
+
+    /**
+     * Recuadro de la derecha: **contador de espectadores y comentarios del stream**.
+     * Ocupa el lugar donde antes estaban los botones del turno (Jorge, 24/11/2026).
+     */
+    private fun pintarComentarios() {
+        val c = centro
+        val contexto = c.context
+        c.removeAllViews()
+        c.orientation = LinearLayout.VERTICAL
+        c.background = caja(contexto, 0xFF16181E.toInt(), 0xFF2C303A.toInt(), 12f)
+        c.setPadding(dp(contexto, 10f), dp(contexto, 8f), dp(contexto, 10f), dp(contexto, 8f))
+
+        c.addView(
+            TextView(contexto).apply {
+                text = "ESPECTADORES"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                setTextColor(0xFF9AA0AA.toInt())
+            }
+        )
+        c.addView(
+            TextView(contexto).apply {
+                val sinDatos = espectadores.isBlank()
+                text = if (sinDatos) "sin conexión" else espectadores
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, if (sinDatos) 14f else 34f)
+                setTextColor(if (sinDatos) 0xFF6E7686.toInt() else 0xFF58C88C.toInt())
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(0, 0, 0, dp(contexto, 6f))
+            }
+        )
+        c.addView(
+            TextView(contexto).apply {
+                text = "COMENTARIOS"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                setTextColor(0xFF9AA0AA.toInt())
+                setPadding(0, 0, 0, dp(contexto, 4f))
+            }
+        )
+        if (comentarios.isEmpty()) {
+            c.addView(
+                TextView(contexto).apply {
+                    text = if (espectadores.isBlank()) {
+                        "Conecta Facebook en «Ajustes» para ver aquí los comentarios del stream."
+                    } else {
+                        "Todavía no hay comentarios."
+                    }
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                    setTextColor(0xFF6E7686.toInt())
+                }
+            )
+            return
+        }
+        val columna = LinearLayout(contexto).apply { orientation = LinearLayout.VERTICAL }
+        comentarios.forEach { par ->
+            val fila = LinearLayout(contexto).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, 0, 0, dp(contexto, 6f))
+            }
+            fila.addView(
+                TextView(contexto).apply {
+                    text = par.first
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                    setTextColor(0xFF96BEFF.toInt())
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+            )
+            fila.addView(
+                TextView(contexto).apply {
+                    text = par.second
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                    setTextColor(0xFFECEEF2.toInt())
+                    maxLines = 4
+                }
+            )
+            columna.addView(fila)
+        }
+        c.addView(
+            android.widget.ScrollView(contexto).apply { addView(columna) },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+            )
+        )
     }
 
     // ------------------------------------------------------------------ tarjetas
@@ -161,6 +259,29 @@ class PanelTcg(
             ).apply { topMargin = dp(contexto, 5f) }
         )
 
+        // Pasar turno y «Ganó» **dentro de la tarjeta del jugador**, arriba de las pokebolas
+        // (Jorge, 24/11/2026: antes estaban en la columna de la derecha, que ahora es de los
+        // comentarios).
+        val acciones = LinearLayout(contexto).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(contexto, 6f), 0, 0)
+        }
+        acciones.addView(
+            boton(contexto, "Pasar turno", 0xFF23262E.toInt(), 0xFFECEEF2.toInt(), 11f) {
+                escucha.onPasarTurno()
+            },
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                rightMargin = dp(contexto, 4f)
+            }
+        )
+        acciones.addView(
+            boton(contexto, "Ganó " + jugador.nombre, 0xFF1A4A30.toInt(), 0xFFD6FFE8.toInt(), 11f) {
+                escucha.onResultado(lado + 1)
+            },
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        fila.addView(acciones)
+
         // Pokebolas: − ●●●●●● +
         val premios = LinearLayout(contexto).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -222,66 +343,6 @@ class PanelTcg(
         fila.addView(fichas)
     }
 
-    // ------------------------------------------------------------------ centro
-
-    private fun pintarCentro(fila: LinearLayout, estado: EstadoTcg) {
-        val contexto = fila.context
-        val quien = if (estado.turno == 0) estado.uno.nombre else estado.dos.nombre
-        fila.removeAllViews()
-        fila.orientation = LinearLayout.VERTICAL
-        fila.background = caja(contexto, 0xFF16181E.toInt(), 0xFF2C303A.toInt(), 12f)
-        fila.setPadding(dp(contexto, 8f), dp(contexto, 8f), dp(contexto, 8f), dp(contexto, 8f))
-
-        fila.addView(
-            TextView(contexto).apply {
-                text = "TURNO DE"
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
-                setTextColor(0xFF9AA0AA.toInt())
-                gravity = Gravity.CENTER
-            }
-        )
-        fila.addView(
-            TextView(contexto).apply {
-                text = quien.uppercase()
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setTextColor(0xFFFF6B35.toInt())
-                typeface = Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-                setPadding(0, 0, 0, dp(contexto, 6f))
-            }
-        )
-
-        fun agregar(t: String, fondo: Int, color: Int, accion: () -> Unit) {
-            val v = boton(contexto, t, fondo, color, 11f, accion)
-            v.layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            fila.addView(
-                v,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = dp(contexto, 5f) }
-            )
-        }
-
-        agregar("Pasar turno", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) { escucha.onPasarTurno() }
-        agregar("Ganó ${estado.uno.nombre}", 0xFF1A4A30.toInt(), 0xFFD6FFE8.toInt()) { escucha.onResultado(1) }
-        agregar("Empate", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) { escucha.onResultado(0) }
-        agregar("Ganó ${estado.dos.nombre}", 0xFF1A4A30.toInt(), 0xFFD6FFE8.toInt()) { escucha.onResultado(2) }
-        agregar("Evento", 0xFF23262E.toInt(), 0xFFFFCB05.toInt()) { escucha.onAbrirEvento() }
-        agregar("Partida nueva", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) { escucha.onNuevaPartida() }
-        agregar("Reiniciar", 0xFF23262E.toInt(), 0xFF9AA0AA.toInt()) { escucha.onReiniciarMarcador() }
-        agregar(
-            if (estado.generalActivo) "Cambiar a mesa" else "Cámara general",
-            0xFF23262E.toInt(),
-            if (estado.generalActivo) 0xFFFF6B35.toInt() else 0xFF9AA0AA.toInt()
-        ) { escucha.onAlternarAmbiente() }
-        agregar("Banner", 0xFF23262E.toInt(), 0xFF96BEFF.toInt()) { escucha.onCambiarPaleta() }
-        // Conectar otra cámara (QR / IP) sin tener que salir a Modo Studio.
-        agregar("＋ Conectar cámara", 0xFF23262E.toInt(), 0xFF58C88C.toInt()) { escucha.onConectarCamara() }
-    }
     // ------------------------------------------------------------------ ayudas
 
     private fun etiqueta(contexto: Context, t: String, color: Int): TextView = TextView(contexto).apply {
