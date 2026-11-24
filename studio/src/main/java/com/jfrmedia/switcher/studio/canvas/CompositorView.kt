@@ -561,14 +561,26 @@ class CompositorView @JvmOverloads constructor(
         val tex = textures[item.slot]
         // Radio de las esquinas en píxeles de la composición (para la mesa y los jugadores del modo).
         val radioPx = item.radiusDp * density * (outH / 1080f).coerceAtLeast(0.35f)
+        val caja = rectPara(item)
+        // El marco se dibuja DENTRO del recuadro: el video se mete el grosor del marco. Así el aro no
+        // se sale del monitor ni queda tapado por la cámara vecina (Jorge, 23/11/2026).
+        val conMarco = item.marcoColor != 0
+        // El grosor se escala igual que el radio: así el marco se ve del mismo tamaño relativo en el
+        // preview y en la grabación (que siempre es 1080p).
+        val escala = (outH / 1080f).coerceAtLeast(0.35f)
+        val grosorPx = if (conMarco) item.marcoGrosor * density * escala else 0f
+        val dx = grosorPx / outW
+        val dy = grosorPx / outH
+        val r = RectF(caja.left + dx, caja.top + dy, caja.right - dx, caja.bottom - dy)
+        val radioInterior = (radioPx - grosorPx).coerceAtLeast(0f)
+
+        // El aro va ANTES del video: el video tapa el centro y queda solo el anillo.
+        dibujarMarco(item, outW, outH, radioPx, r, radioInterior)
+
         if (tex == null || !tex.hasData) {
-            // Sin video: primero el marco (es un relleno redondeado) y encima el cuadro vacío, que
-            // deja ver el anillo del marco en la orilla.
-            dibujarMarco(item, outW, outH, radioPx)
-            drawEmpty(item, outW, outH, radioPx)
+            drawEmpty(item, outW, outH, radioInterior, r)
             return
         }
-        val r = rectPara(item)
         val alpha = item.opacity * (if (item === animItem) animAlpha else 1f)
 
         val srcAspect = if (tex.rotation % 180 == 0) {
@@ -578,11 +590,7 @@ class CompositorView @JvmOverloads constructor(
         }
         val itemAspect = (r.width() * scene.aspect) / r.height()
 
-        // El marco va ANTES del video: es un anillo redondeado por fuera del recuadro y el video lo
-        // tapa por dentro, así las esquinas del marco y del cuadro coinciden.
-        dibujarMarco(item, outW, outH, radioPx)
-
-        // Recuadro donde se dibuja el video: el del elemento o uno más chico si el cuadro se encaja.
+        // Recuadro donde se dibuja el video: el de adentro del marco o uno más chico si se encaja.
         val izq: Float
         val arr: Float
         val der: Float
@@ -591,12 +599,12 @@ class CompositorView @JvmOverloads constructor(
             // Sin recortar: se achica el recuadro hasta que quepa el cuadro completo de la fuente.
             if (srcAspect > itemAspect) {
                 val h = r.width() * scene.aspect / srcAspect
-                val dy = (r.height() - h) / 2f
-                izq = r.left; der = r.right; arr = r.top + dy; aba = r.bottom - dy
+                val dyEnc = (r.height() - h) / 2f
+                izq = r.left; der = r.right; arr = r.top + dyEnc; aba = r.bottom - dyEnc
             } else {
                 val w = r.height() * srcAspect / scene.aspect
-                val dx = (r.width() - w) / 2f
-                arr = r.top; aba = r.bottom; izq = r.left + dx; der = r.right - dx
+                val dxEnc = (r.width() - w) / 2f
+                arr = r.top; aba = r.bottom; izq = r.left + dxEnc; der = r.right - dxEnc
             }
         } else {
             izq = r.left; arr = r.top; der = r.right; aba = r.bottom
@@ -854,8 +862,7 @@ class CompositorView @JvmOverloads constructor(
         )
     }
 
-    private fun drawEmpty(item: CamItem, outW: Int, outH: Int, radioPx: Float = 0f) {
-        val r = item.rect
+    private fun drawEmpty(item: CamItem, outW: Int, outH: Int, radioPx: Float = 0f, r: RectF = item.rect) {
         Mvp.forRect(mvp, r.left, r.top, r.right, r.bottom)
         // Opaco: así no deja ver el color del marco por dentro (el marco ya es el borde).
         solid?.draw(
@@ -893,44 +900,38 @@ class CompositorView @JvmOverloads constructor(
     }
 
     /**
-     * Marco de color alrededor de una cámara ([CamItem.marcoColor]).
+     * Marco de color **dentro** del recuadro de una cámara ([CamItem.marcoColor]).
      *
      * En el Modo Pokémon TCG marca las cámaras de los jugadores con el color del banner en uso y la
-     * de la mesa con un gris claro, para que el límite del video se vea de un golpe. Se dibuja como un
-     * **rectángulo redondeado un poco más grande** que el cuadro: el video lo tapa por dentro y queda un
-     * anillo parejo con las esquinas redondeadas iguales a las del video.
+     * de la mesa con un gris claro, para que el límite del video se vea de un golpe.
+     *
+     * Se dibuja un rectángulo redondeado del color del marco y se "perfora" el interior (con el color
+     * del fondo) hasta [r], que es el recuadro donde después se dibuja el video: queda un **anillo
+     * parejo y por dentro**, así no se sale del monitor ni lo tapa la cámara de al lado.
      */
-    private fun dibujarMarco(item: CamItem, outW: Int, outH: Int, radioPx: Float) {
+    private fun dibujarMarco(
+        item: CamItem, outW: Int, outH: Int, radioPx: Float, r: RectF, radioInterior: Float
+    ) {
         val color = item.marcoColor
         if (color == 0) return
         val a = android.graphics.Color.alpha(color) / 255f
         if (a <= 0.01f) return
-        val r = android.graphics.Color.red(color) / 255f
-        val g = android.graphics.Color.green(color) / 255f
-        val bl = android.graphics.Color.blue(color) / 255f
-        // Grosor del marco en fracción del lienzo (el mismo de antes; se pasa de px a fracción).
-        val grosorX = item.marcoGrosor * density / outW
-        val grosorY = item.marcoGrosor * density / outH
-        val rect = rectPara(item)
-        val izq = rect.left - grosorX
-        val der = rect.right + grosorX
-        val arr = rect.top - grosorY
-        val aba = rect.bottom + grosorY
-        Mvp.forRect(mvp, izq, arr, der, aba)
-        // El radio del borde de afuera es el de adentro MÁS el grosor del marco: así el anillo queda
-        // parejo también en las esquinas (si se suma menos, aparece un pico en cada esquina).
-        val grosorPx = item.marcoGrosor * density
+        val cr = android.graphics.Color.red(color) / 255f
+        val cg = android.graphics.Color.green(color) / 255f
+        val cb = android.graphics.Color.blue(color) / 255f
+        // El aro ocupa el recuadro completo (ya incluye el grosor, porque el video se metió).
+        val caja = rectPara(item)
+        Mvp.forRect(mvp, caja.left, caja.top, caja.right, caja.bottom)
         solid?.draw(
-            mvp, r, g, bl, a,
-            radioPx + grosorPx,
-            (der - izq) * outW / 2f, (aba - arr) * outH / 2f
+            mvp, cr, cg, cb, a,
+            radioPx,
+            caja.width() * outW / 2f, caja.height() * outH / 2f
         )
-        // Se "perfora" el interior con el color del fondo: así queda un **anillo** y no un bloque
-        // (si la cámara no tiene video todavía, se vería el marco tapando todo el recuadro).
-        Mvp.forRect(mvp, rect.left, rect.top, rect.right, rect.bottom)
+        // Se perfora el interior con el color del fondo: así queda un anillo y no un bloque.
+        Mvp.forRect(mvp, r.left, r.top, r.right, r.bottom)
         solid?.draw(
             mvp, 0.047f, 0.055f, 0.067f, 1f,
-            radioPx, rect.width() * outW / 2f, rect.height() * outH / 2f
+            radioInterior, r.width() * outW / 2f, r.height() * outH / 2f
         )
     }
 

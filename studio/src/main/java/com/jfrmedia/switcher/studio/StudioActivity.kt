@@ -7495,19 +7495,27 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** La mesa ocupa lo que queda entre las dos columnas: 16:9 en un lienzo 16:9 ⇒ alto = ancho. */
 
+    /** Grosor del marco de la mesa en px de la composición de 1080 (12 px de referencia). */
+    private fun grosorMarcoMesaPx(): Float = 12f * resources.displayMetrics.density
+
     /**
      * Porción del lienzo donde va la mesa en la vista de mesa: centrada entre las dos columnas y
      * **debajo del banner**, con el mismo margen de arriba y de abajo.
      *
-     * Lleva un **aire a los lados** para que el marco de la mesa no se pegue al de los jugadores.
+     * Lleva un **aire a los lados** para que el marco de la mesa no se pegue al de los jugadores, y el
+     * alto se calcula para que el **área de adentro del marco quede 16:9 exacta**: así un celular que
+     * manda 16:9 llena el recuadro completo sin recortar y sin franjas (Jorge, 23/11/2026).
      */
     private fun rectMesaTcg(): RectF {
         val aire = 0.008f
         val ancho = anchoJugadorTcg() + aire
         val altoBanner = 0.02f + altoTiraTcg()
         val disponible = 0.98f - altoBanner
-        // 16:9 en un lienzo 16:9: el alto es igual al ancho (y si no cupiera, se achica parejo).
-        val alto = minOf(disponible, 1f - 2f * ancho)
+        val g = grosorMarcoMesaPx()
+        // Lienzo de referencia 16:9 (1920x1080): así el marco se descuenta en píxeles reales.
+        val anchoPx = (1f - 2f * ancho) * 1920f
+        val altoPx = ((anchoPx - 2f * g) * 9f / 16f) + 2f * g
+        val alto = (altoPx / 1080f).coerceAtMost(disponible)
         val y0 = altoBanner + (disponible - alto) / 2f
         return RectF(ancho, y0, 1f - ancho, y0 + alto)
     }
