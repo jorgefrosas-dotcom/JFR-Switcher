@@ -8685,7 +8685,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             var espectadores: Int? = null
             var comentarios: List<com.jfrmedia.switcher.studio.stream.ComentarioFb> = emptyList()
             var error = ""
+            var quien = ""
             try {
+                // Primero, de quién es el token: si es de la persona en vez de la Página, nada de lo
+                // demás va a funcionar y hay que decirlo claro.
+                val yo = com.jfrmedia.switcher.studio.stream.FacebookLive.quienSoy(token)
+                quien = if (yo == null) {
+                    "no se pudo leer /me"
+                } else if (yo.first == pageId) {
+                    "token de la Página «${yo.second}» ✓"
+                } else {
+                    "token de «${yo.second}» (id ${yo.first}), NO de la Página $pageId ✗"
+                }
                 val video = com.jfrmedia.switcher.studio.stream.FacebookLive.videoEnVivo(pageId, token)
                 if (video.isNullOrBlank()) {
                     error = "la página no tiene un video en vivo"
@@ -8702,11 +8713,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 fbConsultando = false
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (error.isNotEmpty()) {
-                    L.w("fb", "consulta: $error")
+                    L.w("fb", "consulta: $error · $quien")
                     if (manual) {
                         val claro = cuandoFallaFacebook(error)
                         toast("Facebook: $claro")
-                        aviso?.invoke("ERROR · $claro\n\n($error)")
+                        aviso?.invoke("ERROR · $claro\n\nToken: $quien\n\n($error)")
                     }
                     return@runOnUiThread
                 }
@@ -8716,7 +8727,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     val resumen = "OK · ${espectadores?.toString() ?: "sin dato de espectadores"} " +
                         "viendo · ${lista.size} comentarios"
                     toast("Facebook $resumen")
-                    aviso?.invoke(resumen)
+                    aviso?.invoke("$resumen\n\nToken: $quien")
                 }
             }
         }.apply { isDaemon = true }.start()

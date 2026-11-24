@@ -20,8 +20,21 @@ object FacebookLive {
 
     private const val BASE = "https://graph.facebook.com/v21.0"
 
-    /** Id del video en vivo de la página (el que está al aire ahora). */
-    fun videoEnVivo(pageId: String, token: String): String? {
+    /**
+     * De **quién** es el token: devuelve (id, nombre) de `/me`.
+     *
+     * Es el dato que desambigua todo: si el nombre es la Página, es un **token de Página** (el que
+     * hace falta); si es la persona, es un token de usuario y por eso la Página responde «#200».
+     */
+    fun quienSoy(token: String): Pair<String, String>? = runCatching {
+        val json = bajar("$BASE/me?fields=id,name&access_token=$token")
+        val o = JSONObject(json)
+        val id = o.optString("id", "")
+        val nombre = o.optString("name", "")
+        if (id.isBlank()) null else id to nombre
+    }.getOrNull()
+
+    /** Id del video en vivo de la página (el que está al aire ahora). */    fun videoEnVivo(pageId: String, token: String): String? {
         val json = bajar("$BASE/$pageId/live_videos?fields=id,status&limit=5&access_token=$token")
         val datos = JSONObject(json).optJSONArray("data") ?: return null
         var reciente = ""
@@ -45,14 +58,20 @@ object FacebookLive {
     /** Últimos comentarios, del más nuevo al más viejo. */
     fun comentarios(videoId: String, token: String, limite: Int = 4): List<ComentarioFb> {
         val url = "$BASE/$videoId/comments?live_filter=no_filter&order=reverse_chronological" +
-            "&limit=$limite&fields=from,message&access_token=$token"
+            "&limit=$limite&fields=from{name,id},message&access_token=$token"
         val json = bajar(url)
         val datos = JSONObject(json).optJSONArray("data") ?: return emptyList()
         val salida = ArrayList<ComentarioFb>(datos.length())
         for (i in 0 until datos.length()) {
             val o = datos.optJSONObject(i) ?: continue
-            val autor = o.optJSONObject("from")?.optString("name", "")
-                ?.takeIf { it.isNotBlank() } ?: "Alguien"
+            val autorJson = o.optJSONObject("from")
+            if (autorJson == null && i == 0) {
+                // Deja rastro de lo que sí vino: si falta «from» es permiso, no código.
+                com.jfrmedia.switcher.core.util.L.w("fb", "comentario sin autor: $o")
+            }
+            val autor = autorJson?.optString("name", "")?.takeIf { it.isNotBlank() }
+                ?: o.optString("from_name", "").takeIf { it.isNotBlank() }
+                ?: "Alguien"
             val texto = o.optString("message", "").trim()
             if (texto.isNotEmpty()) salida.add(ComentarioFb(autor, texto))
         }
