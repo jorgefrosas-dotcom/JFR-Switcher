@@ -5455,6 +5455,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
             setPadding(0, 4.dp, 0, 8.dp)
         })
+        // Aquí se muestra el resultado de «Probar»: el error completo de Facebook si falla.
+        val estadoFb = TextView(this).apply {
+            text = ""
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            setPadding(0, 8.dp, 0, 0)
+        }
         caja.addView(TextView(this).apply {
             text = "Probar Facebook"
             textSize = 13f
@@ -5468,9 +5475,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     .putString(CLAVE_FB_PAGE_ID, campoPagina.text.toString().trim())
                     .putString(CLAVE_FB_TOKEN, campoToken.text.toString().trim())
                     .apply()
-                consultarFacebook(manual = true)
+                estadoFb.text = "Consultando…"
+                consultarFacebook(manual = true) { mensaje -> estadoFb.text = mensaje }
             }
         })
+        caja.addView(estadoFb)
 
         // --- Live Producer en el navegador ---
         caja.addView(TextView(this).apply {
@@ -8658,12 +8667,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * Pregunta a Facebook cuántos están viendo y los últimos comentarios, y se lo pasa al panel.
      * Bloqueante a propósito: se llama desde su propio hilo (o desde el botón «Probar»).
      */
-    private fun consultarFacebook(manual: Boolean) {
+    private fun consultarFacebook(manual: Boolean, aviso: ((String) -> Unit)? = null) {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val token = prefs.getString(CLAVE_FB_TOKEN, "").orEmpty().trim()
         val pageId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
         if (token.isBlank() || pageId.isBlank()) {
-            if (manual) toast("Falta el token de la Página o el ID de la Página")
+            val mensaje = "Falta el token de la Página o el ID de la Página"
+            if (manual) {
+                toast(mensaje)
+                aviso?.invoke(mensaje)
+            }
             return
         }
         if (fbConsultando) return
@@ -8689,20 +8702,45 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 fbConsultando = false
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (error.isNotEmpty()) {
-                    if (manual) toast("Facebook: $error")
-                    else L.w("fb", "consulta: $error")
+                    L.w("fb", "consulta: $error")
+                    if (manual) {
+                        val claro = cuandoFallaFacebook(error)
+                        toast("Facebook: $claro")
+                        aviso?.invoke("ERROR · $claro\n\n($error)")
+                    }
                     return@runOnUiThread
                 }
                 val lista = comentarios.map { it.autor to it.texto }
                 panelTcg?.comentariosFacebook(espectadores?.toString().orEmpty(), lista)
                 if (manual) {
-                    toast(
-                        "Facebook OK · ${espectadores?.toString() ?: "sin dato"} viendo · " +
-                            "${lista.size} comentarios"
-                    )
+                    val resumen = "OK · ${espectadores?.toString() ?: "sin dato de espectadores"} " +
+                        "viendo · ${lista.size} comentarios"
+                    toast("Facebook $resumen")
+                    aviso?.invoke(resumen)
                 }
             }
         }.apply { isDaemon = true }.start()
+    }
+
+    /**
+     * Traduce los errores de Facebook a algo que se pueda accionar. El `#200` es el más común y el que
+     * más confunde: o el token es de usuario en vez de Página, o le falta `pages_read_engagement`.
+     */
+    private fun cuandoFallaFacebook(error: String): String = when {
+        error.contains("#200") || error.contains("Missing Permissions", ignoreCase = true) ->
+            "El token no tiene permiso de Página. En el Graph API Explorer elige la Página en «User or " +
+                "Page» (no tu usuario), agrega pages_read_engagement y genera el token otra vez."
+
+        error.contains("Invalid OAuth", ignoreCase = true) ->
+            "El token está mal copiado o ya venció. Copia el que empieza con EAA… completo, sin espacios."
+
+        error.contains("Unsupported get request", ignoreCase = true) ->
+            "El ID de la Página no es el correcto."
+
+        error.contains("no tiene un video en vivo") ->
+            "La Página no tiene un video transmitiendo ahora mismo: esta consulta solo funciona al aire."
+
+        else -> error
     }
 
     // ---- acciones del modo: las usan las tarjetas de jugador y los botones de abajo de la cámara 4
