@@ -346,7 +346,10 @@ class SourceTexture {
             if (w != lastW || h != lastH) {
                 lastW = w
                 lastH = h
-                com.jfrmedia.switcher.core.util.L.i("gl", "cuadro ${w}x$h")
+                // Se registra el giro porque de eso depende la proporción real del cuadro: un celular
+                // vertical manda 1280x720 con giro 90 (o sea, vertical), y uno acostado manda giro 0.
+                com.jfrmedia.switcher.core.util.L.i("gl", "cuadro ${w}x$h giro=$rot (${"%.3f".format(
+                    if (rot % 180 == 0) w.toFloat() / h.toFloat() else h.toFloat() / w.toFloat())})")
             }
             hasData = true
         } finally {

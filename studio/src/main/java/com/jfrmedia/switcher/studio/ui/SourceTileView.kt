@@ -1,4 +1,4 @@
-﻿package com.jfrmedia.switcher.studio.ui
+package com.jfrmedia.switcher.studio.ui
 
 import android.content.Context
 import android.util.AttributeSet
@@ -161,12 +161,13 @@ class SourceTileView @JvmOverloads constructor(
     }
 
     /** Botón pequeño en la esquina de la tarjeta (Modo TCG: la lente de la cámara 4). */
-    fun botonEsquina(texto: String, accion: () -> Unit): TextView {
+    fun botonEsquina(texto: String, chico: Boolean = false, accion: () -> Unit): TextView {
         val b = TextView(context).apply {
             text = texto
-            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, if (chico) 9f else 11f)
             setTextColor(0xFFECEEF2.toInt())
-            setPadding(dp(8f), dp(3f), dp(8f), dp(3f))
+            if (chico) setPadding(dp(6f), dp(2f), dp(6f), dp(2f))
+            else setPadding(dp(8f), dp(3f), dp(8f), dp(3f))
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(0xDD1A1C22.toInt())
                 cornerRadius = dp(10f).toFloat()

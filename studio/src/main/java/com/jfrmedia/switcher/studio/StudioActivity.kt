@@ -3244,7 +3244,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 )
                 // Con 6 cámaras en una fila hacen falta letras más chicas; en el celular vertical
                 // las tarjetas son angostas y también (Jorge, 29/10: «sí caben si son más chicos»).
-                tile.modoCompacto((modoStudio && studioVertical) || (esPantallaCelular() && vertical))
+                // En Modo Pokémon TCG la tarjeta va a media columna (dos por fila), así que las letras
+                // también se achican: si no, «Sin conectar» y «Jugador 1» salen cortados (23/11/2026).
+                tile.modoCompacto(
+                    modoTcg || (modoStudio && studioVertical) || (esPantallaCelular() && vertical)
+                )
                 if (esPantallaCelular() && vertical) tile.modoMuyCompacto()
                 if (index == LocalCam.SLOT) {
                     tile.setup(index) { onTileTap(LocalCam.SLOT) }
@@ -3265,7 +3269,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             tiles.forEachIndexed { i, t -> t.ponerNombre(nombres.getOrElse(i) { "Cámara ${i + 1}" }) }
             // Cámara 4: botón de tres pasos para la cámara de la tablet
             // (Tablet → frontal → trasera → apagada). Apagada, la cámara 4 es la del cuarto celular.
-            botonCamara4 = tiles.getOrNull(3)?.botonEsquina(etiquetaBotonCamara4()) {
+            botonCamara4 = tiles.getOrNull(3)?.botonEsquina(etiquetaBotonCamara4(), chico = true) {
                 cicloCamaraAmbiente()
             }
             // La parrilla se rehace cada vez que cambia una cámara y eso limpia la tarjeta:
