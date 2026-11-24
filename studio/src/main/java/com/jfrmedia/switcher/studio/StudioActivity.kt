@@ -7453,9 +7453,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             val dibujos = com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, jugador.mazoId)
                 .filter { !it.isRecycled }.take(2)
             if (dibujos.isEmpty()) return@forEach
-            // Un icono mide el 72 % del ancho de la columna; con dos, 44 % cada uno para que la
-            // pareja quepa con un respiro en medio. Cuadrados de verdad en un lienzo 16:9.
-            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.72f else 0.44f
+            // Un icono mide el 36 % del ancho de la columna (la mitad de lo que medía antes); con dos,
+            // 22 % cada uno para que la pareja quepa con un respiro en medio. Cuadrados de verdad en
+            // un lienzo 16:9 (Jorge, 23/11/2026: «los quiero a la mitad de tamaño»).
+            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.36f else 0.22f
             val altoIcono = anchoIcono * (16f / 9f)
             val abajo = 0.975f                 // pie de la columna, con un pelín de aire
             val arriba = abajo - altoIcono
