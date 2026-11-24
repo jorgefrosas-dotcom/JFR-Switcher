@@ -98,16 +98,25 @@ class PanelTcg(
 
     /** Lo llama la pantalla cuando llegan datos de Facebook. */
     fun comentariosFacebook(espectadores: String, lista: List<Pair<String, String>>) {
+        // Se cuentan los comentarios nuevos de arriba para animarlos: si no, el bloque cambiaba de
+        // golpe cada 8 segundos y no se sabía cuál había entrado.
+        val nuevos = if (lista == comentarios) {
+            0
+        } else {
+            val primeroViejo = comentarios.firstOrNull()
+            val i = if (primeroViejo == null) lista.size else lista.indexOfFirst { it == primeroViejo }
+            if (i >= 0) i else lista.size
+        }
         this.espectadores = espectadores
         this.comentarios = lista
-        pintarComentarios()
+        pintarComentarios(animar = nuevos)
     }
 
     /**
      * Recuadro de la derecha: **contador de espectadores y comentarios del stream**.
      * Ocupa el lugar donde antes estaban los botones del turno (Jorge, 24/11/2026).
      */
-    private fun pintarComentarios() {
+    private fun pintarComentarios(animar: Int = 0) {
         val c = centro
         val contexto = c.context
         c.removeAllViews()
@@ -129,9 +138,25 @@ class PanelTcg(
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, if (sinDatos) 14f else 34f)
                 setTextColor(if (sinDatos) 0xFF6E7686.toInt() else 0xFF58C88C.toInt())
                 typeface = Typeface.DEFAULT_BOLD
-                setPadding(0, 0, 0, dp(contexto, 6f))
             }
         )
+        if (espectadores.isNotBlank()) {
+            c.addView(
+                TextView(contexto).apply {
+                    text = "viendo ahora"
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                    setTextColor(0xFF9AA0AA.toInt())
+                    setPadding(0, dp(contexto, -2f), 0, dp(contexto, 8f))
+                }
+            )
+        } else {
+            c.addView(
+                TextView(contexto).apply {
+                    text = ""
+                    setPadding(0, 0, 0, dp(contexto, 8f))
+                }
+            )
+        }
         c.addView(
             TextView(contexto).apply {
                 text = "COMENTARIOS"
@@ -160,14 +185,17 @@ class PanelTcg(
                 orientation = LinearLayout.VERTICAL
                 setPadding(0, 0, 0, dp(contexto, 6f))
             }
-            fila.addView(
-                TextView(contexto).apply {
-                    text = par.first
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                    setTextColor(0xFF96BEFF.toInt())
-                    typeface = Typeface.DEFAULT_BOLD
-                }
-            )
+            // Si Facebook no manda el autor, no se inventa un «Alguien»: se muestra solo el texto.
+            if (par.first.isNotBlank() && par.first != "Alguien") {
+                fila.addView(
+                    TextView(contexto).apply {
+                        text = par.first
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                        setTextColor(0xFF96BEFF.toInt())
+                        typeface = Typeface.DEFAULT_BOLD
+                    }
+                )
+            }
             fila.addView(
                 TextView(contexto).apply {
                     text = par.second
@@ -184,6 +212,19 @@ class PanelTcg(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
             )
         )
+        // Los comentarios que acaban de entrar aparecen deslizándose y con un fundido, para que se
+        // note cuál es el nuevo (antes el bloque cambiaba de golpe).
+        for (i in 0 until animar.coerceAtMost(columna.childCount)) {
+            val vista = columna.getChildAt(i)
+            vista.alpha = 0f
+            vista.translationY = -dp(contexto, 10f).toFloat()
+            vista.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setStartDelay((i * 70L))
+                .setDuration(260L)
+                .start()
+        }
     }
 
     // ------------------------------------------------------------------ tarjetas

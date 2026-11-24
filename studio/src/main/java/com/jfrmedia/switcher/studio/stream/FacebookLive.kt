@@ -55,6 +55,22 @@ object FacebookLive {
         JSONObject(json).optInt("live_views", -1).takeIf { it >= 0 }
     }.getOrNull()
 
+    /**
+     * Cuando la lista no trae el autor, se pregunta el comentario **por su id**: a veces ese camino sí
+     * devuelve `from`. Devuelve el nombre o null.
+     */
+    fun autorDeComentario(comentarioId: String, token: String): String? = runCatching {
+        val json = bajar("$BASE/$comentarioId?fields=from{name,id}&access_token=$token")
+        val o = JSONObject(json)
+        val nombre = o.optJSONObject("from")?.optString("name", "").orEmpty()
+        if (nombre.isBlank()) {
+            com.jfrmedia.switcher.core.util.L.w("fb", "por id tampoco hay autor: $o")
+            null
+        } else {
+            nombre
+        }
+    }.getOrNull()
+
     /** Últimos comentarios, del más nuevo al más viejo. */
     fun comentarios(videoId: String, token: String, limite: Int = 4): List<ComentarioFb> {
         val url = "$BASE/$videoId/comments?live_filter=no_filter&order=reverse_chronological" +
@@ -65,15 +81,15 @@ object FacebookLive {
         for (i in 0 until datos.length()) {
             val o = datos.optJSONObject(i) ?: continue
             val autorJson = o.optJSONObject("from")
-            if (autorJson == null && i == 0) {
-                // Deja rastro de lo que sí vino: si falta «from» es permiso, no código.
-                com.jfrmedia.switcher.core.util.L.w("fb", "comentario sin autor: $o")
-            }
-            val autor = autorJson?.optString("name", "")?.takeIf { it.isNotBlank() }
-                ?: o.optString("from_name", "").takeIf { it.isNotBlank() }
-                ?: "Alguien"
             val texto = o.optString("message", "").trim()
-            if (texto.isNotEmpty()) salida.add(ComentarioFb(autor, texto))
+            if (texto.isEmpty()) continue
+            var autor = autorJson?.optString("name", "")?.takeIf { it.isNotBlank() }
+            if (autor == null) {
+                // Segunda oportunidad: el comentario por su id (una sola vez por consulta).
+                val id = o.optString("id", "")
+                if (id.isNotBlank()) autor = autorDeComentario(id, token)
+            }
+            salida.add(ComentarioFb(autor ?: "Alguien", texto))
         }
         return salida
     }
