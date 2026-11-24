@@ -876,6 +876,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // En Modo Pokémon TCG la escena es fija: la cámara solo se engancha a su hueco del monitor.
         // (Antes se ponía sola a pantalla completa y tapaba la mesa.)
         if (modoTcg) {
+            // A la cámara que acaba de entrar se le pide su orientación (jugadores verticales,
+            // mesa y ambiente horizontales) antes de dibujarla.
+            aplicarOrientacionCamarasTcg()
             runCatching { adjuntar(session.slot, track) }
             runCatching { aplicarRectangulosTcg() }
             b.canvas.requestRender()
@@ -5644,6 +5647,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         ajustarBarraPorOrientacion()
         hub.vertical = vertical
+        // Fuera del Modo Pokémon, los celulares vuelven a seguir la orientación del lienzo (en TCG
+        // se pide por cámara: jugadores verticales aunque el programa sea 16:9).
+        if (!modoTcg) soltarOrientacionCamaras()
         // La cámara de la tablet solo existe en horizontal: en vertical se apaga. En el celular
         // la cámara propia sigue disponible también en vertical (Jorge, 29/10).
         if (vertical && !esPantallaCelular()) {
@@ -7508,6 +7514,38 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         escena.camAt(2)?.rect?.set(rectMesaTcg())
     }
 
+    /**
+     * Le pide a cada celular su orientación en el Modo Pokémon TCG: los **dos jugadores verticales**
+     * (su columna va de arriba a abajo del monitor) y la **mesa y el ambiente horizontales**.
+     *
+     * El celular no sabe en qué modo está la tablet: se le dice con el mismo mensaje que usa el Modo
+     * Studio para el lienzo 9:16, pero **por cámara**. Al recibirlo, la app del celular gira y WebRTC
+     * empieza a mandar el cuadro vertical (giro 90): eso es lo que hace que la columna de 19 % muestre
+     * el **60 % central** sin recortar de más (Jorge, 23/11/2026).
+     */
+    private fun aplicarOrientacionCamarasTcg() {
+        val pedido = mapOf(0 to true, 1 to true, 2 to false, 3 to false)
+        hub.all().forEach { session ->
+            val vertical = pedido[session.slot] ?: false
+            if (session.verticalPropio != vertical) {
+                session.verticalPropio = vertical
+                runCatching { session.enviarOrientacion() }
+                L.i("tcg", "camara ${session.slot}: se le pide ${if (vertical) "vertical" else "horizontal"}")
+            }
+        }
+    }
+
+    /** Devuelve la orientación de las cámaras a la del lienzo (al salir del Modo Pokémon). */
+    private fun soltarOrientacionCamaras() {
+        hub.all().forEach { session ->
+            if (session.verticalPropio != null) {
+                session.verticalPropio = null
+                runCatching { session.enviarOrientacion() }
+                L.i("tcg", "camara ${session.slot}: vuelve a la orientación del lienzo")
+            }
+        }
+    }
+
     /** Coloca las cámaras en su rectángulo del modo (mesa al centro, jugadores a los lados). */
     private fun aplicarRectangulosTcg() {
         val escena = b.canvas.scene
@@ -7738,6 +7776,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         b.canvasHost.aspect = aspecto
         hostPrograma?.aspect = aspecto
         hub.vertical = lienzoVertical
+        // En Modo Studio manda la orientación del lienzo: se sueltan las peticiones por cámara del
+        // Modo Pokémon TCG.
+        soltarOrientacionCamaras()
         // Con 9:16 los monitores ocupan todo el alto disponible; con 16:9 son bajos, así que la
         // fila toma solo su alto y las tarjetas se quedan con el resto.
         filaMonitores?.let { fila ->
@@ -9133,6 +9174,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // se suelta la pista y sin esto el PiP quedaba en negro).
         escena.cams().forEach { c -> runCatching { engancharFuente(c.slot) } }
         hub.all().forEach { s -> s.videoTrack?.let { t -> runCatching { adjuntar(s.slot, t) } } }
+        // Los celulares de los jugadores van verticales en este modo (la mesa y el ambiente no).
+        aplicarOrientacionCamarasTcg()
         escena.selectedId = null   // sin marco de selección: el resaltado es del turno
         b.canvas.slotResaltado = if (estadoTcg.turno == 0) 0 else 1
         escena.touch()

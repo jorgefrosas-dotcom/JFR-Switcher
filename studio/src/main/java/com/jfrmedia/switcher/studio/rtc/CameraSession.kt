@@ -231,12 +231,22 @@ class CameraSession(
         )
     }
 
-    /** Avisa al celular si el lienzo es vertical u horizontal (bloquea su orientación). */
+    /**
+     * Orientación pedida a **esta** cámara en particular; `null` = la del lienzo ([hub.vertical]).
+     *
+     * En Modo Pokémon TCG el programa es 16:9 pero los celulares de los jugadores van **verticales**
+     * (columna entera a cada lado) y la mesa horizontal: por eso la orientación se pide por cámara.
+     */
+    @Volatile
+    var verticalPropio: Boolean? = null
+
+    /** Avisa al celular si su cuadro va vertical u horizontal (bloquea su orientación). */
     fun enviarOrientacion() {
+        val vertical = verticalPropio ?: hub.vertical
         sendCmd(
             Msg.builder(Proto.CMD)
                 .put(Proto.K_ACTION, Proto.A_ORIENTATION)
-                .put(Proto.K_ORIENTATION, if (hub.vertical) "portrait" else "landscape")
+                .put(Proto.K_ORIENTATION, if (vertical) "portrait" else "landscape")
                 .build()
         )
     }
