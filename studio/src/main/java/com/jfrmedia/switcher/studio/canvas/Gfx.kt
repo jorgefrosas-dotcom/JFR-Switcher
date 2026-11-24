@@ -159,9 +159,23 @@ void main() {
 
 private const val FRAG_SOLID = """
 precision mediump float;
+varying vec2 vQ;
 uniform vec4 uColor;
+uniform float uRadius;
+uniform vec2 uHalfPx;
+float sdRoundS(vec2 p, vec2 b, float r) {
+    vec2 q = abs(p) - b + vec2(r);
+    return min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;
+}
 void main() {
-    gl_FragColor = uColor;
+    if (uRadius > 0.5) {
+        vec2 p = (vQ - vec2(0.5)) * 2.0 * uHalfPx;
+        float d = sdRoundS(p, uHalfPx, uRadius);
+        float a = 1.0 - smoothstep(-1.5, 0.0, d);
+        gl_FragColor = vec4(uColor.rgb, uColor.a * a);
+    } else {
+        gl_FragColor = uColor;
+    }
 }
 """
 
@@ -271,20 +285,31 @@ class RgbaProgram {
     fun release() = GLES20.glDeleteProgram(id)
 }
 
-/** Color plano: fondo, borde de selección. */
+/** Color plano: fondo, borde de selección y **marco redondeado** de las cámaras. */
 class SolidProgram {
     private val id = Gl.link(VERT_SHADER, FRAG_SOLID)
     private val aQuad = GLES20.glGetAttribLocation(id, "aQuad")
     private val uMvp = GLES20.glGetUniformLocation(id, "uMvp")
     private val uColor = GLES20.glGetUniformLocation(id, "uColor")
+    private val uRadius = GLES20.glGetUniformLocation(id, "uRadius")
+    private val uHalfPx = GLES20.glGetUniformLocation(id, "uHalfPx")
 
-    fun draw(mvp: FloatArray, r: Float, g: Float, b: Float, a: Float) {
+    /**
+     * Dibuja un rectángulo del color pedido. Con [radiusPx] > 0 las esquinas se redondean igual que
+     * el video (hace falta [halfW]/[halfH] en píxeles para medir la distancia al borde).
+     */
+    fun draw(
+        mvp: FloatArray, r: Float, g: Float, b: Float, a: Float,
+        radiusPx: Float = 0f, halfW: Float = 0f, halfH: Float = 0f
+    ) {
         GLES20.glUseProgram(id)
         GLES20.glEnableVertexAttribArray(aQuad)
         Gl.quad.position(0)
         GLES20.glVertexAttribPointer(aQuad, 2, GLES20.GL_FLOAT, false, 0, Gl.quad)
         GLES20.glUniformMatrix4fv(uMvp, 1, false, mvp, 0)
         GLES20.glUniform4f(uColor, r, g, b, a)
+        GLES20.glUniform1f(uRadius, radiusPx)
+        GLES20.glUniform2f(uHalfPx, halfW, halfH)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         GLES20.glDisableVertexAttribArray(aQuad)
     }

@@ -36,6 +36,16 @@ class CamItem(id: Long, val slot: Int) : CanvasItem(id) {
     var panX: Float = 0f
     var panY: Float = 0f
 
+    /**
+     * Si es `true`, el cuadro se **encaja completo** dentro del recuadro (se ven las cuatro orillas,
+     * con franjas negras si sobra espacio) en vez de recortarse para llenarlo.
+     *
+     * Se usa en la cámara de mesa del Modo Pokémon TCG: el área de juego no se puede recortar
+     * (Jorge, 23/11/2026).
+     */
+    @Volatile
+    var encajar: Boolean = false
+
     // --- Ajustes de imagen por cámara (no afectan el encuadre) ---
     /** Brillo, -1..1 (0 = normal). */
     var luz: Float = 0f
@@ -62,6 +72,9 @@ class CamItem(id: Long, val slot: Int) : CanvasItem(id) {
      * para que no se confundan con la imagen de la mesa.
      */
     var marcoColor: Int = 0
+
+    /** Grosor del marco en px de referencia (5 = el de siempre). */
+    var marcoGrosor: Float = 5f
 
     fun resetImagen() {
         luz = 0f

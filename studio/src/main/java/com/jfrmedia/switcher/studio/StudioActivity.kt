@@ -7421,11 +7421,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         runCatching { b.canvas.requestRender() }
     }
 
-    /** Marco de las cámaras de jugador: el color de acento del banner en uso (solo en la mesa). */
+    /** Marco de las cámaras: color del banner para los jugadores y gris claro para la mesa. */
     private fun actualizarMarcosTcg() {
-        val color = if (vistaTcg == VISTA_MESA) Banners.paleta(estadoTcg.paleta).franjaTexto else 0
-        b.canvas.scene.camAt(0)?.marcoColor = color
-        b.canvas.scene.camAt(1)?.marcoColor = color
+        val enMesa = vistaTcg == VISTA_MESA
+        val colorJugador = if (enMesa) Banners.paleta(estadoTcg.paleta).franjaTexto else 0
+        // La mesa lleva su propio marco claro: así se ve exactamente dónde termina el video del
+        // área de juego y no se confunde con el fondo (Jorge, 23/11/2026).
+        val colorMesa = if (enMesa) 0xFFE8ECF2.toInt() else 0
+        b.canvas.scene.camAt(0)?.marcoColor = colorJugador
+        b.canvas.scene.camAt(1)?.marcoColor = colorJugador
+        b.canvas.scene.camAt(2)?.marcoColor = colorMesa
         runCatching { b.canvas.requestRender() }
     }
 
@@ -7489,18 +7494,26 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun anchoJugadorTcg(): Float = 0.60f * (9f / 16f) * (9f / 16f)
 
     /** La mesa ocupa lo que queda entre las dos columnas: 16:9 en un lienzo 16:9 ⇒ alto = ancho. */
-    private fun altoMesaTcg(): Float = 1f - 2f * anchoJugadorTcg()
 
     /**
      * Porción del lienzo donde va la mesa en la vista de mesa: centrada entre las dos columnas y
      * **debajo del banner**, con el mismo margen de arriba y de abajo.
+     *
+     * Lleva un **aire a los lados** para que el marco de la mesa no se pegue al de los jugadores.
      */
     private fun rectMesaTcg(): RectF {
-        val ancho = anchoJugadorTcg()
-        val alto = altoMesaTcg()
-        val y0 = (0.02f + altoTiraTcg() + 0.98f - alto) / 2f
+        val aire = 0.008f
+        val ancho = anchoJugadorTcg() + aire
+        val altoBanner = 0.02f + altoTiraTcg()
+        val disponible = 0.98f - altoBanner
+        // 16:9 en un lienzo 16:9: el alto es igual al ancho (y si no cupiera, se achica parejo).
+        val alto = minOf(disponible, 1f - 2f * ancho)
+        val y0 = altoBanner + (disponible - alto) / 2f
         return RectF(ancho, y0, 1f - ancho, y0 + alto)
     }
+
+    /** 30 px de redondeado en las esquinas, medidos en la composición de 1080 (Jorge, 23/11/2026). */
+    private fun radioCamaraTcg(): Float = 30f / resources.displayMetrics.density
 
     /**
      * Coloca las tres cámaras de la vista de mesa: **jugador 1 a la izquierda**, **jugador 2 a la
@@ -7510,9 +7523,26 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      */
     private fun colocarCamarasTcg(escena: Scene) {
         val ancho = anchoJugadorTcg()
-        escena.camAt(0)?.rect?.set(0f, 0f, ancho, 1f)
-        escena.camAt(1)?.rect?.set(1f - ancho, 0f, 1f, 1f)
-        escena.camAt(2)?.rect?.set(rectMesaTcg())
+        escena.camAt(0)?.let { cam ->
+            cam.rect.set(0f, 0f, ancho, 1f)
+            cam.radiusDp = radioCamaraTcg()
+            cam.marcoGrosor = 5f
+            cam.encajar = false
+        }
+        escena.camAt(1)?.let { cam ->
+            cam.rect.set(1f - ancho, 0f, 1f, 1f)
+            cam.radiusDp = radioCamaraTcg()
+            cam.marcoGrosor = 5f
+            cam.encajar = false
+        }
+        escena.camAt(2)?.let { cam ->
+            cam.rect.set(rectMesaTcg())
+            cam.radiusDp = radioCamaraTcg()
+            // La mesa lleva el marco un poco más grueso (es el que tiene que verse de lejos) y NO se
+            // recorta: se encaja entera en el hueco entre las columnas y debajo del banner.
+            cam.marcoGrosor = 12f
+            cam.encajar = true
+        }
     }
 
     /**
