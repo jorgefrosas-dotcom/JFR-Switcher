@@ -151,44 +151,44 @@ object Banners {
             textAlign = Paint.Align.CENTER
         }
         texto.color = p.franjaTexto
-        texto.textSize = 26f * u
-        cv.drawText(estado.evento.uppercase(), ancho / 2f, 40f * u, texto)
+        texto.textSize = 30f * u
+        cv.drawText(estado.evento.uppercase(), ancho / 2f, 42f * u, texto)
 
         // nombres (arriba), después el mazo y el récord. Los chips ya no van aquí: ahora van dentro
         // de la cámara de cada jugador, así que este lado queda libre para las pokebolas grandes.
         texto.textAlign = Paint.Align.LEFT
         texto.color = p.nombre
-        texto.textSize = 40f * u
+        texto.textSize = 46f * u
         cv.drawText(estado.uno.nombre.uppercase(), 34f * u, 128f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
         cv.drawText(estado.dos.nombre.uppercase(), ancho - 34f * u, 128f * u, texto)
 
         // 6 pokebolas grandes en **2 columnas × 3 filas**, pegadas al marcador: la del jugador 1 a la
         // izquierda del 0:0 y la del jugador 2 a la derecha (Jorge, 23/11/2026).
-        val r = 30f * u
-        val pasoY = 74f * u
-        val pasoX = 70f * u
-        val yPokebolas = 118f * u
+        val r = 36f * u
+        val pasoY = 88f * u
+        val pasoX = 84f * u
+        val yPokebolas = 120f * u
         for (i in 0 until 6) {
             val fila = i / 2
             val col = i % 2
-            val xIzq = 520f * u + col * pasoX
+            val xIzq = 508f * u + col * pasoX
             pokebola(cv, xIzq, yPokebolas + fila * pasoY, r, i >= estado.uno.debilitados, p.pokebolaBorde)
-            val xDer = 1080f * u - col * pasoX
+            val xDer = 1092f * u - col * pasoX
             pokebola(cv, xDer, yPokebolas + fila * pasoY, r, i >= estado.dos.debilitados, p.pokebolaBorde)
         }
 
         // récord
-        texto.textSize = 34f * u
+        texto.textSize = 40f * u
         texto.color = p.record
         texto.textAlign = Paint.Align.LEFT
-        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 232f * u, texto)
+        cv.drawText("Torneo  ${estado.uno.record}", 34f * u, 252f * u, texto)
         texto.textAlign = Paint.Align.RIGHT
-        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 232f * u, texto)
+        cv.drawText("Torneo  ${estado.dos.record}", ancho - 34f * u, 252f * u, texto)
 
         // Mazo de cada jugador (icono + nombre), entre el nombre y el récord.
-        dibujarMazo(cv, estado.uno, 34f * u, 160f * u, u, alDerecha = false, iconos, p)
-        dibujarMazo(cv, estado.dos, ancho - 34f * u, 160f * u, u, alDerecha = true, iconos, p)
+        dibujarMazo(cv, estado.uno, 34f * u, 168f * u, u, alDerecha = false, iconos, p)
+        dibujarMazo(cv, estado.dos, ancho - 34f * u, 168f * u, u, alDerecha = true, iconos, p)
 
         // marcador central
         val caja = RectF(ancho / 2f - 160f * u, 70f * u, ancho / 2f + 160f * u, 300f * u)
@@ -311,16 +311,16 @@ object Banners {
         val nombreMazo = jugador.mazo.trim()
         if (nombreMazo.isEmpty()) return
         val dibujos = iconos[jugador.mazoId].orEmpty().filter { !it.isRecycled }.take(2)
-        val lado = 40f * u
-        val entreIconos = 5f * u
-        val separacion = 9f * u
+        val lado = 48f * u
+        val entreIconos = 6f * u
+        val separacion = 10f * u
         val anchoIconos =
             if (dibujos.isEmpty()) 0f else lado * dibujos.size + entreIconos * (dibujos.size - 1) + separacion
-        // Las pokebolas grandes empiezan en 490u: el nombre del mazo no puede pasar de ahí.
-        val topeTexto = 452f * u - anchoIconos
+        // Las pokebolas grandes empiezan en 472u: el nombre del mazo no puede pasar de ahí.
+        val topeTexto = 430f * u - anchoIconos
         val pintura = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            textSize = 32f * u
+            textSize = 34f * u
             color = p.franjaTexto
             textAlign = if (alDerecha) Paint.Align.RIGHT else Paint.Align.LEFT
         }

@@ -7463,16 +7463,19 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 .filter { !it.isRecycled }.take(2)
             if (dibujos.isEmpty()) return@forEach
             // El icono va **del lado de la cámara de mesa**: jugador 1 a la derecha de su columna y
-            // jugador 2 a la izquierda. Los chips se quedan del lado de afuera.
-            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.30f else 0.18f
+            // jugador 2 a la izquierda. Los chips se quedan del lado de afuera. Queda **centrado con
+            // los tres chips** (misma altura que la pila).
+            val altoPila = 3f * altoChipTcg() + 2f * (altoChipTcg() * 0.24f)
+            val centroPila = 0.975f - altoPila / 2f
+            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.33f else 0.15f
             val altoIcono = anchoIcono * (16f / 9f)
-            val abajo = 0.975f
-            val arriba = abajo - altoIcono
+            val arriba = centroPila - altoIcono / 2f
+            val abajo = arriba + altoIcono
             val anchoTotal = anchoIcono * dibujos.size + entre * (dibujos.size - 1)
             var x = if (derecha) {
-                anchoCam - anchoCam * 0.06f - anchoTotal      // pegado a la mesa
+                anchoCam - anchoCam * 0.04f - anchoTotal      // pegado a la mesa
             } else {
-                1f - anchoCam + anchoCam * 0.06f
+                1f - anchoCam + anchoCam * 0.04f
             }
             val items = ArrayList<ImageItem>()
             dibujos.forEach { bmp ->
@@ -8420,13 +8423,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     // ------------------------------------------------ chips de la mesa (dentro de la cámara)
 
     /** Ancho de un chip: la mayor parte del ancho de la columna del jugador. */
-    private fun anchoChipTcg(): Float = anchoJugadorTcg() * 0.70f
+    private fun anchoChipTcg(): Float = anchoJugadorTcg() * 0.74f
 
-    /** Alto del chip (pastilla): el ancho en píxeles dividido entre 4.1, pasado a fracción. */
-    private fun altoChipTcg(): Float = anchoChipTcg() * (16f / 9f) / 4.1f
+    /** Alto del chip (pastilla): el ancho en píxeles dividido entre 3.6, pasado a fracción. */
+    private fun altoChipTcg(): Float = anchoChipTcg() * (16f / 9f) / 3.6f
 
     /** Cuánto se mete hacia afuera del monitor: el chip queda **asomando** en la orilla. */
-    private fun sangradoChipTcg(): Float = anchoChipTcg() * 0.14f
+    private fun sangradoChipTcg(): Float = anchoChipTcg() * 0.12f
 
     /** Lo que se corre hacia afuera al usarlo: deja solo la punta redondeada a la vista. */
     private fun corridoChipUsadoTcg(): Float = anchoChipTcg() * 0.62f
