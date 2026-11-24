@@ -8672,9 +8672,34 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private val fbTarea = object : Runnable {
         override fun run() {
-            if (modoTcg && transmitiendo) consultarEspectadores()
+            if (modoTcg) {
+                if (transmitiendo) consultarEspectadores() else probarCupoFacebook()
+            }
             fbHandler.postDelayed(this, fbCadaEspectadores)
         }
+    }
+
+    /** Contador de vueltas para la sonda de cupo (una cada 10 minutos, solo una llamada). */
+    private var fbVueltas = 0
+
+    /**
+     * Sin directo, una sonda muy barata: una llamada cada 10 minutos para saber si Facebook ya nos
+     * devolvió el cupo. No toca la pantalla, solo deja el dato en el log.
+     */
+    private fun probarCupoFacebook() {
+        fbVueltas++
+        if (fbVueltas % 10 != 0) return
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val token = prefs.getString(CLAVE_FB_TOKEN, "").orEmpty().trim()
+        val pageId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
+        if (token.isBlank() || pageId.isBlank()) return
+        Thread {
+            val error = runCatching {
+                com.jfrmedia.switcher.studio.stream.FacebookLive.videoEnVivo(pageId, token)
+            }.exceptionOrNull()
+            if (error == null) L.i("fb", "cupo libre (la sonda pasó)")
+            else L.w("fb", "cupo bloqueado: ${error.message}")
+        }.apply { isDaemon = true }.start()
     }
 
     /** Arranca la lectura del directo: comentarios en vivo y conteo de espectadores. */

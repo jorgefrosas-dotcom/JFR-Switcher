@@ -30,7 +30,26 @@ franja de arriba más ordenada». Notas completas en `docs/NOTAS-0.2.13.md`.
   60 % central de un cuadro vertical 9:16 llene la columna sin deformar ni cortar arriba/abajo.
   **Si el celular mandara el cuadro horizontal, el mismo recuadro mostraría menos ancho del central**
   (se recorta más, nunca deforma) — hay que verlo con las cámaras de verdad.
+- **La tablet le pide a cada celular su orientación** en este modo: jugadores verticales, mesa y
+  ambiente horizontales (el mismo mensaje que usa el Modo Studio para el lienzo 9:16, pero por cámara).
+  Verificado: los celulares pasan a `giro=90` y el cuadro llega vertical (proporción 0.563).
+- **Mesa sin recortar**: se encaja completa en el hueco entre columnas y debajo del banner, con marco
+  claro y **esquinas redondeadas de 30 px** (también en los jugadores). El área de adentro del marco
+  queda 16:9 exacta.
+- **Chips Energy / Supporter / Retreat dentro de la cámara de cada jugador**: en columna, asomando por
+  la orilla, y al usarlos se deslizan con animación dejando la punta redondeada a la vista. Los
+  **iconos del mazo** van arriba del chip de Energy, del mismo tamaño tengan uno o dos.
+- **Banner sin chips**: las 6 pokebolas ahora son más grandes y van en **2 columnas × 3 filas** junto
+  al marcador; nombre, mazo y récord más grandes.
+- **Columna derecha del modo = espectadores y comentarios de Facebook**; los botones se reacomodaron
+  (6 debajo de Cámara 4 en 3×2, Pasar turno y Ganó dentro de cada tarjeta, Cámara general se quitó y se
+  abre tocando la tarjeta de Mesa).
 
-Pendiente antes de publicar: **probarlo en la tablet real** en una partida (el emulador no puede probar
-cámaras ni red), sobre todo el recorte de los jugadores con el celular vertical.
+Pendiente antes de publicar:
+
+1. **Probar en la tablet real en una partida**, sobre todo el recorte de los jugadores con el celular
+   vertical y la mesa conectada.
+2. **Terminar de probar el panel de Facebook** con un directo de verdad (el 24/11 funcionó pero
+   Facebook bloqueó por exceso de consultas). Detalle y aprendizajes en
+   `memoria\JFR-Switcher-FACEBOOK-20261124.md`.
 
