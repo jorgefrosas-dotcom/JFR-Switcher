@@ -3163,8 +3163,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      */
     /** En vertical las tarjetas son verticales (9:16) y entran más por fila. */
     private fun columnasFuentes(): Int = when {
-        // Modo Pokémon TCG: las 4 cámaras en una sola columna, como el diseño aprobado.
-        modoTcg -> 1
+        // Modo Pokémon TCG: dos columnas. Arriba los dos jugadores (verticales) y abajo la mesa y
+        // el ambiente (horizontales), que es la forma de cada cámara en el programa (Jorge, 23/11/2026).
+        modoTcg -> 2
         // En celular la columna es más ancha: 2 tarjetas por fila, más grandes. Para ver el resto se
         // desliza la columna (pedido de Jorge, 29/10).
         esPantallaCelular() -> 2
@@ -3233,7 +3234,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
                 val tile = SourceTileView(this)
                 // Las tarjetas siguen la forma del lienzo (en Modo Studio vertical van a 3:4).
-                tile.modoAspecto(aspectoFuente)
+                // En Modo Pokémon TCG cada tarjeta tiene la forma de su cámara en el programa: los
+                // jugadores verticales (3:4, no 9:16 para que las cuatro quepan) y la mesa y el
+                // ambiente horizontales (Jorge, 23/11/2026).
+                tile.modoAspecto(
+                    if (!modoTcg) aspectoFuente
+                    else if (index <= 1) 3f / 4f
+                    else 16f / 9f
+                )
                 // Con 6 cámaras en una fila hacen falta letras más chicas; en el celular vertical
                 // las tarjetas son angostas y también (Jorge, 29/10: «sí caben si son más chicos»).
                 tile.modoCompacto((modoStudio && studioVertical) || (esPantallaCelular() && vertical))
@@ -7341,26 +7349,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     /**
-     * Ancho del banner del modo (fracción del lienzo). Con las cámaras de los jugadores en 4:3 queda
-     * lugar para que el banner sea más ancho: **58.75 %** (antes 60 % con cámaras 16:9 y 54 % con 16:10).
+     * Ancho del banner del modo (fracción del lienzo): **58.75 %**, centrado arriba.
      *
-     * Sale de repartir el ancho: `2·anchoCamara + anchoBanner + 4·margen = 1`, con las cámaras a
-     * `0.75 × alto` (4:3) y el banner a `alto / 0.4` (su formato 1600×360). El alto de la franja que
-     * resulta es **23.5 %** del lienzo (Jorge, 22/11/2026).
+     * Con la vista de mesa nueva las columnas de los jugadores se llevan ~19 % a cada lado, así que
+     * el hueco del centro es ~62 %: el banner entra con un 1.6 % de aire por lado. Si se ensancharan
+     * las columnas, el banner es lo primero que deja de caber (Jorge, 23/11/2026).
      */
     private fun anchoBannerTcg(): Float = 0.5875f
 
     /**
-     * Alto de la franja de arriba: el banner se dibuja a 1600×360, así que su alto sale de su ancho.
-     * Las cámaras de los jugadores usan este mismo alto (≈0.235 del lienzo).
+     * Alto de la franja del banner: se dibuja a 1600×360, así que su alto sale de su ancho
+     * (≈23.5 % del lienzo).
      */
     private fun altoTiraTcg(): Float = anchoBannerTcg() * (16f / 9f) / (1600f / 360f)
 
-    /**
-     * Ancho de las cámaras de jugador en **4:3**: el cuadro 16:9 del celular se recorta a los lados
-     * (~25 % del ancho) para que la cámara se vea más grande y cuadrada.
-     */
-    private fun anchoPipTcg(): Float = altoTiraTcg() * 0.75f
 
     /**
      * Coloca el banner del modo: **arriba** con la vista de mesa, **abajo** cuando hay un jugador a
@@ -7401,9 +7403,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     /**
-     * Iconos del mazo **debajo de la cámara de cada jugador**, solo en la vista de mesa.
-     * Cada icono mide la **mitad del alto del recuadro de la cámara** (50 %), van centrados bajo la
-     * cámara y sin texto: así se ve de un golpe qué mazo juega cada quien (Jorge, 22/11/2026).
+     * Iconos del mazo **dentro del área de cámara de cada jugador, ocupando la parte de abajo**,
+     * solo en la vista de mesa (Jorge, 23/11/2026: antes se montaban un 30 % sobre la cámara).
+     *
+     * Van centrados en la columna del jugador y pegados al pie, sin texto: así se ve de un golpe
+     * qué mazo juega cada quien sin tapar la cara.
      */
     private fun actualizarIconosMazo() {
         val escena = b.canvas.scene
@@ -7414,21 +7418,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             runCatching { b.canvas.requestRender() }
             return
         }
-        val altoCam = altoTiraTcg()
-        val anchoCam = anchoPipTcg()
-        val entre = anchoCam * 0.06f
-        listOf(estadoTcg.uno to 0.015f, estadoTcg.dos to (0.985f - anchoCam)).forEach { par ->
+        val anchoCam = anchoJugadorTcg()
+        val entre = anchoCam * 0.04f
+        listOf(estadoTcg.uno to 0f, estadoTcg.dos to (1f - anchoCam)).forEach { par ->
             val jugador = par.first
             val xCam = par.second
             val dibujos = com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, jugador.mazoId)
                 .filter { !it.isRecycled }.take(2)
             if (dibujos.isEmpty()) return@forEach
-            // El icono mide el 60 % del ancho del recuadro de la cámara (con dos, la mitad cada uno
-            // para que la pareja quepa). Un 30 % del icono queda MONTADO sobre la cámara.
-            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.60f else 0.50f
-            val altoIcono = anchoIcono * (16f / 9f)     // cuadrado de verdad en un lienzo 16:9
-            val arriba = (0.02f + altoCam) - altoIcono * 0.30f
-            val abajo = arriba + altoIcono
+            // Un icono mide el 72 % del ancho de la columna; con dos, 44 % cada uno para que la
+            // pareja quepa con un respiro en medio. Cuadrados de verdad en un lienzo 16:9.
+            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.72f else 0.44f
+            val altoIcono = anchoIcono * (16f / 9f)
+            val abajo = 0.975f                 // pie de la columna, con un pelín de aire
+            val arriba = abajo - altoIcono
             val anchoTotal = anchoIcono * dibujos.size + entre * (dibujos.size - 1)
             var x = xCam + anchoCam / 2f - anchoTotal / 2f
             val items = ArrayList<ImageItem>()
@@ -7445,17 +7448,51 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         runCatching { b.canvas.requestRender() }
     }
 
-    /** Coloca las cámaras en su rectángulo del modo (mesa al fondo, jugadores como PiP). */
+    /**
+     * Ancho de la cámara de cada jugador en la vista de mesa: **la columna entera, de arriba a abajo
+     * del monitor**, mostrando solo el **60 % central** del cuadro (se recorta 20 % de cada lado).
+     *
+     * El celular manda el cuadro **vertical 9:16**; para que ese 60 % central llene la columna sin
+     * deformar ni recortar arriba y abajo, el ancho del lienzo tiene que ser exactamente:
+     * `0.60 × (9/16) × (9/16)` ≈ **19 %** del ancho (el segundo 9/16 es porque el lienzo es 16:9).
+     * Si el celular mandara el cuadro horizontal, el mismo recuadro mostraría menos ancho del central
+     * (se recorta más), nunca deforma (Jorge, 23/11/2026).
+     */
+    private fun anchoJugadorTcg(): Float = 0.60f * (9f / 16f) * (9f / 16f)
+
+    /** La mesa ocupa lo que queda entre las dos columnas: 16:9 en un lienzo 16:9 ⇒ alto = ancho. */
+    private fun altoMesaTcg(): Float = 1f - 2f * anchoJugadorTcg()
+
+    /**
+     * Porción del lienzo donde va la mesa en la vista de mesa: centrada entre las dos columnas y
+     * **debajo del banner**, con el mismo margen de arriba y de abajo.
+     */
+    private fun rectMesaTcg(): RectF {
+        val ancho = anchoJugadorTcg()
+        val alto = altoMesaTcg()
+        val y0 = (0.02f + altoTiraTcg() + 0.98f - alto) / 2f
+        return RectF(ancho, y0, 1f - ancho, y0 + alto)
+    }
+
+    /**
+     * Coloca las tres cámaras de la vista de mesa: **jugador 1 a la izquierda**, **jugador 2 a la
+     * derecha** (las dos de arriba a abajo del monitor) y **la mesa al centro** (horizontal, con el
+     * área de juego de ambos). La usan tanto el armado de la escena como el reacomodo de rectángulos,
+     * para que no se separen las dos versiones.
+     */
+    private fun colocarCamarasTcg(escena: Scene) {
+        val ancho = anchoJugadorTcg()
+        escena.camAt(0)?.rect?.set(0f, 0f, ancho, 1f)
+        escena.camAt(1)?.rect?.set(1f - ancho, 0f, 1f, 1f)
+        escena.camAt(2)?.rect?.set(rectMesaTcg())
+    }
+
+    /** Coloca las cámaras en su rectángulo del modo (mesa al centro, jugadores a los lados). */
     private fun aplicarRectangulosTcg() {
         val escena = b.canvas.scene
         aplicandoRectTcg = true
         try {
-            escena.camAt(2)?.rect?.set(0f, 0f, 1f, 1f)
-            // Jugadores: misma altura que el banner y un poco más cuadrados (se recortan los lados).
-            val alto = altoTiraTcg()
-            val ancho = anchoPipTcg()
-            escena.camAt(0)?.rect?.set(0.015f, 0.02f, 0.015f + ancho, 0.02f + alto)
-            escena.camAt(1)?.rect?.set(0.985f - ancho, 0.02f, 0.985f, 0.02f + alto)
+            colocarCamarasTcg(escena)
             // La cámara que está al aire va a pantalla completa (jugador, mesa o ambiente).
             if (vistaTcg != VISTA_MESA) escena.camAt(vistaTcg)?.rect?.set(0f, 0f, 1f, 1f)
             // Y cualquier cámara que se haya colado en la escena del modo se saca (así no queda
@@ -9043,14 +9080,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
 
         val mesa = escena.addCam(2)
-        mesa?.rect?.set(0f, 0f, 1f, 1f)
-        // Jugadores: misma altura que el banner y un poco más cuadrados (se recortan los lados).
-        val altoTira = altoTiraTcg()
-        val anchoPip = anchoPipTcg()
         val uno = escena.addCam(0)
-        uno?.rect?.set(0.015f, 0.02f, 0.015f + anchoPip, 0.02f + altoTira)
         val dos = escena.addCam(1)
-        dos?.rect?.set(0.985f - anchoPip, 0.02f, 0.985f, 0.02f + altoTira)
+        // Jugadores verticales a los lados (de arriba a abajo) y la mesa horizontal al centro.
+        colocarCamarasTcg(escena)
 
         if (enMesa) {
             uno?.visible = true

@@ -21,7 +21,16 @@ franja de arriba más ordenada». Notas completas en `docs/NOTAS-0.2.13.md`.
 - Los mazos extra **no muestran % de uso** (Limitless no lo publica) y no se repiten con el top.
 - Herramienta nueva para regenerar la lista cuando rote el formato:
   `herramientas\generar-mazos-extra.ps1` (con caché y pausa porque la API corta con 429).
+- **Vista de mesa nueva:** jugadores **verticales a los lados, de arriba a abajo**, mostrando el **60 %
+  central** del cuadro (se recorta 20 % de cada lado); **la mesa al centro en horizontal**; el banner se
+  queda arriba con el mismo tamaño; los **iconos del mazo dentro del área de cámara del jugador**, al pie.
+  Las **tarjetas de preview** pasan a dos columnas con la forma de cada cámara (jugadores verticales,
+  mesa y ambiente horizontales).
+- La columna de cada jugador mide **19 %** del ancho porque `0.60 × 9/16 × 9/16` es lo que hace que el
+  60 % central de un cuadro vertical 9:16 llene la columna sin deformar ni cortar arriba/abajo.
+  **Si el celular mandara el cuadro horizontal, el mismo recuadro mostraría menos ancho del central**
+  (se recorta más, nunca deforma) — hay que verlo con las cámaras de verdad.
 
 Pendiente antes de publicar: **probarlo en la tablet real** en una partida (el emulador no puede probar
-cámaras ni red).
+cámaras ni red), sobre todo el recorte de los jugadores con el celular vertical.
 

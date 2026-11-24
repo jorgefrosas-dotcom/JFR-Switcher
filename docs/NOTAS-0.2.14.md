@@ -1,6 +1,21 @@
 # Notas de la versión 0.2.14 (23/11/2026)
 
-**Modo Pokémon TCG: la lista de mazos pasa de 29 a 79, con buscador.**
+**Modo Pokémon TCG: la lista de mazos pasa de 29 a 79, con buscador, y la vista de mesa cambia a
+cámaras verticales a los lados con la mesa al centro.**
+
+## Vista de mesa nueva (23/11/2026)
+
+- **Jugador 1 a la izquierda y jugador 2 a la derecha, verticales y de arriba a abajo del monitor**, con
+  el **60 % central** de su cuadro (se recorta 20 % de cada lado). La columna mide **19 %** del ancho:
+  sale de `0.60 × 9/16 × 9/16`, que es lo justo para que el 60 % central de un cuadro vertical 9:16 llene
+  la columna **sin deformar y sin cortar arriba ni abajo**.
+- **La mesa al centro, horizontal (16:9)**, con el área de juego de los dos jugadores, debajo del banner.
+- **El banner se queda arriba y centrado**, con el mismo tamaño (58.75 % del ancho, 23.5 % del alto):
+  entra justo en el hueco entre las dos columnas.
+- **Los iconos del mazo en uso van dentro del área de cámara de cada jugador, pegados al pie** (antes se
+  montaban un 30 % sobre la cámara y quedaban fuera del recuadro).
+- **Las tarjetas de preview** ahora van en dos columnas y con la forma de su cámara en el programa: los
+  dos jugadores **verticales** (3:4) y la mesa y el ambiente **horizontales** (16:9).
 
 ## De dónde salen los 50 mazos nuevos
 
