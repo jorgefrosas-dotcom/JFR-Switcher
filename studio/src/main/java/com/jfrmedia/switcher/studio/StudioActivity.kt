@@ -8496,11 +8496,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             setPadding(12.dp, 4.dp, 12.dp, 0)
         }
         columna.addView(TextView(this).apply {
-            text = "Top del formato · actualizado $fecha"
+            text = "Top del formato + ${com.jfrmedia.switcher.studio.tcg.Mazos.extras(this@StudioActivity).size} " +
+                "mazos de torneo · actualizado $fecha"
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11f)
             setTextColor(ContextCompat.getColor(context, R.color.text_dim))
             setPadding(6.dp, 0, 6.dp, 6.dp)
         })
+
+        // Buscador: con ~80 mazos en la lista, escribir tres letras es más rápido que bajar con el dedo.
+        val campo = EditText(this).apply {
+            hint = "Buscar mazo (por ejemplo: Mega, Zoroark, Igglybuff)…"
+            setSingleLine()
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+        }
+        columna.addView(campo)
+        val filas = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        columna.addView(filas)
 
         val dialogo = AlertDialog.Builder(this)
             .setTitle("Mazo de ${jugador.nombre}")
@@ -8517,10 +8529,39 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             toast(if (mazo == null) "Mazo quitado" else "Mazo: ${mazo.nombre}")
         }
 
-        lista.forEach { mazo ->
-            columna.addView(filaMazoDialogo(mazo, mazo.id == jugador.mazoId) { asignar(mazo) })
+        fun pintar(filtro: String) {
+            filas.removeAllViews()
+            val buscar = filtro.trim()
+            var cuantos = 0
+            lista.forEach { mazo ->
+                if (buscar.isNotEmpty() && !mazo.nombre.contains(buscar, ignoreCase = true)) return@forEach
+                filas.addView(filaMazoDialogo(mazo, mazo.id == jugador.mazoId) { asignar(mazo) })
+                cuantos++
+            }
+            if (cuantos == 0) {
+                filas.addView(TextView(this).apply {
+                    text = "Ningún mazo se llama así"
+                    setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13f)
+                    setTextColor(ContextCompat.getColor(context, R.color.text_dim))
+                    setPadding(8.dp, 10.dp, 8.dp, 10.dp)
+                })
+            }
         }
+        campo.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) =
+                pintar(s?.toString().orEmpty())
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+        pintar("")
         dialogo.setOnShowListener {
+            // Con el teclado abierto, la ventana se encoge para que la lista siga viéndose (si no, el
+            // teclado tapaba la mitad de los mazos en la tablet).
+            runCatching {
+                dialogo.window?.setSoftInputMode(
+                    android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                )
+            }
             dialogo.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener { asignar(null) }
             dialogo.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
                 runCatching { dialogo.dismiss() }

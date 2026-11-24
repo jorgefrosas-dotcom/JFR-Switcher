@@ -28,11 +28,19 @@ data class Mazo(
  * **una vez al día** (al entrar al Modo Pokémon). Los iconos (los mismos sprites que usa Limitless) se
  * bajan una vez y se guardan como archivo en la carpeta privada de la app, así que se ven sin internet.
  *
+ * Además de ese top, la app trae **50 mazos más** dentro del APK (`assets/mazos_extra.json`): son los
+ * arquetipos del Estándar que aparecen en los torneos y que el top del sitio no publica (el sitio solo
+ * lista ~29). Esa lista es fija y se regenera con `herramientas\generar-mazos-extra.ps1`.
+ *
  * Cuando no hay red o la página cambia, se sigue usando la última lista buena.
  */
 object Mazos {
 
-    private const val URL_LISTA = "https://limitlesstcg.com/decks?page=1"
+    /** Las dos páginas del top: la primera trae 25 mazos y la segunda los 4 que quedan. */
+    private val URL_LISTA = listOf(
+        "https://limitlesstcg.com/decks?page=1",
+        "https://limitlesstcg.com/decks?page=2",
+    )
     private const val UA =
         "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) " +
             "Chrome/120.0 Mobile Safari/537.36"
@@ -42,19 +50,25 @@ object Mazos {
     private const val CLAVE_ESQUEMA = "mazos_esquema"
     private const val UN_DIA_MS = 24L * 60 * 60 * 1000
 
+    /** Mazos extra que vienen dentro del APK (ver `herramientas\generar-mazos-extra.ps1`). */
+    private const val ASSET_EXTRA = "mazos_extra.json"
+
     /**
      * Versión de la caché de iconos. Se sube cuando cambia cómo se guardan (por ejemplo al pasar de
      * uno a dos iconos por mazo) para forzar una descarga nueva una sola vez.
      */
-    private const val ESQUEMA_ICONOS = 2
+    private const val ESQUEMA_ICONOS = 3
 
     /** Iconos ya cargados en memoria (por id de mazo). */
     private val memoriaIconos = HashMap<String, List<Bitmap>>()
 
+    /** Mazos extra leídos del APK (se leen una sola vez). */
+    private var extraEnMemoria: List<Mazo>? = null
+
     // ------------------------------------------------------------------ consulta
 
-    /** Lista guardada (vacía si nunca se ha descargado). */
-    fun guardados(ctx: Context): List<Mazo> = leer(ctx)
+    /** Lista completa: el top descargado del sitio primero y después los 50 extra de los torneos. */
+    fun guardados(ctx: Context): List<Mazo> = unir(leer(ctx), extras(ctx))
 
     /** ¿Toca volver a bajar la lista? (nunca descargada o con más de un día) */
     fun vieja(ctx: Context): Boolean {
@@ -72,7 +86,21 @@ object Mazos {
     fun cuando(ctx: Context): Long =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(CLAVE_CUANDO, 0L)
 
-    fun porId(ctx: Context, id: String): Mazo? = leer(ctx).firstOrNull { it.id == id }
+    fun porId(ctx: Context, id: String): Mazo? = guardados(ctx).firstOrNull { it.id == id }
+
+    /** Los mazos extra que vienen dentro del APK (leídos una sola vez). */
+    fun extras(ctx: Context): List<Mazo> {
+        extraEnMemoria?.let { return it }
+        val lista = runCatching {
+            val texto = ctx.assets.open(ASSET_EXTRA).use { it.readBytes().toString(Charsets.UTF_8) }
+            desdeJson(texto)
+        }.getOrElse { t ->
+            L.w("mazos", "no se pudieron leer los mazos extra: ${t.message}")
+            emptyList()
+        }
+        extraEnMemoria = lista
+        return lista
+    }
 
     /** Iconos ya bajados de un mazo (0, 1 o 2). Se cachean en memoria. */
     fun iconos(ctx: Context, mazoId: String): List<Bitmap> {
@@ -98,21 +126,23 @@ object Mazos {
 
     /**
      * Baja la lista y los iconos que falten. **Bloqueante**: se llama desde un hilo aparte.
-     * Devuelve la lista que quedó (la nueva, o la guardada si algo falló).
+     * Devuelve la lista que quedó (la nueva más los extra, o la guardada si algo falló).
      */
     fun actualizar(ctx: Context): List<Mazo> {
         val nueva = runCatching { descargarLista() }.getOrElse { t ->
             L.w("mazos", "no se pudo bajar la lista: ${t.message}")
-            return leer(ctx)
+            null
         }
-        if (nueva.isEmpty()) {
+        if (nueva != null && nueva.isNotEmpty()) {
+            guardar(ctx, nueva)
+        } else {
             L.w("mazos", "la lista vino vacía: se queda la anterior")
-            return leer(ctx)
         }
-        guardar(ctx, nueva)
         // Los iconos se bajan después de guardar: si alguno falla, la lista ya quedó.
         // Se guardan hasta dos por mazo (algunos llevan dos Pokémon y se muestran los dos).
-        nueva.forEach { mazo ->
+        // Incluye los mazos extra, que también tienen iconos que bajar (una sola vez).
+        val todos = guardados(ctx)
+        todos.forEach { mazo ->
             mazo.iconos.take(2).forEachIndexed { indice, url ->
                 val archivo = archivoIcono(ctx, mazo.id, indice + 1)
                 if (archivo.exists() && archivo.length() > 0) return@forEachIndexed
@@ -124,27 +154,65 @@ object Mazos {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putInt(CLAVE_ESQUEMA, ESQUEMA_ICONOS)
             .apply()
-        L.i("mazos", "lista actualizada: ${nueva.size} mazos (primero: ${nueva.first().nombre})")
-        return nueva
+        L.i("mazos", "lista actualizada: ${todos.size} mazos (top ${leer(ctx).size} + extra)")
+        return todos
     }
 
-    private fun descargarLista(): List<Mazo> {
-        val html = bajarTexto(URL_LISTA)
-        val filas = Regex("<tr>(.*?)</tr>", RegexOption.DOT_MATCHES_ALL).findAll(html)
-        val lista = ArrayList<Mazo>()
-        for (fila in filas) {
-            val trozo = fila.groupValues[1]
-            val enlace = Regex("<a href=\"/decks/(\\d+)\">(.*?)</a>", RegexOption.DOT_MATCHES_ALL)
-                .find(trozo) ?: continue
-            val id = enlace.groupValues[1]
-            val nombre = limpiarTexto(enlace.groupValues[2])
-            if (id.isBlank() || nombre.isBlank()) continue
-            val iconos = Regex("src=\"(https://r2\\.limitlesstcg\\.net/pokemon/[^\"]+)\"")
-                .findAll(trozo).map { it.groupValues[1] }.toList()
-            val uso = Regex("(\\d+(?:\\.\\d+)?%)\"").find(trozo)?.groupValues?.get(1)
-                ?: Regex("(\\d+(?:\\.\\d+)?%)").find(trozo)?.groupValues?.get(1).orEmpty()
-            lista.add(Mazo(id = id, nombre = nombre, iconos = iconos, uso = uso))
+    /**
+     * Pega el top descargado y los extra del APK, sin repetir: si el top del sitio ya trae un mazo con
+     * el mismo id o el mismo nombre, el extra se descarta (el del sitio tiene el % de uso).
+     */
+    private fun unir(top: List<Mazo>, extra: List<Mazo>): List<Mazo> {
+        val ids = HashSet<String>()
+        val nombres = HashSet<String>()
+        val salida = ArrayList<Mazo>(top.size + extra.size)
+        for (m in top) {
+            if (!ids.add(m.id)) continue
+            nombres.add(normalizar(m.nombre))
+            salida.add(m)
         }
+        for (m in extra) {
+            if (ids.contains(m.id)) continue
+            if (!nombres.add(normalizar(m.nombre))) continue
+            ids.add(m.id)
+            salida.add(m)
+        }
+        return salida
+    }
+
+    /** Para comparar nombres: sin «ex» final, sin acentos y sin signos. */
+    private fun normalizar(nombre: String): String = nombre
+        .lowercase()
+        .replace(Regex("\\bex\\b"), "")
+        .replace(Regex("[^a-z0-9]"), "")
+
+    private fun descargarLista(): List<Mazo> {
+        // La página 1 trae 25 mazos y la 2 los 4 que faltan. Si alguna falla, se usa lo que llegó.
+        val lista = ArrayList<Mazo>()
+        var fallos = 0
+        for (url in URL_LISTA) {
+            val html = runCatching { bajarTexto(url) }.getOrElse { t ->
+                fallos++
+                L.w("mazos", "no se pudo bajar $url: ${t.message}")
+                continue
+            }
+            val filas = Regex("<tr>(.*?)</tr>", RegexOption.DOT_MATCHES_ALL).findAll(html)
+            for (fila in filas) {
+                val trozo = fila.groupValues[1]
+                val enlace = Regex("<a href=\"/decks/(\\d+)\">(.*?)</a>", RegexOption.DOT_MATCHES_ALL)
+                    .find(trozo) ?: continue
+                val id = enlace.groupValues[1]
+                val nombre = limpiarTexto(enlace.groupValues[2])
+                if (id.isBlank() || nombre.isBlank()) continue
+                if (lista.any { it.id == id }) continue
+                val iconos = Regex("src=\"(https://r2\\.limitlesstcg\\.net/pokemon/[^\"]+)\"")
+                    .findAll(trozo).map { it.groupValues[1] }.toList()
+                val uso = Regex("(\\d+(?:\\.\\d+)?%)\"").find(trozo)?.groupValues?.get(1)
+                    ?: Regex("(\\d+(?:\\.\\d+)?%)").find(trozo)?.groupValues?.get(1).orEmpty()
+                lista.add(Mazo(id = id, nombre = nombre, iconos = iconos, uso = uso))
+            }
+        }
+        if (lista.isEmpty() && fallos > 0) throw IllegalStateException("no se pudo bajar ninguna página")
         return lista
     }
 
@@ -213,6 +281,14 @@ object Mazos {
     private fun leer(ctx: Context): List<Mazo> = runCatching {
         val texto = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(CLAVE_LISTA, null) ?: return emptyList()
+        desdeJson(texto)
+    }.getOrElse {
+        L.w("mazos", "no se pudo leer la lista guardada: ${it.message}")
+        emptyList()
+    }
+
+    /** Convierte el JSON de la lista (el guardado o el asset de los extra) en mazos. */
+    private fun desdeJson(texto: String): List<Mazo> {
         val arr = JSONArray(texto)
         val lista = ArrayList<Mazo>(arr.length())
         for (i in 0 until arr.length()) {
@@ -230,10 +306,7 @@ object Mazos {
                 )
             )
         }
-        lista.filter { it.id.isNotBlank() && it.nombre.isNotBlank() }
-    }.getOrElse {
-        L.w("mazos", "no se pudo leer la lista guardada: ${it.message}")
-        emptyList()
+        return lista.filter { it.id.isNotBlank() && it.nombre.isNotBlank() }
     }
 
     private fun guardar(ctx: Context, lista: List<Mazo>) {

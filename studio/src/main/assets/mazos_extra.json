@@ -1,0 +1,429 @@
+[
+    {
+        "id":  "ogerpon-meganium-hydrapple",
+        "nombre":  "Ogerpon Meganium Hydrapple",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/ogerpon.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/hydrapple.png"
+                   ]
+    },
+    {
+        "id":  "alakazam-dudunsparce",
+        "nombre":  "Alakazam Dudunsparce",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/alakazam.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dudunsparce.png"
+                   ]
+    },
+    {
+        "id":  "lopunny-dudunsparce",
+        "nombre":  "Lopunny Dudunsparce",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/lopunny-mega.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dudunsparce.png"
+                   ]
+    },
+    {
+        "id":  "dragapult-dudunsparce",
+        "nombre":  "Dragapult Dudunsparce",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dragapult.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dudunsparce.png"
+                   ]
+    },
+    {
+        "id":  "dragapult-dusknoir",
+        "nombre":  "Dragapult Dusknoir",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dragapult.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dusknoir.png"
+                   ]
+    },
+    {
+        "id":  "dragapult-blaziken",
+        "nombre":  "Dragapult Blaziken",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dragapult.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/blaziken.png"
+                   ]
+    },
+    {
+        "id":  "sharpedo-toxtricity",
+        "nombre":  "Sharpedo Toxtricity",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/sharpedo-mega.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/toxtricity.png"
+                   ]
+    },
+    {
+        "id":  "mega-golisopod-ex",
+        "nombre":  "Mega Golisopod",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/golisopod-mega.png"
+                   ]
+    },
+    {
+        "id":  "alakazam-dusknoir",
+        "nombre":  "Alakazam Dusknoir",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/alakazam.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dusknoir.png"
+                   ]
+    },
+    {
+        "id":  "lucario-hariyama",
+        "nombre":  "Lucario Hariyama",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/lucario-mega.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/hariyama.png"
+                   ]
+    },
+    {
+        "id":  "iron-thorns-ex",
+        "nombre":  "Iron Thorns",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/iron-thorns.png"
+                   ]
+    },
+    {
+        "id":  "igglybuff-30c",
+        "nombre":  "Igglybuff",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/igglybuff.png"
+                   ]
+    },
+    {
+        "id":  "toucannon-pbl",
+        "nombre":  "Toucannon",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/toucannon.png"
+                   ]
+    },
+    {
+        "id":  "grimmsnarl-froslass",
+        "nombre":  "Grimmsnarl Froslass",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/grimmsnarl.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/froslass.png"
+                   ]
+    },
+    {
+        "id":  "mega-malamar-ex",
+        "nombre":  "Mega Malamar",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/malamar-mega.png"
+                   ]
+    },
+    {
+        "id":  "kangaskhan-bouffalant",
+        "nombre":  "Kangaskhan Bouffalant",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/kangaskhan-mega.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/bouffalant.png"
+                   ]
+    },
+    {
+        "id":  "lopunny-dusknoir",
+        "nombre":  "Lopunny Dusknoir",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/lopunny-mega.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dusknoir.png"
+                   ]
+    },
+    {
+        "id":  "mega-darkrai-ex",
+        "nombre":  "Mega Darkrai",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/darkrai-mega.png"
+                   ]
+    },
+    {
+        "id":  "seaking-pre",
+        "nombre":  "Seaking Festival Lead",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/seaking.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/thwackey.png"
+                   ]
+    },
+    {
+        "id":  "ogerpon-meganium-arboliva",
+        "nombre":  "Ogerpon Meganium Arboliva",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/ogerpon.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/arboliva.png"
+                   ]
+    },
+    {
+        "id":  "okidogi-barbaracle",
+        "nombre":  "Okidogi Barbaracle",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/okidogi.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/barbaracle.png"
+                   ]
+    },
+    {
+        "id":  "manectric-eelektrik",
+        "nombre":  "Manectric Eelektrik",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/manectric-mega.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/eelektrik.png"
+                   ]
+    },
+    {
+        "id":  "hops-trevenant",
+        "nombre":  "Hop\u0027s Trevenant",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/trevenant.png"
+                   ]
+    },
+    {
+        "id":  "starmie-froslass",
+        "nombre":  "Starmie Froslass",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/starmie-mega.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/froslass.png"
+                   ]
+    },
+    {
+        "id":  "ceruledge-ex",
+        "nombre":  "Ceruledge",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/ceruledge.png"
+                   ]
+    },
+    {
+        "id":  "iono-bellibolt",
+        "nombre":  "Iono\u0027s Bellibolt",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/bellibolt.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/voltorb.png"
+                   ]
+    },
+    {
+        "id":  "starmie-dusknoir",
+        "nombre":  "Starmie Dusknoir",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/starmie-mega.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dusknoir.png"
+                   ]
+    },
+    {
+        "id":  "raging-bolt-ogerpon",
+        "nombre":  "Raging Bolt Ogerpon",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/raging-bolt.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/ogerpon.png"
+                   ]
+    },
+    {
+        "id":  "mega-absol-mega-audino",
+        "nombre":  "Absol Audino",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/absol-mega.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/audino-mega.png"
+                   ]
+    },
+    {
+        "id":  "mega-charizard-x-ex",
+        "nombre":  "Mega Charizard X",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/charizard-mega-x.png"
+                   ]
+    },
+    {
+        "id":  "mega-zygarde-ex",
+        "nombre":  "Mega Zygarde",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/zygarde-mega.png"
+                   ]
+    },
+    {
+        "id":  "hydreigon-ex",
+        "nombre":  "Hydreigon",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/hydreigon.png"
+                   ]
+    },
+    {
+        "id":  "toxtricity-box",
+        "nombre":  "Toxtricity Box",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/toxtricity.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/absol-mega.png"
+                   ]
+    },
+    {
+        "id":  "gengar-ex",
+        "nombre":  "Gengar",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/gengar.png"
+                   ]
+    },
+    {
+        "id":  "toxtricity-pfl",
+        "nombre":  "Toxtricity",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/toxtricity.png"
+                   ]
+    },
+    {
+        "id":  "mega-manectric-ex-meg",
+        "nombre":  "Mega Manectric",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/manectric-mega.png"
+                   ]
+    },
+    {
+        "id":  "mega-dragonite-ex",
+        "nombre":  "Mega Dragonite",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dragonite-mega.png"
+                   ]
+    },
+    {
+        "id":  "flareon-noctowl",
+        "nombre":  "Flareon Noctowl",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/flareon.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/noctowl.png"
+                   ]
+    },
+    {
+        "id":  "mega-chandelure-ex",
+        "nombre":  "Mega Chandelure",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/chandelure-mega.png"
+                   ]
+    },
+    {
+        "id":  "cinccino-ex",
+        "nombre":  "Cinccino",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/cinccino.png"
+                   ]
+    },
+    {
+        "id":  "yanmega-ex",
+        "nombre":  "Yanmega",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/yanmega.png"
+                   ]
+    },
+    {
+        "id":  "joltik-box",
+        "nombre":  "Joltik Box",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/joltik.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/pikachu.png"
+                   ]
+    },
+    {
+        "id":  "blaziken-ex-jtg",
+        "nombre":  "Blaziken",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/blaziken.png"
+                   ]
+    },
+    {
+        "id":  "mega-abomasnow-ex",
+        "nombre":  "Mega Abomasnow",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/abomasnow-mega.png"
+                   ]
+    },
+    {
+        "id":  "dragapult-alakazam",
+        "nombre":  "Dragapult Alakazam",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/dragapult.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/alakazam.png"
+                   ]
+    },
+    {
+        "id":  "archaludon-ex",
+        "nombre":  "Archaludon",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/archaludon.png"
+                   ]
+    },
+    {
+        "id":  "mamoswine-ex",
+        "nombre":  "Mamoswine",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/mamoswine.png"
+                   ]
+    },
+    {
+        "id":  "sinistcha-ogerpon",
+        "nombre":  "Sinistcha Ogerpon",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/sinistcha.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/ogerpon.png"
+                   ]
+    },
+    {
+        "id":  "mega-camerupt-ex",
+        "nombre":  "Mega Camerupt",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/camerupt-mega.png"
+                   ]
+    },
+    {
+        "id":  "mega-absol-box",
+        "nombre":  "Mega Absol Box",
+        "uso":  "",
+        "iconos":  [
+                       "https://r2.limitlesstcg.net/pokemon/gen9/absol-mega.png",
+                       "https://r2.limitlesstcg.net/pokemon/gen9/kangaskhan-mega.png"
+                   ]
+    }
+]
