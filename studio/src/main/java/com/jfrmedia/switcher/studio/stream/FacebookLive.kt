@@ -80,16 +80,14 @@ object FacebookLive {
         val salida = ArrayList<ComentarioFb>(datos.length())
         for (i in 0 until datos.length()) {
             val o = datos.optJSONObject(i) ?: continue
-            val autorJson = o.optJSONObject("from")
             val texto = o.optString("message", "").trim()
             if (texto.isEmpty()) continue
-            var autor = autorJson?.optString("name", "")?.takeIf { it.isNotBlank() }
-            if (autor == null) {
-                // Segunda oportunidad: el comentario por su id (una sola vez por consulta).
-                val id = o.optString("id", "")
-                if (id.isNotBlank()) autor = autorDeComentario(id, token)
-            }
-            salida.add(ComentarioFb(autor ?: "Alguien", texto))
+            // Se usa el autor solo si Facebook lo manda: preguntarlo por id multiplicaba las
+            // llamadas y disparaba el límite de la aplicación (Jorge, 24/11/2026).
+            val autor = o.optJSONObject("from")?.optString("name", "")?.takeIf { it.isNotBlank() }
+                ?: o.optString("from_name", "").takeIf { it.isNotBlank() }
+                ?: "Alguien"
+            salida.add(ComentarioFb(autor, texto))
         }
         return salida
     }
