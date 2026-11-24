@@ -7462,20 +7462,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             val dibujos = com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, jugador.mazoId)
                 .filter { !it.isRecycled }.take(2)
             if (dibujos.isEmpty()) return@forEach
-            // El icono va **del lado de la cámara de mesa**: jugador 1 a la derecha de su columna y
-            // jugador 2 a la izquierda. Los chips se quedan del lado de afuera. Queda **centrado con
-            // los tres chips** (misma altura que la pila).
-            val altoPila = 3f * altoChipTcg() + 2f * (altoChipTcg() * 0.24f)
-            val centroPila = 0.975f - altoPila / 2f
-            val anchoIcono = anchoCam * if (dibujos.size == 1) 0.33f else 0.15f
+            // Los iconos del mazo van **arriba del chip de Energy**, del mismo tamaño siempre (uno o
+            // dos, no se achican), centrados sobre la pila de chips (Jorge, 24/11/2026).
+            val anchoIcono = anchoCam * 0.33f
             val altoIcono = anchoIcono * (16f / 9f)
-            val arriba = centroPila - altoIcono / 2f
-            val abajo = arriba + altoIcono
+            val altoPila = 3f * altoChipTcg() + 2f * (altoChipTcg() * 0.24f)
+            val techoPila = 0.975f - altoPila                 // justo encima del chip Energy
+            val abajo = techoPila - altoChipTcg() * 0.10f
+            val arriba = abajo - altoIcono
             val anchoTotal = anchoIcono * dibujos.size + entre * (dibujos.size - 1)
-            var x = if (derecha) {
-                anchoCam - anchoCam * 0.04f - anchoTotal      // pegado a la mesa
+            // Centro de la pila de chips (que va asomada hacia afuera de la columna).
+            val centroChips = if (derecha) anchoChipTcg() / 2f - sangradoChipTcg()
+                else 1f - anchoChipTcg() / 2f + sangradoChipTcg()
+            var x = centroChips - anchoTotal / 2f
+            // Que no se salgan de la columna (con dos iconos, centrados sobre los chips se salían y
+            // el borde del monitor los recortaba).
+            x = if (derecha) {
+                x.coerceIn(0.004f, anchoCam - 0.004f - anchoTotal)
             } else {
-                1f - anchoCam + anchoCam * 0.04f
+                x.coerceIn(1f - anchoCam + 0.004f, 1f - 0.004f - anchoTotal)
             }
             val items = ArrayList<ImageItem>()
             dibujos.forEach { bmp ->
