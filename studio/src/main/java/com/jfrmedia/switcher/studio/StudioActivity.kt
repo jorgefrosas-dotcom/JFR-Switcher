@@ -378,11 +378,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         rotulo.text = "YouTube: conectado, leyendo el canal…"
         com.jfrmedia.switcher.studio.stream.YouTubeLive.nombreCanal(this) { nombre ->
             runOnUiThread {
-                rotuloYoutube?.text = if (nombre == null) {
-                    "YouTube: conectado"
-                } else {
-                    "YouTube: conectado como «$nombre»"
+                if (nombre != null) {
+                    rotuloYoutube?.text = "YouTube: conectado como «$nombre»"
+                    return@runOnUiThread
                 }
+                // Autorizó, pero esa cuenta no tiene canal: no se puede transmitir así.
+                rotuloYoutube?.text =
+                    "YouTube: la cuenta no tiene canal · desconecta y elige la CUENTA DE MARCA"
             }
         }
     }

@@ -113,6 +113,25 @@ object YouTubeLive {
     }
 
     /**
+     * ¿La cuenta conectada tiene un canal de YouTube?
+     *
+     * Es distinto de «estar conectado»: se puede autorizar con una cuenta personal que **no tiene
+     * canal**, y entonces YouTube responde `youtubeSignupRequired` al crear el directo. Para
+     * transmitir hay que elegir la **cuenta de marca** en la pantalla de Google (Jorge, 25/11/2026).
+     */
+    fun tieneCanal(contexto: Context, alListo: (Boolean) -> Unit) {
+        conToken(contexto, alListo = { token ->
+            val json = runCatching {
+                pedir("$API/channels?part=id&mine=true&access_token=$token")
+            }.getOrNull()
+            val cuantos = json?.let {
+                JSONObject(it).optJSONArray("items")?.length() ?: 0
+            } ?: 0
+            alListo(cuantos > 0)
+        }) { alListo(false) }
+    }
+
+    /**
      * Ejecuta [accion] con un token válido (lo renueva solo si venció).
      * [alError] se llama si no hay sesión o Google no da token.
      */
@@ -210,7 +229,15 @@ object YouTubeLive {
                 L.i("yt", "transmisión $idEmision creada (stream $idStream, chat ${chat.ifBlank { "pendiente" }})")
                 alListo(DirectoFbYt(idEmision, "$direccion/$clave", chat))
             } catch (t: Throwable) {
-                alError(t.message ?: "no se pudo crear la transmisión")
+                val bruto = t.message ?: "no se pudo crear la transmisión"
+                // Este error es el más confuso: la cuenta autorizó pero no tiene canal.
+                val claro = if (bruto.contains("youtubeSignupRequired")) {
+                    "esa cuenta no tiene canal de YouTube: desconecta y vuelve a conectar " +
+                        "eligiendo la CUENTA DE MARCA (no la personal)"
+                } else {
+                    bruto
+                }
+                alError(claro)
             }
         }, alError = alError)
     }
