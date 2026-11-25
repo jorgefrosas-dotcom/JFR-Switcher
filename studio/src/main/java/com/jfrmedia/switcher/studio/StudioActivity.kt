@@ -336,17 +336,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val servicio = servicioYt
             ?: com.jfrmedia.switcher.studio.stream.YouTubeLive.servicio(this)
         servicioYt = servicio
-        val estado = net.openid.appauth.AuthState(respuesta, fallo)
-        estado.performActionWithFreshTokens(servicio) { token, _, excepcion ->
-            if (token.isNullOrBlank() || excepcion != null) {
-                com.jfrmedia.switcher.core.util.L.w(
-                    "yt", "token: ${excepcion?.message ?: "sin token"}"
-                )
-                runOnUiThread {
-                    toast("Google no dio el permiso: ${excepcion?.message ?: "sin token"}")
+        // Intercambio **explícito** del código por el token: así, si Google lo rechaza, devuelve el
+        // motivo (`invalid_grant`, `redirect_uri_mismatch`, …) en vez de un «sin token» a secas.
+        val peticion = respuesta.createTokenExchangeRequest()
+        com.jfrmedia.switcher.core.util.L.i("yt", "canjeando el código de Google…")
+        servicio.performTokenRequest(peticion) { tokens, excepcion ->
+            if (excepcion != null || tokens == null) {
+                val detalle = if (excepcion == null) {
+                    "sin token"
+                } else {
+                    "${excepcion.error}${excepcion.errorDescription?.let { ": $it" }.orEmpty()}"
                 }
-                return@performActionWithFreshTokens
+                com.jfrmedia.switcher.core.util.L.w("yt", "token: $detalle")
+                runOnUiThread { toast("Google: $detalle") }
+                return@performTokenRequest
             }
+            val estado = net.openid.appauth.AuthState()
+            estado.update(tokens as net.openid.appauth.TokenResponse, null)
             com.jfrmedia.switcher.studio.stream.YouTubeLive.guardar(this, estado)
             com.jfrmedia.switcher.core.util.L.i("yt", "cuenta conectada")
             runOnUiThread {
