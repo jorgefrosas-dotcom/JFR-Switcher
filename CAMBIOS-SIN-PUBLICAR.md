@@ -44,12 +44,29 @@ franja de arriba más ordenada». Notas completas en `docs/NOTAS-0.2.13.md`.
 - **Columna derecha del modo = espectadores y comentarios de Facebook**; los botones se reacomodaron
   (6 debajo de Cámara 4 en 3×2, Pasar turno y Ganó dentro de cada tarjeta, Cámara general se quitó y se
   abre tocando la tarjeta de Mesa).
+- **Facebook sin Live Producer**: con un token de usuario, la app trae la lista de Páginas que
+  administras, guarda el token de la que elijas y **crea el directo sola** (`status=LIVE_NOW`),
+  recibiendo el id y la dirección con la clave. Al detener, **cierra el directo** en Facebook.
+  Incluye campo de **descripción** del directo.
+- **Motor de emisión multi-destino** (`MultiStream`): el mismo video codificado una vez se puede
+  repartir a **dos direcciones** a la vez.
+- **YouTube**: login de Google con **AppAuth** (Authorization Code + PKCE, sin guardar contraseñas),
+  y creación de la transmisión por API (`liveStreams` + `liveBroadcasts` con arranque y corte
+  automáticos). Casilla **«Transmitir también a YouTube»** para el multistream.
+  - ID de cliente OAuth de tipo Android: `299565880934-0g0n4o4ffcdlpssa5mb6pn98ka20fdb6`
+  - Paquete: `com.jfrmedia.switcher.studio` · SHA-1: `F0:E4:76:57:97:57:BE:C7:81:71:28:8E:C4:0E:D9:98:11:2B:38:90`
+  - En Google Cloud hay que tener habilitada la **YouTube Data API v3** y la cuenta usada como
+    **usuario de prueba** en la pantalla de consentimiento.
+- **Comentarios de Facebook**: se consultan cada 30 s y los espectadores cada 3 min, **solo mientras
+  se transmite**. El nombre del autor no se puede leer sin el permiso `pages_read_user_content`
+  (requiere revisión de Meta), así que se muestra solo el texto.
 
 Pendiente antes de publicar:
 
 1. **Probar en la tablet real en una partida**, sobre todo el recorte de los jugadores con el celular
    vertical y la mesa conectada.
-2. **Terminar de probar el panel de Facebook** con un directo de verdad (el 24/11 funcionó pero
-   Facebook bloqueó por exceso de consultas). Detalle y aprendizajes en
-   `memoria\JFR-Switcher-FACEBOOK-20261124.md`.
+2. **Probar el envío de video** (el emulador no logra codificar; en la tablet sí salió el 24/11).
+3. **Probar el multistream** Facebook + YouTube en la tablet, con 720p en cada destino y midiendo la
+   subida real. El emulador no puede.
+4. Detalle y aprendizajes de Facebook: `memoria\JFR-Switcher-FACEBOOK-20261124.md`.
 
