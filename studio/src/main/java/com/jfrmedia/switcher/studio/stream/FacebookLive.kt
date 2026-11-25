@@ -250,10 +250,21 @@ object FacebookLive {
      * video, Facebook publica solo. Devuelve el id y la URL para transmitir, así no hay que abrir el
      * Live Producer ni copiar claves (Jorge, 25/11/2026).
      */
-    fun crearDirecto(paginaId: String, tokenPagina: String, titulo: String): DirectoFb {
+    fun crearDirecto(
+        paginaId: String,
+        tokenPagina: String,
+        titulo: String,
+        descripcion: String = ""
+    ): DirectoFb {
         val nombre = java.net.URLEncoder.encode(titulo.ifBlank { "JFR Media" }, "UTF-8")
+        val detalle = if (descripcion.isBlank()) {
+            ""
+        } else {
+            "&description=" + java.net.URLEncoder.encode(descripcion, "UTF-8")
+        }
         val json = enviar(
-            "$BASE/$paginaId/live_videos?status=LIVE_NOW&title=$nombre&access_token=$tokenPagina"
+            "$BASE/$paginaId/live_videos?status=LIVE_NOW&title=$nombre$detalle" +
+                "&access_token=$tokenPagina"
         )
         val o = JSONObject(json)
         val id = o.optString("id", "")

@@ -5483,6 +5483,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
             setPadding(0, 8.dp, 0, 0)
         }
+        // --- Descripción del directo (la que se ve en la Página) ---
+        caja.addView(TextView(this).apply {
+            text = "Descripción del directo"
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
+            setPadding(0, 16.dp, 0, 0)
+        })
+        val campoDescripcion = EditText(this).apply {
+            setText(prefs.getString(CLAVE_FB_DESCRIPCION, ""))
+            textSize = 12f
+            hint = "Ej. Liga JFR · Ronda 3 · Bo3"
+        }
+        caja.addView(campoDescripcion)
+
         // --- Páginas que administras: se eligen aquí y la app crea el directo sola ---
         val rotuloPagina = TextView(this).apply {
             text = paginaElegidaTexto()
@@ -5551,17 +5565,22 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             botonFb("Crear directo y salir al aire") {
                 val paginaId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
                 val tokenPagina = prefs.getString(CLAVE_FB_PAGINA_TOKEN, "").orEmpty().trim()
+                // La descripción se guarda tal como está escrita en ese momento.
+                prefs.edit()
+                    .putString(CLAVE_FB_DESCRIPCION, campoDescripcion.text.toString().trim())
+                    .apply()
                 if (paginaId.isBlank() || tokenPagina.isBlank()) {
                     estadoFb.text = "Primero trae tus Páginas y elige una."
                     return@botonFb
                 }
                 estadoFb.text = "Creando el directo en Facebook…"
+                val descripcion = campoDescripcion.text.toString().trim()
                 Thread {
                     var directo: com.jfrmedia.switcher.studio.stream.FacebookLive.DirectoFb? = null
                     var error = ""
                     try {
                         directo = com.jfrmedia.switcher.studio.stream.FacebookLive
-                            .crearDirecto(paginaId, tokenPagina, "JFR Media")
+                            .crearDirecto(paginaId, tokenPagina, "JFR Media", descripcion)
                     } catch (t: Throwable) {
                         error = t.message ?: "error"
                     }
@@ -9910,6 +9929,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         /** Directo creado por la app (para cerrarlo al detener la transmisión). */
         private const val CLAVE_FB_DIRECTO_ID = "fb_directo_id"
+
+        /** Descripción que se manda al crear el directo (la que se ve en la Página). */
+        private const val CLAVE_FB_DESCRIPCION = "fb_descripcion"
         private const val CLAVE_PALETA = "paleta_colores"
         private const val FB_URL_POR_DEFECTO = "rtmps://live-api-s.facebook.com:443/rtmp/"
         private const val CLAVE_TABLET_FRONTAL = "tablet_cam_frontal"
