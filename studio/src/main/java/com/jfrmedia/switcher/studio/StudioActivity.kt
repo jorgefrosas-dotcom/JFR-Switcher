@@ -5477,16 +5477,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
 
         caja.addView(TextView(this).apply {
-            text = "Se transmite con la clave del Live Producer: elige el destino en el navegador, " +
-                "copia la clave y pégala aquí."
+            text = "Con el token de usuario, la app trae tus Páginas y crea el directo sola. " +
+                "Todo lo del Live Producer queda guardado en «Configurar respaldo»."
             textSize = 11f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
             setPadding(0, 0, 0, 10.dp)
         })
 
-        // --- Página ---
-        caja.addView(TextView(this).apply {
-            text = "ID de tu página de Facebook"
+        // --- Página y respaldo: van en un cuadro aparte para no estorbar aquí ---
+        val cajaRespaldo = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(22.dp, 10.dp, 22.dp, 10.dp)
+        }
+        cajaRespaldo.addView(TextView(this).apply {
+            text = "ID de la Página"
             textSize = 11f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
         })
@@ -5494,13 +5498,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             setText(prefs.getString(CLAVE_FB_PAGE_ID, ""))
             textSize = 12f
             setSingleLine(true)
-            hint = "Solo para abrir el Live Producer de esa página"
+            hint = "Se llena solo al elegir la Página"
         }
-        caja.addView(campoPagina)
-
-        // --- Servidor y clave ---
-        caja.addView(TextView(this).apply {
-            text = "Servidor RTMPS y clave"
+        cajaRespaldo.addView(campoPagina)
+        cajaRespaldo.addView(TextView(this).apply {
+            text = "Servidor RTMPS y clave (solo si transmites desde el Live Producer)"
             textSize = 11f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
             setPadding(0, 14.dp, 0, 0)
@@ -5510,14 +5512,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             textSize = 12f
             setSingleLine(true)
         }
-        caja.addView(campoUrl)
+        cajaRespaldo.addView(campoUrl)
         val campoClave = EditText(this).apply {
             setText(prefs.getString(CLAVE_FB_CLAVE, ""))
             textSize = 12f
             setSingleLine(true)
             hint = "Clave del Live Producer"
         }
-        caja.addView(campoClave)
+        cajaRespaldo.addView(campoClave)
+        cajaRespaldo.addView(
+            botonFb("Abrir el Live Producer") {
+                prefs.edit().putString(CLAVE_FB_PAGE_ID, campoPagina.text.toString().trim()).apply()
+                abrirLiveProducer()
+            }
+        )
 
         // --- Token de la Página (para espectadores y comentarios) ---
         caja.addView(TextView(this).apply {
@@ -5722,26 +5730,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         })
         caja.addView(estadoFb)
 
-        // --- Live Producer en el navegador ---
-        caja.addView(TextView(this).apply {
-            text = "Elige primero el destino en el Producer (perfil o página): cada uno tiene su clave."
-            textSize = 10f
-            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
-            setPadding(0, 12.dp, 0, 6.dp)
-        })
-        caja.addView(TextView(this).apply {
-            text = "Abrir Live Producer"
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
-            setBackgroundResource(R.drawable.bg_pill_ghost)
-            setPadding(16.dp, 12.dp, 16.dp, 12.dp)
-            setOnClickListener {
-                // El ID que se acaba de escribir es el que se usa para abrir el Producer.
-                prefs.edit().putString(CLAVE_FB_PAGE_ID, campoPagina.text.toString().trim()).apply()
-                abrirLiveProducer()
+        // --- Lo del Live Producer (ID de página, servidor, clave) queda escondido aquí ---
+        caja.addView(
+            botonFb("Configurar respaldo (Live Producer)") {
+                AlertDialog.Builder(this)
+                    .setTitle("Respaldo · Live Producer")
+                    .setView(ScrollView(this).apply { addView(cajaRespaldo) })
+                    .setPositiveButton("Guardar") { _, _ ->
+                        prefs.edit()
+                            .putString(CLAVE_FB_PAGE_ID, campoPagina.text.toString().trim())
+                            .putString(CLAVE_FB_URL, campoUrl.text.toString().trim())
+                            .putString(CLAVE_FB_CLAVE, campoClave.text.toString().trim())
+                            .apply()
+                        toast("Respaldo guardado")
+                    }
+                    .setNegativeButton("Cerrar", null)
+                    .show()
+                    .also { cuadroALaIzquierda(it) }
             }
-        })
+        )
 
         AlertDialog.Builder(this)
             .setTitle("Conectar con Facebook")
