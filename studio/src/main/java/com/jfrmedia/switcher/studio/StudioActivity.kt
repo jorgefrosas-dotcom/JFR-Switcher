@@ -5333,9 +5333,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         abrirRegistro("transmisión")
         iniciarProteccionSesion()
         toast("Conectando con Facebook…")
-        // Al salir al aire se arranca la lectura: comentarios en tiempo real y conteo de espectadores.
-        fbVideoId = ""
-        iniciarConsultasFacebook()
+        // Al salir al aire se arranca la lectura. El id del directo va dentro de la clave
+        // (`FB-<idVideo>-0-…`), así se lee el video correcto sin adivinar.
+        iniciarConsultasFacebook(
+            com.jfrmedia.switcher.studio.stream.FacebookLive.videoDeLaClave(clave).orEmpty()
+        )
         // Cronómetro del directo: si no hay grabación local, cuenta el tiempo en el aire.
         if (!recorder.isRecording) {
             if (!emisor.grabando) recStartMs = SystemClock.elapsedRealtime()
@@ -8650,169 +8652,126 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private val fbHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
-    /** Id del video al aire: se pregunta una vez y se reutiliza. */
+    /** Id del video al aire. Sale de la propia clave (`FB-<idVideo>-0-…`). */
     private var fbVideoId = ""
 
     /** Espectadores en texto (vacío = sin dato todavía). */
     private var fbEspectadores = ""
 
-    /** Últimos comentarios, del más nuevo al más viejo (máximo 4). */
+    /** Últimos comentarios, del más nuevo al más viejo. */
     private val fbLista = ArrayList<Pair<String, String>>()
 
-    /** Hilo que mantiene abierta la escucha de comentarios en tiempo real. */
-    private var fbEscucha: Thread? = null
-
+    /** Hay lectura en curso (se apaga al cortar el directo o si el token vence). */
     @Volatile
-    private var fbEscuchando = false
+    private var fbLeyendo = false
 
-    private var fbConsultando = false
+    private var fbOcupadoComentarios = false
+    private var fbOcupadoEspectadores = false
+    private var fbOcupadoPrueba = false
 
-    /** Una consulta cada 3 minutos para el conteo: barata y lejos del límite de la aplicación. */
+    /** Comentarios cada 30 s y espectadores cada 3 min: así no se topa el límite de Facebook. */
+    private val fbCadaComentarios = 30_000L
     private val fbCadaEspectadores = 180_000L
 
-    /** Comentarios: cada 30 segundos. Más seguido dispara el `(#4)` de Facebook. */
-    private val fbCadaComentarios = 30_000L
-
-    private val fbTarea = object : Runnable {
+    private val fbTareaComentarios = object : Runnable {
         override fun run() {
-            if (modoTcg) {
-                if (transmitiendo) consultarEspectadores() else probarCupoFacebook()
-            }
+            if (!fbLeyendo) return
+            consultarComentariosAhora()
+            fbHandler.postDelayed(this, fbCadaComentarios)
+        }
+    }
+
+    private val fbTareaEspectadores = object : Runnable {
+        override fun run() {
+            if (!fbLeyendo) return
+            consultarEspectadoresAhora()
             fbHandler.postDelayed(this, fbCadaEspectadores)
         }
     }
 
-    /** Contador de vueltas para la sonda de cupo (una cada 10 minutos, solo una llamada). */
-    private var fbVueltas = 0
-
-    /**
-     * Sin directo, una sonda muy barata: una llamada cada 10 minutos para saber si Facebook ya nos
-     * devolvió el cupo. No toca la pantalla, solo deja el dato en el log.
-     */
-    private fun probarCupoFacebook() {
-        fbVueltas++
-        if (fbVueltas % 10 != 0) return
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val token = prefs.getString(CLAVE_FB_TOKEN, "").orEmpty().trim()
-        val pageId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
-        if (token.isBlank() || pageId.isBlank()) return
-        Thread {
-            val error = runCatching {
-                com.jfrmedia.switcher.studio.stream.FacebookLive.videoEnVivo(pageId, token)
-            }.exceptionOrNull()
-            if (error == null) L.i("fb", "cupo libre (la sonda pasó)")
-            else L.w("fb", "cupo bloqueado: ${error.message}")
-        }.apply { isDaemon = true }.start()
-    }
-
-    /** Arranca la lectura del directo: comentarios en vivo y conteo de espectadores. */
-    private fun iniciarConsultasFacebook() {
-        fbHandler.removeCallbacks(fbTarea)
+    /** Arranca la lectura: comentarios cada 30 s y espectadores cada 3 min. */
+    private fun iniciarConsultasFacebook(videoDeLaClave: String = "") {
+        fbHandler.removeCallbacks(fbTareaComentarios)
+        fbHandler.removeCallbacks(fbTareaEspectadores)
         fbEspectadores = ""
         fbLista.clear()
-        fbVideoId = ""
-        if (fbEscuchando) return
-        fbEscuchando = true
-        fbEscucha = Thread {
-            while (fbEscuchando) {
-                val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-                val token = prefs.getString(CLAVE_FB_TOKEN, "").orEmpty().trim()
-                val pageId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
-                if (!fbEscuchando) break
-                if (token.isBlank() || pageId.isBlank()) {
-                    esperarFb(10_000L)
-                    continue
-                }
-                try {
-                    var video = fbVideoId
-                    if (video.isBlank()) {
-                        video = com.jfrmedia.switcher.studio.stream.FacebookLive
-                            .videoEnVivo(pageId, token).orEmpty()
-                        fbVideoId = video
-                    }
-                    if (video.isBlank()) {
-                        L.i("fb", "todavía no hay un directo al aire")
-                        esperarFb(20_000L)
-                        continue
-                    }
-                    // La lista de comentarios: una sola llamada cada 30 s. (El canal en tiempo real
-                    // `live_comments` de Facebook responde 400 desde el 25/11/2026, así que se usa la
-                    // consulta normal, que sí funciona.)
-                    val lista = com.jfrmedia.switcher.studio.stream.FacebookLive
-                        .comentarios(video, token, 6)
-                    runOnUiThread { if (fbEscuchando) actualizarComentarios(lista) }
-                } catch (t: Throwable) {
-                    val mensaje = t.message ?: "error"
-                    L.w("fb", "comentarios: $mensaje")
-                    if (mensaje.contains("(#4)") || mensaje.contains("limit", ignoreCase = true)) {
-                        fbVideoId = ""
-                        esperarFb(300_000L)
-                        continue
-                    }
-                    esperarFb(20_000L)
-                    continue
-                }
-                esperarFb(fbCadaComentarios)
-            }
-        }.apply { isDaemon = true; name = "fb-comentarios" }
-        fbEscucha?.start()
-        fbHandler.postDelayed(fbTarea, 2_000L)
-    }
-
-    private fun esperarFb(ms: Long) {
-        runCatching { Thread.sleep(ms) }
+        fbVideoId = videoDeLaClave
+        fbLeyendo = true
+        // Una primera vuelta casi inmediata para que el panel no arranque vacío.
+        fbHandler.postDelayed(fbTareaComentarios, 1_500L)
+        fbHandler.postDelayed(fbTareaEspectadores, 2_500L)
     }
 
     private fun detenerConsultasFacebook() {
-        fbEscuchando = false
-        fbHandler.removeCallbacks(fbTarea)
+        fbLeyendo = false
+        fbHandler.removeCallbacks(fbTareaComentarios)
+        fbHandler.removeCallbacks(fbTareaEspectadores)
         runCatching { com.jfrmedia.switcher.studio.stream.FacebookLive.cortarEscucha() }
-        fbEscucha = null
     }
 
-    /** Un comentario nuevo entra arriba de la lista y se manda al panel. */
-    private fun agregarComentario(comentario: com.jfrmedia.switcher.studio.stream.ComentarioFb) {
-        if (isFinishing || isDestroyed) return
-        fbLista.add(0, comentario.autor to comentario.texto)
-        while (fbLista.size > 4) fbLista.removeAt(fbLista.lastIndex)
-        panelTcg?.comentariosFacebook(fbEspectadores, fbLista.toList())
-        L.i("fb", "comentario: ${comentario.texto.take(60)}")
-    }
-
-    /**
-     * Reemplaza la lista con lo que devolvió Facebook (viene del más nuevo al más viejo). Si no
-     * cambió nada, no se repinta para no animar de más.
-     */
-    private fun actualizarComentarios(
-        lista: List<com.jfrmedia.switcher.studio.stream.ComentarioFb>
-    ) {
-        if (isFinishing || isDestroyed) return
-        val nueva = lista.take(6).map { it.autor to it.texto }
-        if (nueva == fbLista) return
-        val nuevos = (nueva.size - fbLista.size).coerceAtLeast(0)
-        fbLista.clear()
-        fbLista.addAll(nueva)
-        panelTcg?.comentariosFacebook(fbEspectadores, fbLista.toList())
-        L.i("fb", "comentarios: ${fbLista.size} (nuevos: $nuevos)")
-    }
-
-    /** Conteo de espectadores: una sola consulta por minuto mientras hay directo. */
-    private fun consultarEspectadores() {
+    private fun tokenYpagina(): Pair<String, String> {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val token = prefs.getString(CLAVE_FB_TOKEN, "").orEmpty().trim()
-        val pageId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
-        if (token.isBlank() || pageId.isBlank() || fbConsultando) return
-        fbConsultando = true
+        return prefs.getString(CLAVE_FB_TOKEN, "").orEmpty().trim() to
+            prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
+    }
+
+    /** Resuelve el video al aire: el de la clave o, si no vino, el que se busca en las Páginas. */
+    private fun videoObjetivo(token: String, pageId: String): String {
+        if (fbVideoId.isNotBlank()) return fbVideoId
+        val hallado = com.jfrmedia.switcher.studio.stream.FacebookLive
+            .videoEnVivo(pageId, token).orEmpty()
+        fbVideoId = hallado
+        return hallado
+    }
+
+    private fun consultarComentariosAhora() {
+        if (fbOcupadoComentarios) return
+        val (token, pageId) = tokenYpagina()
+        if (token.isBlank() || pageId.isBlank()) return
+        fbOcupadoComentarios = true
+        Thread {
+            var lista: List<com.jfrmedia.switcher.studio.stream.ComentarioFb> = emptyList()
+            var error = ""
+            try {
+                val video = videoObjetivo(token, pageId)
+                if (video.isBlank()) error = "sin directo al aire (todavía)"
+                else lista = com.jfrmedia.switcher.studio.stream.FacebookLive
+                    .comentarios(video, token, 6)
+            } catch (t: Throwable) {
+                error = t.message ?: "error"
+            }
+            runOnUiThread {
+                fbOcupadoComentarios = false
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (error.isNotEmpty()) {
+                    L.w("fb", "comentarios: $error")
+                    if (error.contains("(#4)") || error.contains("limit", ignoreCase = true)) {
+                        // Exceso de consultas: se olvida el video y se deja descansar 5 minutos.
+                        fbVideoId = ""
+                        fbHandler.removeCallbacks(fbTareaComentarios)
+                        fbHandler.postDelayed(fbTareaComentarios, 300_000L)
+                    } else if (error.contains("expired", ignoreCase = true) ||
+                        error.contains("\"code\":190")
+                    ) {
+                        fbLeyendo = false
+                    }
+                    return@runOnUiThread
+                }
+                if (fbLeyendo) actualizarComentarios(lista)
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    private fun consultarEspectadoresAhora() {
+        if (fbOcupadoEspectadores) return
+        val (token, pageId) = tokenYpagina()
+        if (token.isBlank() || pageId.isBlank()) return
+        fbOcupadoEspectadores = true
         Thread {
             var numero: Int? = null
             var error = ""
             try {
-                var video = fbVideoId
-                if (video.isBlank()) {
-                    video = com.jfrmedia.switcher.studio.stream.FacebookLive
-                        .videoEnVivo(pageId, token).orEmpty()
-                    fbVideoId = video
-                }
+                val video = videoObjetivo(token, pageId)
                 if (video.isNotBlank()) {
                     numero = com.jfrmedia.switcher.studio.stream.FacebookLive
                         .espectadores(video, token)
@@ -8821,14 +8780,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 error = t.message ?: "error"
             }
             runOnUiThread {
-                fbConsultando = false
+                fbOcupadoEspectadores = false
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (error.isNotEmpty()) {
                     L.w("fb", "espectadores: $error")
-                    if (error.contains("(#4)") || error.contains("limit", ignoreCase = true)) fbVideoId = ""
+                    if (error.contains("(#4)") || error.contains("limit", ignoreCase = true)) {
+                        fbVideoId = ""
+                    }
                     return@runOnUiThread
                 }
-                if (numero != null) {
+                if (numero != null && fbLeyendo) {
                     fbEspectadores = numero.toString()
                     panelTcg?.comentariosFacebook(fbEspectadores, fbLista.toList())
                     L.i("fb", "$numero viendo")
@@ -8837,14 +8798,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }.apply { isDaemon = true }.start()
     }
 
+    /** Reemplaza la lista con lo que devolvió Facebook (viene del más nuevo al más viejo). */
+    private fun actualizarComentarios(
+        lista: List<com.jfrmedia.switcher.studio.stream.ComentarioFb>
+    ) {
+        if (isFinishing || isDestroyed) return
+        val nueva = lista.take(6).map { it.autor to it.texto }
+        if (nueva == fbLista) return
+        fbLista.clear()
+        fbLista.addAll(nueva)
+        panelTcg?.comentariosFacebook(fbEspectadores, fbLista.toList())
+        L.i("fb", "comentarios: ${fbLista.size}")
+    }
+
     /**
      * Consulta puntual (botón «Probar»): lee una vez espectadores y comentarios y llena el panel.
-     * Bloqueante a propósito: se llama desde su propio hilo.
      */
     private fun consultarFacebook(manual: Boolean, aviso: ((String) -> Unit)? = null) {
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val token = prefs.getString(CLAVE_FB_TOKEN, "").orEmpty().trim()
-        val pageId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
+        if (fbOcupadoPrueba) return
+        val (token, pageId) = tokenYpagina()
         if (token.isBlank() || pageId.isBlank()) {
             val mensaje = "Falta el token de la Página o el ID de la Página"
             if (manual) {
@@ -8853,8 +8825,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             return
         }
-        if (fbConsultando) return
-        fbConsultando = true
+        fbOcupadoPrueba = true
         Thread {
             var espectadores: Int? = null
             var lista: List<com.jfrmedia.switcher.studio.stream.ComentarioFb> = emptyList()
@@ -8875,7 +8846,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 error = t.message ?: "error de conexión"
             }
             runOnUiThread {
-                fbConsultando = false
+                fbOcupadoPrueba = false
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (error.isNotEmpty()) {
                     L.w("fb", "prueba: $error")
@@ -8896,7 +8867,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     val quien = when {
                         yo == null -> "no se pudo leer /me"
                         yo.first == pageId -> "token de la Página «${yo.second}»"
-                        else -> "token de «${yo.second}» (id ${yo.first}), distinto del id de Página $pageId"
+                        else ->
+                            "token de «${yo.second}» (id ${yo.first}), distinto del id de Página $pageId"
                     }
                     val resumen = "OK · ${espectadores?.toString() ?: "sin dato de espectadores"} " +
                         "viendo · ${lista.size} comentarios"
@@ -8951,7 +8923,6 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 dos = dos.copy(perdidas = dos.perdidas + 1, debilitados = 0, chips = vacias),
                 turno = 0,
             )
-
             2 -> estadoTcg.copy(
                 serieDos = estadoTcg.serieDos + 1,
                 uno = uno.copy(perdidas = uno.perdidas + 1, debilitados = 0, chips = vacias),
@@ -9797,4 +9768,5 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         private const val VISTA_MESA = -1
     }
 }
+
 

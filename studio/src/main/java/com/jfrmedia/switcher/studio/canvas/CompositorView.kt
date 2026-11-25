@@ -204,14 +204,24 @@ class CompositorView @JvmOverloads constructor(
                         synchronized(lock) { dirty = true }
                     }
                     synchronized(lock) {
-                        if (!dirty) {
+                        // Mientras se graba o se transmite hay que **entregar cuadros siempre**,
+                        // aunque la escena esté quieta: el codificador no manda nada si no recibe
+                        // imágenes y Facebook ve el directo «sin datos» (pasó el 25/11/2026).
+                        if (isRecording) {
+                            try {
+                                lock.wait(33)
+                            } catch (e: InterruptedException) {
+                                Thread.currentThread().interrupt()
+                            }
+                            dirty = true
+                        } else if (!dirty) {
                             try {
                                 lock.wait(400)
                             } catch (e: InterruptedException) {
                                 Thread.currentThread().interrupt()
                             }
                         }
-                        dirty = false
+                        if (!isRecording) dirty = false
                     }
                 }
                 if (!running) break

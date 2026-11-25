@@ -61,6 +61,18 @@ object FacebookLive {
         return reciente.takeIf { it.isNotBlank() }
     }
 
+    /**
+     * El **id del directo** viene dentro de la propia clave del Live Producer:
+     * `FB-<idVideo>-0-<secreto>`. Con ese id no hay que adivinar cuál video está al aire, que es lo
+     * que fallaba cuando el directo estaba en otra Página o en el perfil (Jorge, 25/11/2026).
+     */
+    fun videoDeLaClave(clave: String): String? {
+        val partes = clave.trim().split('-')
+        if (partes.size < 2) return null
+        if (!partes[0].equals("FB", ignoreCase = true)) return null
+        return partes[1].takeIf { it.isNotBlank() && it.all { c -> c.isDigit() } }
+    }
+
     /** Espectadores conectados ahora; `null` si Facebook no lo da. */
     fun espectadores(videoId: String, token: String): Int? = runCatching {
         val json = bajar("$BASE/$videoId?fields=live_views&access_token=$token")
