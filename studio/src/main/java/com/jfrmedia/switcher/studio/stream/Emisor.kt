@@ -91,6 +91,13 @@ class Emisor(
     var grabando: Boolean = false
         private set
 
+    /**
+     * Se puso en `true` cuando el codificador de audio falló y el directo salió **sin sonido**
+     * (pasa en el emulador, que no tiene micrófono utilizable).
+     */
+    var sinAudio: Boolean = false
+        private set
+
     private var superficie: SurfaceTexture? = null
     private var ancho = 1280
     private var alto = 720
@@ -161,17 +168,29 @@ class Emisor(
                 fps = fps,
                 iFrameInterval = 2
             )
-            val audio = flujo.prepareAudio(
-                sampleRate = 44100,
-                isStereo = false,
-                bitrate = 128 * 1024,
-                echoCanceler = false,
-                noiseSuppressor = false
-            )
-            if (!video || !audio) {
+            val audio = runCatching {
+                flujo.prepareAudio(
+                    sampleRate = 44100,
+                    isStereo = false,
+                    bitrate = 128 * 1024,
+                    echoCanceler = false,
+                    noiseSuppressor = false
+                )
+            }.getOrElse { t ->
+                // En el emulador (y en un equipo sin micrófono usable) el codificador de audio rechaza
+                // los parámetros y antes se abortaba TODA la transmisión. Mejor salir al aire sin audio
+                // y avisarlo, que no transmitir (Jorge, 25/11/2026).
+                L.w(TAG, "audio no disponible: ${t.message}")
+                false
+            }
+            if (!video) {
                 L.w(TAG, "no se pudo preparar el codificador (video=$video audio=$audio)")
                 alEstado(Estado.ERROR, "El equipo no soporta esta configuración")
                 return null
+            }
+            if (!audio) {
+                L.w(TAG, "se transmite SIN audio: el equipo no tiene micrófono utilizable")
+                sinAudio = true
             }
             // El SurfaceTexture solo existe cuando el GL interno está arrancado.
             val gl = flujo.getGlInterface()

@@ -8667,8 +8667,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     private var fbConsultando = false
 
-    /** Una consulta por minuto para el conteo: es barata y no topa el límite de la aplicación. */
-    private val fbCadaEspectadores = 60_000L
+    /** Una consulta cada 3 minutos para el conteo: barata y lejos del límite de la aplicación. */
+    private val fbCadaEspectadores = 180_000L
+
+    /** Comentarios: cada 30 segundos. Más seguido dispara el `(#4)` de Facebook. */
+    private val fbCadaComentarios = 30_000L
 
     private val fbTarea = object : Runnable {
         override fun run() {
@@ -8732,23 +8735,24 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                         esperarFb(20_000L)
                         continue
                     }
-                    L.i("fb", "escuchando comentarios del video $video")
-                    com.jfrmedia.switcher.studio.stream.FacebookLive
-                        .escucharComentarios(video, token) { comentario ->
-                            runOnUiThread { if (fbEscuchando) agregarComentario(comentario) }
-                        }
-                    L.i("fb", "se cortó la escucha de comentarios")
-                    esperarFb(5_000L)
+                    // La lista de comentarios: una sola llamada cada 30 s. (El canal en tiempo real
+                    // `live_comments` de Facebook responde 400 desde el 25/11/2026, así que se usa la
+                    // consulta normal, que sí funciona.)
+                    val lista = com.jfrmedia.switcher.studio.stream.FacebookLive
+                        .comentarios(video, token, 6)
+                    runOnUiThread { if (fbEscuchando) actualizarComentarios(lista) }
                 } catch (t: Throwable) {
                     val mensaje = t.message ?: "error"
-                    L.w("fb", "escucha: $mensaje")
+                    L.w("fb", "comentarios: $mensaje")
                     if (mensaje.contains("(#4)") || mensaje.contains("limit", ignoreCase = true)) {
                         fbVideoId = ""
-                        esperarFb(120_000L)
-                    } else {
-                        esperarFb(8_000L)
+                        esperarFb(300_000L)
+                        continue
                     }
+                    esperarFb(20_000L)
+                    continue
                 }
+                esperarFb(fbCadaComentarios)
             }
         }.apply { isDaemon = true; name = "fb-comentarios" }
         fbEscucha?.start()
@@ -8773,6 +8777,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         while (fbLista.size > 4) fbLista.removeAt(fbLista.lastIndex)
         panelTcg?.comentariosFacebook(fbEspectadores, fbLista.toList())
         L.i("fb", "comentario: ${comentario.texto.take(60)}")
+    }
+
+    /**
+     * Reemplaza la lista con lo que devolvió Facebook (viene del más nuevo al más viejo). Si no
+     * cambió nada, no se repinta para no animar de más.
+     */
+    private fun actualizarComentarios(
+        lista: List<com.jfrmedia.switcher.studio.stream.ComentarioFb>
+    ) {
+        if (isFinishing || isDestroyed) return
+        val nueva = lista.take(6).map { it.autor to it.texto }
+        if (nueva == fbLista) return
+        val nuevos = (nueva.size - fbLista.size).coerceAtLeast(0)
+        fbLista.clear()
+        fbLista.addAll(nueva)
+        panelTcg?.comentariosFacebook(fbEspectadores, fbLista.toList())
+        L.i("fb", "comentarios: ${fbLista.size} (nuevos: $nuevos)")
     }
 
     /** Conteo de espectadores: una sola consulta por minuto mientras hay directo. */
@@ -8897,6 +8918,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         error.contains("Invalid OAuth", ignoreCase = true) ->
             "El token está mal copiado o ya venció. Copia el que empieza con EAA… completo, sin espacios."
+
+        error.contains("Session has expired", ignoreCase = true) || error.contains("\"code\":190") ->
+            "El token venció (los del Graph API Explorer duran ~1 hora). Saca uno de larga duración: " +
+                "en el Debug de Facebook toca «Extend Access Token» y con ese pide me/accounts; el " +
+                "token de la Página que sale ahí ya no vence."
 
         error.contains("Unsupported get request", ignoreCase = true) ->
             "El ID de la Página no es el correcto."
