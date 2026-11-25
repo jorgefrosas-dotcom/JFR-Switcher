@@ -42,6 +42,11 @@ android {
         versionCode = providers.gradleProperty("jfr.versionCode").get().toInt()
         versionName = providers.gradleProperty("jfr.versionName").get()
 
+        // Esquema de vuelta del login de Google (AppAuth). Lleva el ID de cliente OAuth de tipo
+        // Android; los de Android no tienen secreto, así que no es información delicada.
+        manifestPlaceholders["appAuthRedirectScheme"] =
+            "com.googleusercontent.apps.299565880934-0g0n4o4ffcdlpssa5mb6pn98ka20fdb6"
+
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -100,5 +105,7 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     // Motor de transmisión RTMP/RTMPS (Facebook, YouTube, etc.)
     implementation("com.github.pedroSG94.RootEncoder:library:2.8.1")
+    // Login de Google (OAuth con PKCE) para crear la transmisión de YouTube sin pegar tokens.
+    implementation("net.openid:appauth:0.11.1")
     // El login de Facebook se quitó: el directo se hace con el Live Producer + la clave pegada a mano.
 }

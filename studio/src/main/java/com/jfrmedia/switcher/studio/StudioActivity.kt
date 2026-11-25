@@ -20,6 +20,7 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import android.graphics.RectF
 import android.widget.EditText
+import android.widget.CheckBox
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.PopupMenu
@@ -296,6 +297,67 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) agregarMedio(uri)
+    }
+
+    /** Servicio de login de Google que hay que conservar mientras vuelve la respuesta. */
+    private var servicioYt: net.openid.appauth.AuthorizationService? = null
+
+    /** Etiqueta del cuadro de Facebook que muestra cómo está YouTube. */
+    private var rotuloYoutube: TextView? = null
+
+    /** Vuelta del login de Google para YouTube (Authorization Code + PKCE). */
+    private val loginYouTube = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { resultado ->
+        val datos = resultado.data
+        val respuesta = datos?.let { net.openid.appauth.AuthorizationResponse.fromIntent(it) }
+        val fallo = datos?.let { net.openid.appauth.AuthorizationException.fromIntent(it) }
+        if (respuesta == null) {
+            toast("Login de Google sin respuesta: ${fallo?.errorDescription ?: "cancelado"}")
+            return@registerForActivityResult
+        }
+        val servicio = servicioYt
+            ?: com.jfrmedia.switcher.studio.stream.YouTubeLive.servicio(this)
+        val estado = net.openid.appauth.AuthState(respuesta, fallo)
+        estado.performActionWithFreshTokens(servicio) { token, _, excepcion ->
+            if (token.isNullOrBlank() || excepcion != null) {
+                toast("Google no dio el permiso: ${excepcion?.message ?: "sin token"}")
+                return@performActionWithFreshTokens
+            }
+            com.jfrmedia.switcher.studio.stream.YouTubeLive.guardar(this, estado)
+            runOnUiThread {
+                toast("YouTube conectado")
+                actualizarRotuloYouTube()
+            }
+        }
+    }
+
+    /** Describe cómo está YouTube en el cuadro (conectado con qué canal, o sin conectar). */
+    private fun actualizarRotuloYouTube() {
+        val rotulo = rotuloYoutube ?: return
+        if (!com.jfrmedia.switcher.studio.stream.YouTubeLive.conectado(this)) {
+            rotulo.text = "YouTube: sin conectar"
+            return
+        }
+        rotulo.text = "YouTube: conectado, leyendo el canal…"
+        com.jfrmedia.switcher.studio.stream.YouTubeLive.nombreCanal(this) { nombre ->
+            runOnUiThread {
+                rotuloYoutube?.text = if (nombre == null) {
+                    "YouTube: conectado"
+                } else {
+                    "YouTube: conectado como «$nombre»"
+                }
+            }
+        }
+    }
+
+    /** Arranca el login de Google. */
+    private fun conectarYouTube() {
+        val servicio = com.jfrmedia.switcher.studio.stream.YouTubeLive.servicio(this)
+        servicioYt = servicio
+        val peticion = com.jfrmedia.switcher.studio.stream.YouTubeLive.peticion()
+        runCatching { loginYouTube.launch(servicio.getAuthorizationRequestIntent(peticion)) }
+            .onFailure { toast("No hay navegador para el login de Google") }
     }
 
     private val ticker = object : Runnable {
@@ -3837,6 +3899,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             val attrs = ventana.attributes
             attrs.gravity = Gravity.START or Gravity.CENTER_VERTICAL
             attrs.x = 40.dp
+            // El cuadro de Facebook creció (token, Páginas, YouTube, descripción): con el alto por
+            // defecto los botones de abajo quedaban fuera de la vista.
+            attrs.height = (resources.displayMetrics.heightPixels * 0.92f).toInt()
+            attrs.width = (resources.displayMetrics.widthPixels * 0.88f).toInt()
             ventana.attributes = attrs
         }
     }
@@ -5374,6 +5440,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         detenerConsultasFacebook()
         // Si el directo lo creó la app, se cierra también en Facebook para que no quede «fantasma».
         cerrarDirectoFacebook()
+        cerrarDirectoYouTube()
         vistaAlAire().endRecordingOutput()
         vistaAlAire().salidaInvertida = false
         actualizarBotonSesion()
@@ -5561,13 +5628,46 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
         )
         caja.addView(listaPaginas)
+
+        // --- YouTube: conectar y mandar ahí también (multistream) ---
+        val rotuloYt = TextView(this).apply {
+            text = "YouTube: sin conectar"
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+            setPadding(0, 16.dp, 0, 4.dp)
+        }
+        rotuloYoutube = rotuloYt
+        caja.addView(rotuloYt)
+        caja.addView(
+            botonFb("Conectar con YouTube") {
+                val yt = com.jfrmedia.switcher.studio.stream.YouTubeLive
+                if (yt.conectado(this)) {
+                    yt.salir(this)
+                    actualizarRotuloYouTube()
+                    toast("YouTube desconectado")
+                } else {
+                    conectarYouTube()
+                }
+            }
+        )
+        val casillaYt = CheckBox(this).apply {
+            text = "Transmitir también a YouTube"
+            textSize = 12f
+            isChecked = prefs.getBoolean(CLAVE_YT_ACTIVO, false)
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+            setPadding(0, 10.dp, 0, 0)
+        }
+        caja.addView(casillaYt)
+        actualizarRotuloYouTube()
+
         caja.addView(
             botonFb("Crear directo y salir al aire") {
                 val paginaId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
                 val tokenPagina = prefs.getString(CLAVE_FB_PAGINA_TOKEN, "").orEmpty().trim()
-                // La descripción se guarda tal como está escrita en ese momento.
+                // La descripción y la casilla de YouTube se guardan tal como están ahora.
                 prefs.edit()
                     .putString(CLAVE_FB_DESCRIPCION, campoDescripcion.text.toString().trim())
+                    .putBoolean(CLAVE_YT_ACTIVO, casillaYt.isChecked)
                     .apply()
                 if (paginaId.isBlank() || tokenPagina.isBlank()) {
                     estadoFb.text = "Primero trae tus Páginas y elige una."
@@ -5575,6 +5675,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
                 estadoFb.text = "Creando el directo en Facebook…"
                 val descripcion = campoDescripcion.text.toString().trim()
+                val conYoutube = casillaYt.isChecked
                 Thread {
                     var directo: com.jfrmedia.switcher.studio.stream.FacebookLive.DirectoFb? = null
                     var error = ""
@@ -5595,6 +5696,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                         estadoFb.text = "Directo ${listo.id} creado. Conectando…"
                         cuadroActual?.dismiss()
                         iniciarTransmision(listo.url)
+                        // Si la casilla está marcada, YouTube entra como segundo destino.
+                        if (conYoutube) crearYoutubeYConectar()
                     }
                 }.apply { isDaemon = true }.start()
             }
@@ -8876,6 +8979,52 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         runCatching { com.jfrmedia.switcher.studio.stream.FacebookLive.cortarEscucha() }
     }
 
+    /**
+     * Crea la transmisión en YouTube y la agrega como **segundo destino** (multistream).
+     *
+     * Va en su propio hilo porque habla con Google; cuando llega la dirección con la clave se
+     * conecta el destino 1 del emisor. Si algo falla, Facebook sigue al aire y solo se avisa.
+     */
+    private fun crearYoutubeYConectar() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        if (!com.jfrmedia.switcher.studio.stream.YouTubeLive.conectado(this)) {
+            toast("YouTube marcado pero sin conectar: toca «Conectar con YouTube»")
+            return
+        }
+        val descripcion = prefs.getString(CLAVE_FB_DESCRIPCION, "").orEmpty().trim()
+        Thread {
+            com.jfrmedia.switcher.studio.stream.YouTubeLive.crearDirecto(
+                this,
+                "JFR Media",
+                descripcion,
+                alListo = { directo ->
+                    prefs.edit().putString(CLAVE_YT_DIRECTO_ID, directo.id).apply()
+                    runOnUiThread {
+                        val ok = emisor.transmitirAdemas(directo.url)
+                        L.i("yt", "destino 1 (YouTube): ${if (ok) "conectando" else "no aceptó"}")
+                        toast(if (ok) "YouTube: conectando…" else "YouTube no aceptó la conexión")
+                    }
+                },
+                alError = { mensaje ->
+                    L.w("yt", "crear: $mensaje")
+                    runOnUiThread { toast("YouTube: ${mensaje.take(120)}") }
+                }
+            )
+        }.apply { isDaemon = true }.start()
+    }
+
+    /** Cierra la transmisión de YouTube si la app la creó. */
+    private fun cerrarDirectoYouTube() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val id = prefs.getString(CLAVE_YT_DIRECTO_ID, "").orEmpty().trim()
+        if (id.isBlank()) return
+        prefs.edit().putString(CLAVE_YT_DIRECTO_ID, "").apply()
+        Thread {
+            val cerrado = com.jfrmedia.switcher.studio.stream.YouTubeLive.terminarDirecto(this, id)
+            L.i("yt", if (cerrado) "transmisión $id cerrada" else "no se pudo cerrar $id")
+        }.apply { isDaemon = true }.start()
+    }
+
     /** Cierra en Facebook el directo que creó la app (si lo hubo). */
     private fun cerrarDirectoFacebook() {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -9932,6 +10081,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         /** Descripción que se manda al crear el directo (la que se ve en la Página). */
         private const val CLAVE_FB_DESCRIPCION = "fb_descripcion"
+
+        /** Transmitir también a YouTube (multistream). */
+        private const val CLAVE_YT_ACTIVO = "yt_activo"
+
+        /** Transmisión de YouTube creada por la app, para cerrarla al terminar. */
+        private const val CLAVE_YT_DIRECTO_ID = "yt_directo_id"
         private const val CLAVE_PALETA = "paleta_colores"
         private const val FB_URL_POR_DEFECTO = "rtmps://live-api-s.facebook.com:443/rtmp/"
         private const val CLAVE_TABLET_FRONTAL = "tablet_cam_frontal"

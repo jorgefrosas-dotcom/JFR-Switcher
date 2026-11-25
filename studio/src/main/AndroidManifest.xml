@@ -51,6 +51,23 @@
             android:name=".stream.EmisionService"
             android:exported="false"
             android:foregroundServiceType="microphone|camera" />
+
+        <!--
+          Vuelta del login de Google para YouTube (AppAuth). El esquema lleva el ID de cliente
+          OAuth de tipo Android; no es un secreto (Jorge, 25/11/2026).
+        -->
+        <activity
+            android:name="net.openid.appauth.RedirectUriReceiverActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="oauth2redirect"
+                    android:scheme="${appAuthRedirectScheme}" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>
