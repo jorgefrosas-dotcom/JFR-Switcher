@@ -3893,16 +3893,22 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * Carga el cuadro hacia la izquierda de la pantalla, con un margen para que no se pegue
      * al borde. Así el visor de programa queda libre a la derecha.
      */
-    private fun cuadroALaIzquierda(dialogo: android.app.Dialog) {
+    private fun cuadroALaIzquierda(dialogo: android.app.Dialog, altoCompleto: Boolean = true) {
         runCatching {
             val ventana = dialogo.window ?: return
             val attrs = ventana.attributes
             attrs.gravity = Gravity.START or Gravity.CENTER_VERTICAL
             attrs.x = 40.dp
-            // El cuadro de Facebook creció (token, Páginas, YouTube, descripción): con el alto por
-            // defecto los botones de abajo quedaban fuera de la vista.
-            attrs.height = (resources.displayMetrics.heightPixels * 0.92f).toInt()
-            attrs.width = (resources.displayMetrics.widthPixels * 0.88f).toInt()
+            if (altoCompleto) {
+                // El cuadro de Facebook creció (token, Páginas, YouTube): con el alto por defecto
+                // los botones de abajo quedaban fuera de la vista.
+                attrs.height = (resources.displayMetrics.heightPixels * 0.92f).toInt()
+                attrs.width = (resources.displayMetrics.widthPixels * 0.88f).toInt()
+            } else {
+                // Los cuadros chicos (destino, descripción) usan solo lo que necesitan.
+                attrs.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                attrs.width = (resources.displayMetrics.widthPixels * 0.55f).toInt()
+            }
             ventana.attributes = attrs
         }
     }
@@ -5410,7 +5416,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         toast("Conectando con Facebook…")
         // Al salir al aire se arranca la lectura. El id del directo va dentro de la dirección
         // (`.../rtmp/<id>?…` o `.../rtmp/FB-<id>-0-…`); si no saliera, se usa el que guardó la app.
-        // Si el destino es solo YouTube no hay nada que leer en Facebook.
+        // Si el destino es solo YouTube no hay nada que leer en Facebook, pero el panel sí sigue
+        // activo: es el que muestra los comentarios del chat de YouTube.
+        fbLeyendo = true
         if (conFacebook) {
             iniciarConsultasFacebook(
                 com.jfrmedia.switcher.studio.stream.FacebookLive.videoDeLaUrl(url).orEmpty()
@@ -8876,7 +8884,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private var fbEspectadores = ""
 
     /** Últimos comentarios, del más nuevo al más viejo. */
-    private val fbLista = ArrayList<Pair<String, String>>()
+    /**
+     * Comentarios del panel, del más nuevo al más viejo, **de las dos plataformas juntas**.
+     * Cada uno guarda de dónde viene para poder etiquetarlo.
+     */
+    private val fbLista = ArrayList<com.jfrmedia.switcher.studio.tcg.ComentarioPanel>()
 
     /** Hay lectura en curso (se apaga al cortar el directo o si el token vence). */
     @Volatile
@@ -8910,13 +8922,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun iniciarConsultasFacebook(videoDeLaClave: String = "") {
         fbHandler.removeCallbacks(fbTareaComentarios)
         fbHandler.removeCallbacks(fbTareaEspectadores)
+        fbHandler.removeCallbacks(ytTareaComentarios)
+        ytChatId = ""
         fbEspectadores = ""
         fbLista.clear()
         fbVideoId = videoDeLaClave
         fbLeyendo = true
         // Se repinta de inmediato: si no, el panel se queda mostrando los comentarios del directo
         // anterior hasta que llegue la primera consulta (visto el 25/11/2026).
-        panelTcg?.comentariosFacebook("", emptyList())
+        panelTcg?.comentarios("", emptyList())
         L.i("fb", "lectura para el directo '${videoDeLaClave.ifBlank { "(se busca en la Página)" }}'")
         // Una primera vuelta casi inmediata para que el panel no arranque vacío.
         fbHandler.postDelayed(fbTareaComentarios, 1_500L)
@@ -8927,6 +8941,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         fbLeyendo = false
         fbHandler.removeCallbacks(fbTareaComentarios)
         fbHandler.removeCallbacks(fbTareaEspectadores)
+        fbHandler.removeCallbacks(ytTareaComentarios)
+        ytChatId = ""
         runCatching { com.jfrmedia.switcher.studio.stream.FacebookLive.cortarEscucha() }
     }
 
@@ -8950,6 +8966,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 descripcion,
                 alListo = { directo ->
                     prefs.edit().putString(CLAVE_YT_DIRECTO_ID, directo.id).apply()
+                    // El chat se pide aparte si no vino al crear la transmisión.
+                    val chat = directo.chatId.ifBlank {
+                        com.jfrmedia.switcher.studio.stream.YouTubeLive.chatDe(this, directo.id)
+                            .orEmpty()
+                    }
+                    runOnUiThread { iniciarChatYouTube(chat) }
                     runOnUiThread {
                         val ok = if (indice == 0) {
                             // Solo YouTube: es la transmisión principal, con toda la preparación.
@@ -8978,7 +9000,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .setItems(opciones) { _, cual -> pedirDescripcionDelDirecto(cual) }
             .setNegativeButton("Cancelar", null)
             .show()
-            .also { cuadroALaIzquierda(it) }
+            .also { cuadroALaIzquierda(it, altoCompleto = false) }
     }
 
     /** Paso 2: la descripción (la misma para Facebook y para YouTube) y salir al aire. */
@@ -9019,7 +9041,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             .setNegativeButton("Cancelar", null)
             .show()
-            .also { cuadroALaIzquierda(it) }
+            .also { cuadroALaIzquierda(it, altoCompleto = false) }
     }
 
     /** Crea lo que haga falta y sale al aire en el destino elegido. */
@@ -9172,24 +9194,97 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
                 if (numero != null && fbLeyendo) {
                     fbEspectadores = numero.toString()
-                    panelTcg?.comentariosFacebook(fbEspectadores, fbLista.toList())
+                    panelTcg?.comentarios(fbEspectadores, fbLista.toList())
                     L.i("fb", "$numero viendo")
                 }
             }
         }.apply { isDaemon = true }.start()
     }
 
-    /** Reemplaza la lista con lo que devolvió Facebook (viene del más nuevo al más viejo). */
+    /**
+     * Suma al panel los comentarios de Facebook que todavía no estaban (vienen del más nuevo al
+     * más viejo) y respeta los de YouTube que ya estén ahí.
+     */
     private fun actualizarComentarios(
         lista: List<com.jfrmedia.switcher.studio.stream.ComentarioFb>
     ) {
         if (isFinishing || isDestroyed) return
-        val nueva = lista.take(6).map { it.autor to it.texto }
-        if (nueva == fbLista) return
-        fbLista.clear()
-        fbLista.addAll(nueva)
-        panelTcg?.comentariosFacebook(fbEspectadores, fbLista.toList())
-        L.i("fb", "comentarios: ${fbLista.size}")
+        val cambio = agregarAlPanel("Facebook", lista)
+        if (cambio) L.i("fb", "comentarios en el panel: ${fbLista.size}")
+    }
+
+    // ---- Chat de YouTube: se lee del mismo panel, etiquetado como «YT» ----
+
+    /** Id del chat de la transmisión de YouTube (vacío si no hay). */
+    private var ytChatId = ""
+
+    private var ytOcupado = false
+
+    private val ytTareaComentarios = object : Runnable {
+        override fun run() {
+            if (!fbLeyendo) return
+            consultarChatYouTube()
+            fbHandler.postDelayed(this, 30_000L)
+        }
+    }
+
+    /** Una vuelta al chat de YouTube (en su propio hilo corto). */
+    private fun consultarChatYouTube() {
+        val chat = ytChatId
+        if (chat.isBlank() || ytOcupado) return
+        ytOcupado = true
+        Thread {
+            var lista: List<com.jfrmedia.switcher.studio.stream.ComentarioFb> = emptyList()
+            try {
+                lista = com.jfrmedia.switcher.studio.stream.YouTubeLive
+                    .comentariosChat(this, chat)
+            } catch (t: Throwable) {
+                L.w("yt", "chat: ${t.message}")
+            }
+            runOnUiThread {
+                ytOcupado = false
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (lista.isNotEmpty() && fbLeyendo) {
+                    if (agregarAlPanel("YouTube", lista)) {
+                        L.i("yt", "comentarios de YouTube: ${lista.size}")
+                    }
+                }
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /** Empieza a leer el chat de YouTube (se llama al crear la transmisión). */
+    private fun iniciarChatYouTube(chat: String) {
+        ytChatId = chat
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putString(CLAVE_YT_CHAT_ID, chat)
+            .apply()
+        fbHandler.removeCallbacks(ytTareaComentarios)
+        if (chat.isNotBlank()) fbHandler.postDelayed(ytTareaComentarios, 4_000L)
+    }
+
+    /** Suma comentarios de una plataforma al panel; devuelve si hubo algo nuevo. */    private fun agregarAlPanel(
+        origen: String,
+        lista: List<com.jfrmedia.switcher.studio.stream.ComentarioFb>
+    ): Boolean {
+        if (lista.isEmpty()) return false
+        var cambio = false
+        // Al revés para que el más nuevo quede arriba al insertar cada uno al principio.
+        lista.reversed().forEach { comentario ->
+            val item = com.jfrmedia.switcher.studio.tcg.ComentarioPanel(
+                origen, comentario.autor, comentario.texto
+            )
+            val repetido = fbLista.any {
+                it.origen == item.origen && it.texto == item.texto
+            }
+            if (!repetido) {
+                fbLista.add(0, item)
+                cambio = true
+            }
+        }
+        while (fbLista.size > 8) fbLista.removeAt(fbLista.lastIndex)
+        if (cambio) panelTcg?.comentarios(fbEspectadores, fbLista.toList())
+        return cambio
     }
 
     /**
@@ -9240,8 +9335,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
                 fbEspectadores = espectadores?.toString().orEmpty()
                 fbLista.clear()
-                lista.forEach { fbLista.add(it.autor to it.texto) }
-                panelTcg?.comentariosFacebook(fbEspectadores, fbLista.toList())
+                lista.forEach { fbLista.add(com.jfrmedia.switcher.studio.tcg.ComentarioPanel("Facebook", it.autor, it.texto)) }
+                panelTcg?.comentarios(fbEspectadores, fbLista.toList())
                 L.i("fb", "prueba: ${espectadores ?: "sin dato"} viendo · ${lista.size} comentarios")
                 if (manual) {
                     val yo = com.jfrmedia.switcher.studio.stream.FacebookLive.quienSoy(token)
@@ -10135,6 +10230,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         /** Transmisión de YouTube creada por la app, para cerrarla al terminar. */
         private const val CLAVE_YT_DIRECTO_ID = "yt_directo_id"
+
+        /** Chat de la transmisión de YouTube (para leer sus comentarios). */
+        private const val CLAVE_YT_CHAT_ID = "yt_chat_id"
         private const val CLAVE_PALETA = "paleta_colores"
         private const val FB_URL_POR_DEFECTO = "rtmps://live-api-s.facebook.com:443/rtmp/"
         private const val CLAVE_TABLET_FRONTAL = "tablet_cam_frontal"

@@ -13,6 +13,12 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 /**
+ * Un comentario del stream tal como se muestra en el panel: con **la plataforma de donde viene**
+ * (Facebook o YouTube), el autor y el texto (Jorge, 25/11/2026).
+ */
+data class ComentarioPanel(val origen: String, val autor: String, val texto: String)
+
+/**
  * Banda de controles del Modo Pokémon TCG, en una sola fila como el diseño aprobado:
  *
  *     [ Jugador 1 ] [ turno · resultado · herramientas ] [ Jugador 2 ]
@@ -93,13 +99,13 @@ class PanelTcg(
     /** Cuántos están viendo en Facebook (texto ya formateado; vacío = sin conectar). */
     private var espectadores: String = ""
 
-    /** Últimos comentarios: (autor, texto). */
-    private var comentarios: List<Pair<String, String>> = emptyList()
+    /** Últimos comentarios, con la plataforma de donde vienen. */
+    private var comentarios: List<ComentarioPanel> = emptyList()
 
-    /** Lo llama la pantalla cuando llegan datos de Facebook. */
-    fun comentariosFacebook(espectadores: String, lista: List<Pair<String, String>>) {
+    /** Lo llama la pantalla cuando llegan datos de Facebook o de YouTube. */
+    fun comentarios(espectadores: String, lista: List<ComentarioPanel>) {
         // Se cuentan los comentarios nuevos de arriba para animarlos: si no, el bloque cambiaba de
-        // golpe cada 8 segundos y no se sabía cuál había entrado.
+        // golpe cada 30 segundos y no se sabía cuál había entrado.
         val nuevos = if (lista == comentarios) {
             0
         } else {
@@ -185,20 +191,33 @@ class PanelTcg(
                 orientation = LinearLayout.VERTICAL
                 setPadding(0, 0, 0, dp(contexto, 6f))
             }
-            // Si Facebook no manda el autor, no se inventa un «Alguien»: se muestra solo el texto.
-            if (par.first.isNotBlank() && par.first != "Alguien") {
-                fila.addView(
+            // De dónde viene el comentario (Facebook o YouTube) y quién lo escribió.
+            val cabecera = LinearLayout(contexto).apply { orientation = LinearLayout.HORIZONTAL }
+            val deYoutube = par.origen.equals("YouTube", ignoreCase = true)
+            cabecera.addView(
+                TextView(contexto).apply {
+                    text = if (deYoutube) "YT" else "FB"
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
+                    setTextColor(if (deYoutube) 0xFFFF6B6B.toInt() else 0xFF96BEFF.toInt())
+                    typeface = Typeface.DEFAULT_BOLD
+                    setPadding(0, 0, dp(contexto, 5f), 0)
+                }
+            )
+            // Si Facebook no manda el autor, no se inventa un «Alguien»: queda solo el texto.
+            if (par.autor.isNotBlank() && par.autor != "Alguien") {
+                cabecera.addView(
                     TextView(contexto).apply {
-                        text = par.first
+                        text = par.autor
                         setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                        setTextColor(0xFF96BEFF.toInt())
+                        setTextColor(0xFFD7DCE6.toInt())
                         typeface = Typeface.DEFAULT_BOLD
                     }
                 )
             }
+            fila.addView(cabecera)
             fila.addView(
                 TextView(contexto).apply {
-                    text = par.second
+                    text = par.texto
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
                     setTextColor(0xFFECEEF2.toInt())
                     maxLines = 4

@@ -41,8 +41,8 @@ object YouTubeLive {
 
     val REDIRECCION: Uri = Uri.parse("$ESQUEMA:/oauth2redirect")
 
-    /** Un directo creado en YouTube: su id y la dirección con la clave. */
-    data class DirectoFbYt(val id: String, val url: String)
+    /** Un directo creado en YouTube: su id, la dirección con la clave y el chat (si ya existe). */
+    data class DirectoFbYt(val id: String, val url: String, val chatId: String = "")
 
     fun servicio(contexto: Context): AuthorizationService = AuthorizationService(contexto)
 
@@ -196,12 +196,57 @@ object YouTubeLive {
                     alError("YouTube no devolvió la transmisión")
                     return@conToken
                 }
-                L.i("yt", "transmisión $idEmision creada (stream $idStream)")
-                alListo(DirectoFbYt(idEmision, "$direccion/$clave"))
+                // El chat puede no venir todavía; se pide después si falta.
+                val chat = emision.optJSONObject("snippet")?.optString("liveChatId", "").orEmpty()
+                L.i("yt", "transmisión $idEmision creada (stream $idStream, chat ${chat.ifBlank { "pendiente" }})")
+                alListo(DirectoFbYt(idEmision, "$direccion/$clave", chat))
             } catch (t: Throwable) {
                 alError(t.message ?: "no se pudo crear la transmisión")
             }
         }, alError = alError)
+    }
+
+    // ------------------------------------------------------------------ chat en vivo
+
+    /**
+     * Id del chat de la transmisión. A veces no viene al crearla, así que se pide aparte.
+     * Bloqueante: se llama desde un hilo.
+     */
+    fun chatDe(contexto: Context, emisionId: String): String? {
+        var chat = ""
+        conToken(contexto, alListo = { token ->
+            val json = pedir("$API/liveBroadcasts?id=$emisionId&part=snippet&access_token=$token")
+            chat = JSONObject(json).optJSONArray("items")?.optJSONObject(0)
+                ?.optJSONObject("snippet")?.optString("liveChatId", "").orEmpty()
+        }, alError = { mensaje -> L.w("yt", "chat: $mensaje") })
+        return chat.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Últimos mensajes del chat en vivo de YouTube, del más viejo al más nuevo.
+     * Bloqueante: se llama desde un hilo.
+     */
+    fun comentariosChat(contexto: Context, chatId: String): List<ComentarioFb> {
+        var salida: List<ComentarioFb> = emptyList()
+        conToken(contexto, alListo = { token ->
+            val json = pedir(
+                "$API/liveChat/messages?liveChatId=$chatId" +
+                    "&part=snippet,authorDetails&maxResults=25&access_token=$token"
+            )
+            val datos = JSONObject(json).optJSONArray("items") ?: return@conToken
+            val lista = ArrayList<ComentarioFb>()
+            for (i in 0 until datos.length()) {
+                val o = datos.optJSONObject(i) ?: continue
+                val texto = o.optJSONObject("snippet")
+                    ?.optString("displayMessage", "").orEmpty().trim()
+                if (texto.isEmpty()) continue
+                val autor = o.optJSONObject("authorDetails")
+                    ?.optString("displayName", "")?.takeIf { it.isNotBlank() } ?: "Alguien"
+                lista.add(ComentarioFb(autor, texto))
+            }
+            salida = lista
+        }, alError = { mensaje -> L.w("yt", "chat mensajes: $mensaje") })
+        return salida
     }
 
     /** Cierra la transmisión en YouTube. Bloqueante: se llama desde un hilo aparte. */
