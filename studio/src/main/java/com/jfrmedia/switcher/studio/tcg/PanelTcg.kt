@@ -51,6 +51,9 @@ class PanelTcg(
 
         /** Abre la lista de mazos del formato para asignarle uno a ese jugador. */
         fun onElegirMazo(lado: Int)
+
+        /** Cronómetro de la partida: [arrancar] = true lo pone a correr o lo pausa; si no, lo reinicia. */
+        fun onCronometro(arrancar: Boolean)
     }
 
     val vista: View
@@ -118,6 +121,18 @@ class PanelTcg(
         pintarComentarios(animar = nuevos)
     }
 
+    /** Cronómetro de la partida en el panel (texto y si está corriendo). */
+    private var cronoTexto: TextView? = null
+    private var cronoBoton: TextView? = null
+    private var cronoCorriendo = false
+
+    /** Actualiza el cronómetro del panel sin rehacer todo (se llama cada segundo). */
+    fun cronometro(texto: String, corriendo: Boolean) {
+        cronoCorriendo = corriendo
+        cronoTexto?.text = texto
+        cronoBoton?.text = if (corriendo) "⏸" else "▶"
+    }
+
     /**
      * Recuadro de la derecha: **contador de espectadores y comentarios del stream**.
      * Ocupa el lugar donde antes estaban los botones del turno (Jorge, 24/11/2026).
@@ -129,6 +144,60 @@ class PanelTcg(
         c.orientation = LinearLayout.VERTICAL
         c.background = caja(contexto, 0xFF16181E.toInt(), 0xFF2C303A.toInt(), 12f)
         c.setPadding(dp(contexto, 10f), dp(contexto, 8f), dp(contexto, 10f), dp(contexto, 8f))
+
+        // --- Cronómetro de la partida: ▶ / ⏸ y reiniciar (lo controla Jorge a mano) ---
+        val filaCrono = LinearLayout(contexto).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(contexto, 6f))
+        }
+        val rotuloCrono = TextView(contexto).apply {
+            text = "PARTIDA"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            setTextColor(0xFF9AA0AA.toInt())
+        }
+        filaCrono.addView(rotuloCrono)
+        val valorCrono = TextView(contexto).apply {
+            text = "00:00"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            setTextColor(0xFFFFD21F.toInt())
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.DEFAULT_BOLD.style)
+            setPadding(dp(contexto, 8f), 0, dp(contexto, 6f), 0)
+            isSingleLine = true
+            maxLines = 1
+        }
+        filaCrono.addView(valorCrono)
+        // Empuja los botones a la derecha sin estrujar el número.
+        filaCrono.addView(
+            android.view.View(contexto),
+            LinearLayout.LayoutParams(0, 1, 1f)
+        )
+        val botonCrono = TextView(contexto).apply {
+            text = if (cronoCorriendo) "⏸" else "▶"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            setTextColor(0xFFFFFFFF.toInt())
+            setPadding(dp(contexto, 14f), dp(contexto, 4f), dp(contexto, 14f), dp(contexto, 4f))
+            background = caja(contexto, 0xFF2C303A.toInt(), 0xFF3E4552.toInt(), 8f)
+            setOnClickListener { escucha.onCronometro(!cronoCorriendo) }
+        }
+        filaCrono.addView(botonCrono)
+        val botonReiniciar = TextView(contexto).apply {
+            text = "↺"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            setTextColor(0xFFE0E4EC.toInt())
+            setPadding(dp(contexto, 12f), dp(contexto, 4f), dp(contexto, 12f), dp(contexto, 4f))
+            setOnClickListener { escucha.onCronometro(false) }
+        }
+        filaCrono.addView(
+            botonReiniciar,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { leftMargin = dp(contexto, 6f) }
+        )
+        c.addView(filaCrono)
+        cronoTexto = valorCrono
+        cronoBoton = botonCrono
 
         c.addView(
             TextView(contexto).apply {

@@ -7900,10 +7900,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** Máximo por partida: 45 minutos. */
     private val cronoMaximoMs = 45L * 60L * 1000L
 
-    /** Momento (elapsedRealtime) en que arrancó la partida. */
+    /** Lo que ya llevaba corrido cuando se pausó. */
+    private var cronoAcumuladoMs = 0L
+
+    /** Momento (elapsedRealtime) del último arranque; solo vale si [cronoAndando]. */
     private var cronoInicioMs = 0L
 
-    /** El cronómetro corre desde que hay partida nueva. */
+    /** Lo arranca y lo pausa **el usuario** desde el panel (no arranca solo). */
     private var cronoAndando = false
 
     private var cronoItem: CanvasItem? = null
@@ -7913,23 +7916,57 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Milisegundos que lleva la partida (tope 45 min). */
     private fun cronoTranscurridoMs(): Long {
-        if (!cronoAndando || cronoInicioMs == 0L) return 0L
-        return (android.os.SystemClock.elapsedRealtime() - cronoInicioMs)
-            .coerceIn(0L, cronoMaximoMs)
+        val total = if (cronoAndando) {
+            cronoAcumuladoMs + (android.os.SystemClock.elapsedRealtime() - cronoInicioMs)
+        } else {
+            cronoAcumuladoMs
+        }
+        return total.coerceIn(0L, cronoMaximoMs)
     }
 
-    /** Arranca el cronómetro de una partida nueva. */
+    /** Texto del cronómetro en formato mm:ss. */
+    private fun cronoTextoActual(): String {
+        val total = cronoTranscurridoMs() / 1000
+        return String.format(java.util.Locale.US, "%02d:%02d", total / 60, total % 60)
+    }
+
+    /** Deja el cronómetro en 00:00 y **detenido**: se arranca a mano cuando empieza la partida. */
     private fun reiniciarCronometroTcg() {
-        cronoInicioMs = android.os.SystemClock.elapsedRealtime()
-        cronoAndando = true
+        cronoAcumuladoMs = 0L
+        cronoInicioMs = 0L
+        cronoAndando = false
         cronoTexto = ""
         dibujarCronometroTcg()
+        panelTcg?.cronometro(cronoTextoActual(), false)
+    }
+
+    /** ▶ / ⏸ desde el panel: arranca si estaba parado y pausa si estaba corriendo. */
+    private fun alternarCronometroTcg() {
+        if (cronoAndando) {
+            // Pausa: se guarda lo corrido y se congela.
+            cronoAcumuladoMs = cronoTranscurridoMs()
+            cronoAndando = false
+        } else {
+            if (cronoAcumuladoMs >= cronoMaximoMs) cronoAcumuladoMs = 0L
+            cronoInicioMs = android.os.SystemClock.elapsedRealtime()
+            cronoAndando = true
+        }
+        cronoTexto = ""
+        dibujarCronometroTcg()
+        panelTcg?.cronometro(cronoTextoActual(), cronoAndando)
     }
 
     /** Lo llama el reloj cada segundo mientras la vista es la de mesa. */
     private fun tickCronometroTcg() {
+        // El panel muestra el tiempo siempre (aunque esté en pausa).
+        panelTcg?.cronometro(cronoTextoActual(), cronoAndando)
         if (!cronoAndando) return
-        if (cronoTranscurridoMs() >= cronoMaximoMs) cronoAndando = false
+        if (cronoTranscurridoMs() >= cronoMaximoMs) {
+            // Se llegó al tope de 45 minutos: se detiene y se queda el tiempo congelado.
+            cronoAcumuladoMs = cronoMaximoMs
+            cronoAndando = false
+            panelTcg?.cronometro(cronoTextoActual(), false)
+        }
         dibujarCronometroTcg()
         acomodarCronometroTcg()
     }
@@ -9703,6 +9740,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
             /** Elegir el mazo del jugador de la lista del formato (Limitless). */
             override fun onElegirMazo(lado: Int) = abrirSelectorMazo(lado)
+
+            override fun onCronometro(arrancar: Boolean) {
+                // El ▶ del panel alterna; el ⟲ reinicia a 00:00 y deja el cronómetro parado.
+                if (arrancar) alternarCronometroTcg() else reiniciarCronometroTcg()
+            }
         }, { mazoId -> com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, mazoId) })
         panel.refrescar(estadoTcg)
         panelTcg = panel
@@ -10539,8 +10581,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         actualizarMarcosTcg()
         dibujarChipsTcg()
         // Cronómetro de la partida debajo de la mesa y batería dentro de cada cámara.
-        // Si no venía corriendo (por ejemplo al abrir la app con el modo ya puesto), arranca aquí.
-        if (!cronoAndando) reiniciarCronometroTcg() else dibujarCronometroTcg()
+        // El cronómetro NO arranca solo: se dibuja con lo que lleve y lo controla Jorge desde el panel.
+        dibujarCronometroTcg()
+        panelTcg?.cronometro(cronoTextoActual(), cronoAndando)
         actualizarBateriasTcg()
         // El reloj que hace correr el cronómetro y refresca la batería cada segundo.
         runCatching {
