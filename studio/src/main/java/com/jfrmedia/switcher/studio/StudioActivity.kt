@@ -5277,18 +5277,27 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
     }
 
-    /** Arranca el envío a Facebook con la clave guardada. */
-    private fun iniciarTransmision() {
+    /**
+     * Arranca el envío a Facebook.
+     *
+     * [urlDirecto] llega cuando **la app creó el directo**: esa dirección ya trae servidor y clave
+     * juntos, así que no hay que pegar nada. Sin ella se usa la clave copiada del Live Producer.
+     */
+    private fun iniciarTransmision(urlDirecto: String? = null) {
         // El vúmetro suelta el micrófono antes de que el emisor lo abra para el directo.
         runCatching { audioVivo.detener() }
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val clave = prefs.getString(CLAVE_FB_CLAVE, "").orEmpty().trim()
-        if (clave.isEmpty()) {
-            toast("Falta la clave de transmisión en «Facebook»")
-            return
-        }
         // La clave se copia del Live Producer: servidor RTMPS guardado + clave.
-        val url = prefs.getString(CLAVE_FB_URL, FB_URL_POR_DEFECTO).orEmpty().trim() + clave
+        val url = if (!urlDirecto.isNullOrBlank()) {
+            urlDirecto
+        } else {
+            if (clave.isEmpty()) {
+                toast("Falta la clave: elige la Página y toca «Crear directo», o pega la clave")
+                return
+            }
+            prefs.getString(CLAVE_FB_URL, FB_URL_POR_DEFECTO).orEmpty().trim() + clave
+        }
         // El envío usa el mismo criterio que la grabación: el número es el lado corto, así que
         // en vertical 720p sale 720×1280 (antes se forzaba 16:9 y el lienzo vertical se iba
         // con barras negras a los lados).
@@ -5333,10 +5342,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         abrirRegistro("transmisión")
         iniciarProteccionSesion()
         toast("Conectando con Facebook…")
-        // Al salir al aire se arranca la lectura. El id del directo va dentro de la clave
-        // (`FB-<idVideo>-0-…`), así se lee el video correcto sin adivinar.
+        // Al salir al aire se arranca la lectura. El id del directo va dentro de la dirección
+        // (`.../rtmp/FB-<idVideo>-0-…`), así se lee el video correcto sin adivinar.
         iniciarConsultasFacebook(
-            com.jfrmedia.switcher.studio.stream.FacebookLive.videoDeLaClave(clave).orEmpty()
+            com.jfrmedia.switcher.studio.stream.FacebookLive.videoDeLaUrl(url).orEmpty()
         )
         // Cronómetro del directo: si no hay grabación local, cuenta el tiempo en el aire.
         if (!recorder.isRecording) {
@@ -5362,6 +5371,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         emisor.detenerTransmision()
         // Ya no hay directo que leer: se deja de consultar Facebook.
         detenerConsultasFacebook()
+        // Si el directo lo creó la app, se cierra también en Facebook para que no quede «fantasma».
+        cerrarDirectoFacebook()
         vistaAlAire().endRecordingOutput()
         vistaAlAire().salidaInvertida = false
         actualizarBotonSesion()
@@ -5442,7 +5453,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         // --- Token de la Página (para espectadores y comentarios) ---
         caja.addView(TextView(this).apply {
-            text = "Token de la Página (espectadores y comentarios)"
+            text = "Token de Facebook"
             textSize = 11f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
             setPadding(0, 14.dp, 0, 0)
@@ -5451,13 +5462,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             setText(prefs.getString(CLAVE_FB_TOKEN, ""))
             textSize = 12f
             setSingleLine(true)
-            hint = "Token de Página de larga duración"
+            hint = "Token de USUARIO (el que trae tus Páginas)"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
         caja.addView(campoToken)
         caja.addView(TextView(this).apply {
-            text = "Se guarda solo en esta tablet. Necesita los permisos pages_read_engagement y read_insights."
+            text = "Con este token la app trae la lista de tus Páginas y guarda el de la que elijas. " +
+                "Necesita pages_show_list, pages_read_engagement y read_insights. Se guarda solo " +
+                "en esta tablet."
             textSize = 10f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
             setPadding(0, 4.dp, 0, 8.dp)
@@ -5469,6 +5482,104 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
             setPadding(0, 8.dp, 0, 0)
         }
+        // --- Páginas que administras: se eligen aquí y la app crea el directo sola ---
+        val rotuloPagina = TextView(this).apply {
+            text = paginaElegidaTexto()
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+            setPadding(0, 16.dp, 0, 4.dp)
+        }
+        caja.addView(rotuloPagina)
+        val listaPaginas = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        caja.addView(
+            botonFb("Traer mis Páginas") {
+                listaPaginas.removeAllViews()
+                val usuario = campoToken.text.toString().trim()
+                if (usuario.isBlank()) {
+                    listaPaginas.addView(textoAyuda("Pega primero el token de usuario (el del Explorer sin elegir Página)."))
+                    return@botonFb
+                }
+                prefs.edit().putString(CLAVE_FB_USUARIO_TOKEN, usuario).apply()
+                listaPaginas.addView(textoAyuda("Consultando tus Páginas…"))
+                Thread {
+                    var paginas: List<com.jfrmedia.switcher.studio.stream.FacebookLive.PaginaFb> =
+                        emptyList()
+                    var error = ""
+                    try {
+                        paginas = com.jfrmedia.switcher.studio.stream.FacebookLive.paginas(usuario)
+                    } catch (t: Throwable) {
+                        error = t.message ?: "error"
+                    }
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
+                        listaPaginas.removeAllViews()
+                        if (error.isNotEmpty()) {
+                            listaPaginas.addView(textoAyuda(cuandoFallaFacebook(error)))
+                            return@runOnUiThread
+                        }
+                        if (paginas.isEmpty()) {
+                            listaPaginas.addView(
+                                textoAyuda(
+                                    "No apareció ninguna Página. Revisa que el token sea de usuario y " +
+                                        "que tenga el permiso pages_show_list."
+                                )
+                            )
+                            return@runOnUiThread
+                        }
+                        paginas.forEach { pagina ->
+                            listaPaginas.addView(
+                                botonFb(pagina.nombre) {
+                                    prefs.edit()
+                                        .putString(CLAVE_FB_PAGE_ID, pagina.id)
+                                        .putString(CLAVE_FB_PAGINA_TOKEN, pagina.token)
+                                        .putString(CLAVE_FB_PAGINA_NOMBRE, pagina.nombre)
+                                        .apply()
+                                    campoPagina.setText(pagina.id)
+                                    rotuloPagina.text = paginaElegidaTexto()
+                                    listaPaginas.removeAllViews()
+                                    estadoFb.text = "Página elegida: ${pagina.nombre}"
+                                }
+                            )
+                        }
+                    }
+                }.apply { isDaemon = true }.start()
+            }
+        )
+        caja.addView(listaPaginas)
+        caja.addView(
+            botonFb("Crear directo y salir al aire") {
+                val paginaId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
+                val tokenPagina = prefs.getString(CLAVE_FB_PAGINA_TOKEN, "").orEmpty().trim()
+                if (paginaId.isBlank() || tokenPagina.isBlank()) {
+                    estadoFb.text = "Primero trae tus Páginas y elige una."
+                    return@botonFb
+                }
+                estadoFb.text = "Creando el directo en Facebook…"
+                Thread {
+                    var directo: com.jfrmedia.switcher.studio.stream.FacebookLive.DirectoFb? = null
+                    var error = ""
+                    try {
+                        directo = com.jfrmedia.switcher.studio.stream.FacebookLive
+                            .crearDirecto(paginaId, tokenPagina, "JFR Media")
+                    } catch (t: Throwable) {
+                        error = t.message ?: "error"
+                    }
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
+                        val listo = directo
+                        if (listo == null) {
+                            estadoFb.text = "No se pudo crear el directo: ${cuandoFallaFacebook(error)}"
+                            return@runOnUiThread
+                        }
+                        prefs.edit().putString(CLAVE_FB_DIRECTO_ID, listo.id).apply()
+                        estadoFb.text = "Directo ${listo.id} creado. Conectando…"
+                        cuadroActual?.dismiss()
+                        iniciarTransmision(listo.url)
+                    }
+                }.apply { isDaemon = true }.start()
+            }
+        )
+
         caja.addView(TextView(this).apply {
             text = "Probar Facebook"
             textSize = 13f
@@ -5523,7 +5634,39 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             .setNegativeButton("Cerrar", null)
             .show()
-            .also { cuadroALaIzquierda(it) }
+            .also {
+                cuadroActual = it
+                cuadroALaIzquierda(it)
+            }
+    }
+
+    /** Cuadro abierto del Facebook, para poder cerrarlo desde un botón de adentro. */
+    private var cuadroActual: AlertDialog? = null
+
+    /** Botón con el estilo de los demás del cuadro de Facebook. */
+    private fun botonFb(texto: String, accion: () -> Unit): TextView = TextView(this).apply {
+        text = texto
+        textSize = 13f
+        gravity = Gravity.CENTER
+        setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+        setBackgroundResource(R.drawable.bg_pill_ghost)
+        setPadding(16.dp, 12.dp, 16.dp, 12.dp)
+        setOnClickListener { accion() }
+    }
+
+    /** Texto chico de ayuda dentro del cuadro de Facebook. */
+    private fun textoAyuda(texto: String): TextView = TextView(this).apply {
+        text = texto
+        textSize = 11f
+        setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+        setPadding(0, 8.dp, 0, 4.dp)
+    }
+
+    /** Qué Página está elegida, en una línea. */
+    private fun paginaElegidaTexto(): String {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val nombre = prefs.getString(CLAVE_FB_PAGINA_NOMBRE, "").orEmpty().trim()
+        return if (nombre.isBlank()) "Página: ninguna elegida todavía" else "Página: $nombre"
     }
     private fun dialogoAudio() {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -8709,9 +8852,26 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         runCatching { com.jfrmedia.switcher.studio.stream.FacebookLive.cortarEscucha() }
     }
 
+    /** Cierra en Facebook el directo que creó la app (si lo hubo). */
+    private fun cerrarDirectoFacebook() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val id = prefs.getString(CLAVE_FB_DIRECTO_ID, "").orEmpty().trim()
+        val token = tokenYpagina().first
+        if (id.isBlank() || token.isBlank()) return
+        prefs.edit().putString(CLAVE_FB_DIRECTO_ID, "").apply()
+        Thread {
+            val cerrado = com.jfrmedia.switcher.studio.stream.FacebookLive
+                .terminarDirecto(id, token)
+            L.i("fb", if (cerrado) "directo $id cerrado" else "no se pudo cerrar el directo $id")
+        }.apply { isDaemon = true }.start()
+    }
+
     private fun tokenYpagina(): Pair<String, String> {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        return prefs.getString(CLAVE_FB_TOKEN, "").orEmpty().trim() to
+        // Para leer el directo se usa el token de la **Página** elegida; si no hay, el de usuario.
+        val tokenPagina = prefs.getString(CLAVE_FB_PAGINA_TOKEN, "").orEmpty().trim()
+        val tokenUsuario = prefs.getString(CLAVE_FB_TOKEN, "").orEmpty().trim()
+        return (tokenPagina.ifBlank { tokenUsuario }) to
             prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
     }
 
@@ -8884,6 +9044,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * más confunde: o el token es de usuario en vez de Página, o le falta `pages_read_engagement`.
      */
     private fun cuandoFallaFacebook(error: String): String = when {
+        // Un token de Página no tiene la lista de Páginas: esa solo existe en el token de usuario.
+        error.contains("nonexisting field (accounts)") ->
+            "Ese token es de Página. Para traer la lista de tus Páginas hace falta uno **de usuario**: " +
+                "en el Graph API Explorer deja «User or Page» en «Get User Access Token», agrega " +
+                "pages_show_list y genera. (La app guarda sola el de la Página que elijas.)"
+
         error.contains("#200") || error.contains("Missing Permissions", ignoreCase = true) ->
             "El token no tiene permiso de Página. En el Graph API Explorer elige la Página en «User or " +
                 "Page» (no tu usuario), agrega pages_read_engagement y genera el token otra vez."
@@ -9727,6 +9893,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         /** Token de la Página: solo para leer espectadores y comentarios (nunca se manda al canal). */
         private const val CLAVE_FB_TOKEN = "fb_token"
+
+        /** Token **de usuario**: solo se usa para pedir la lista de Páginas (`me/accounts`). */
+        private const val CLAVE_FB_USUARIO_TOKEN = "fb_usuario_token"
+
+        /** Token de la Página elegida: con ese se crea el directo y se leen espectadores. */
+        private const val CLAVE_FB_PAGINA_TOKEN = "fb_pagina_token"
+
+        /** Nombre de la Página elegida, para mostrarlo en el cuadro. */
+        private const val CLAVE_FB_PAGINA_NOMBRE = "fb_pagina_nombre"
+
+        /** Directo creado por la app (para cerrarlo al detener la transmisión). */
+        private const val CLAVE_FB_DIRECTO_ID = "fb_directo_id"
         private const val CLAVE_PALETA = "paleta_colores"
         private const val FB_URL_POR_DEFECTO = "rtmps://live-api-s.facebook.com:443/rtmp/"
         private const val CLAVE_TABLET_FRONTAL = "tablet_cam_frontal"
