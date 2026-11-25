@@ -65,10 +65,157 @@ object Mazos {
     /** Mazos extra leídos del APK (se leen una sola vez). */
     private var extraEnMemoria: List<Mazo>? = null
 
+    // ------------------------------------------------------------------ mazos propios
+
+    /**
+     * Un Pokémon del catálogo de iconos (para armar mazos personalizados).
+     * [slug] es el nombre del archivo en Limitless.
+     */
+    data class IconoCatalogo(val nombre: String, val slug: String) {
+        val url: String get() = "https://r2.limitlesstcg.net/pokemon/gen9/$slug.png"
+    }
+
+    /** Mazo que armó el usuario y que no está en la lista de Limitless. */
+    data class MazoCustom(val id: String, val nombre: String, val slugs: List<String>)
+
+    private const val ASSET_ICONOS = "iconos_pokemon.json"
+    private const val CLAVE_CUSTOM = "mazos_custom"
+
+    private var catalogoEnMemoria: List<IconoCatalogo>? = null
+
+    /** Todos los Pokémon con icono disponible, ordenados por nombre (se lee del APK una vez). */
+    fun catalogo(ctx: Context): List<IconoCatalogo> {
+        catalogoEnMemoria?.let { return it }
+        val lista = runCatching {
+            val texto = ctx.assets.open(ASSET_ICONOS).use { it.readBytes().toString(Charsets.UTF_8) }
+            val arr = JSONArray(texto)
+            val salida = ArrayList<IconoCatalogo>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val nombre = o.optString("n", "")
+                val slug = o.optString("s", "")
+                if (nombre.isNotBlank() && slug.isNotBlank()) salida.add(IconoCatalogo(nombre, slug))
+            }
+            salida
+        }.getOrElse { t ->
+            L.w("mazos", "no se pudo leer el catálogo de iconos: ${t.message}")
+            emptyList()
+        }
+        catalogoEnMemoria = lista
+        return lista
+    }
+
+    /** Los mazos propios guardados en las preferencias. */
+    fun personalizados(ctx: Context): List<MazoCustom> = runCatching {
+        val texto = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(CLAVE_CUSTOM, null) ?: return emptyList()
+        val arr = JSONArray(texto)
+        val salida = ArrayList<MazoCustom>(arr.length())
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val id = o.optString("id", "")
+            val nombre = o.optString("nombre", "")
+            if (id.isBlank() || nombre.isBlank()) continue
+            val slugs = ArrayList<String>()
+            o.optJSONArray("slugs")?.let { a ->
+                for (j in 0 until a.length()) a.optString(j).takeIf { it.isNotBlank() }?.let(slugs::add)
+            }
+            salida.add(MazoCustom(id, nombre, slugs))
+        }
+        salida
+    }.getOrElse { t ->
+        L.w("mazos", "no se pudieron leer los mazos propios: ${t.message}")
+        emptyList()
+    }
+
+    /**
+     * Guarda (o reemplaza) un mazo propio y **baja sus iconos** a la caché, para que después se
+     * dibujen igual que los de Limitless. Bloqueante: se llama desde un hilo.
+     */
+    fun guardarPersonalizado(ctx: Context, mazo: MazoCustom) {
+        val actuales = personalizados(ctx).toMutableList()
+        actuales.removeAll { it.id == mazo.id }
+        actuales.add(0, mazo)
+        val arr = JSONArray()
+        actuales.forEach { m ->
+            arr.put(
+                JSONObject()
+                    .put("id", m.id)
+                    .put("nombre", m.nombre)
+                    .put("slugs", JSONArray(m.slugs))
+            )
+        }
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(CLAVE_CUSTOM, arr.toString())
+            .apply()
+        // Los iconos, a la misma caché que usan los mazos de Limitless.
+        mazo.slugs.take(2).forEachIndexed { indice, slug ->
+            val archivo = archivoIcono(ctx, mazo.id, indice + 1)
+            runCatching {
+                descargarIcono("https://r2.limitlesstcg.net/pokemon/gen9/$slug.png", archivo)
+            }.onFailure { L.w("mazos", "icono propio ${mazo.nombre}: ${it.message}") }
+        }
+        memoriaIconos.remove(mazo.id)
+    }
+
+    /** Borra un mazo propio y sus iconos guardados. */
+    fun borrarPersonalizado(ctx: Context, id: String) {
+        val actuales = personalizados(ctx).filterNot { it.id == id }
+        val arr = JSONArray()
+        actuales.forEach { m ->
+            arr.put(
+                JSONObject()
+                    .put("id", m.id)
+                    .put("nombre", m.nombre)
+                    .put("slugs", JSONArray(m.slugs))
+            )
+        }
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(CLAVE_CUSTOM, arr.toString())
+            .apply()
+        for (n in 1..2) runCatching { archivoIcono(ctx, id, n).delete() }
+        memoriaIconos.remove(id)
+    }
+
+    /** Los mazos propios como mazos comunes, listos para la lista y el banner. */
+    fun personalizadosComoMazos(ctx: Context): List<Mazo> = personalizados(ctx).map { m ->
+        Mazo(
+            id = m.id,
+            nombre = m.nombre,
+            iconos = m.slugs.map { "https://r2.limitlesstcg.net/pokemon/gen9/$it.png" },
+            uso = "",
+        )
+    }
+
+    /** Carpeta donde se guardan las miniaturas del catálogo (una sola vez por Pokémon). */
+    private fun archivoCatalogo(ctx: Context, slug: String): File =
+        File(File(ctx.filesDir, "iconos_catalogo"), "$slug.png")
+
+    /**
+     * Miniatura del catálogo para el buscador. Devuelve la que ya está guardada, o **null** si
+     * todavía no se ha bajado (así el diálogo no se congela). Bloqueante para el hilo que baja.
+     */
+    fun miniaturaGuardada(ctx: Context, slug: String): Bitmap? {
+        val archivo = archivoCatalogo(ctx, slug)
+        if (!archivo.exists() || archivo.length() == 0L) return null
+        return runCatching { BitmapFactory.decodeFile(archivo.absolutePath) }.getOrNull()
+    }
+
+    /** Baja la miniatura de un Pokémon del catálogo (si no estaba). Bloqueante. */
+    fun bajarMiniatura(ctx: Context, slug: String): Bitmap? {
+        miniaturaGuardada(ctx, slug)?.let { return it }
+        val archivo = archivoCatalogo(ctx, slug)
+        runCatching {
+            descargarIcono("https://r2.limitlesstcg.net/pokemon/gen9/$slug.png", archivo)
+        }.onFailure { L.w("mazos", "miniatura $slug: ${it.message}") }
+        return miniaturaGuardada(ctx, slug)
+    }
+
     // ------------------------------------------------------------------ consulta
 
-    /** Lista completa: el top descargado del sitio primero y después los 50 extra de los torneos. */
-    fun guardados(ctx: Context): List<Mazo> = unir(leer(ctx), extras(ctx))
+    /** Lista completa: el top descargado del sitio, los 50 extra de torneo y los mazos propios. */
+    fun guardados(ctx: Context): List<Mazo> =
+        personalizadosComoMazos(ctx) + unir(leer(ctx), extras(ctx))
 
     /** ¿Toca volver a bajar la lista? (nunca descargada o con más de un día) */
     fun vieja(ctx: Context): Boolean {

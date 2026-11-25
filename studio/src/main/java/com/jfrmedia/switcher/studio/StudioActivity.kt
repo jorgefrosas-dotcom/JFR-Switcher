@@ -9819,6 +9819,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 pintar(s?.toString().orEmpty())
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
+        // Crear un mazo propio: los que arman los jugadores y no están en Limitless.
+        columna.addView(
+            botonFb("＋ Nuevo mazo personalizado") {
+                runCatching { dialogo.dismiss() }
+                dialogoNuevoMazo(lado) { creado -> if (creado != null) asignar(creado) }
+            }
+        )
         pintar("")
         dialogo.setOnShowListener {
             // Con el teclado abierto, la ventana se encoge para que la lista siga viéndose (si no, el
@@ -9841,8 +9848,202 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         dialogo.show()
     }
 
-    /** Una fila del selector de mazos: icono, nombre, uso y resaltado si es el actual. */
-    private fun filaMazoDialogo(
+    /**
+     * Crea un **mazo propio**: nombre libre y hasta dos iconos elegidos de **todo el catálogo de
+     * Pokémon** (1200+), con buscador. Se guarda en la tablet y aparece en la lista como uno más
+     * (Jorge, 25/11/2026).
+     */
+    private fun dialogoNuevoMazo(
+        lado: Int,
+        alTerminar: (com.jfrmedia.switcher.studio.tcg.Mazo?) -> Unit,
+    ) {
+        val catalogo = com.jfrmedia.switcher.studio.tcg.Mazos.catalogo(this)
+        if (catalogo.isEmpty()) {
+            toast("No se pudo leer el catálogo de iconos del APK")
+            alTerminar(null)
+            return
+        }
+        val elegidos = ArrayList<String>()
+        val caja = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20.dp, 8.dp, 20.dp, 8.dp)
+        }
+        caja.addView(TextView(this).apply {
+            text = "Nombre del mazo"
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(context, R.color.text_dim))
+        })
+        val campoNombre = EditText(this).apply {
+            hint = "El nombre que le puso el jugador"
+            setSingleLine()
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+        }
+        caja.addView(campoNombre)
+        caja.addView(TextView(this).apply {
+            text = "Iconos (1 o 2): toca un Pokémon de la lista"
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(context, R.color.text_dim))
+            setPadding(0, 10.dp, 0, 2.dp)
+        })
+        val filaIconos = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        caja.addView(filaIconos)
+        val campoBuscar = EditText(this).apply {
+            hint = "Buscar Pokémon (por ejemplo: Charizard, Pikachu)…"
+            setSingleLine()
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+        }
+        caja.addView(campoBuscar)
+        val resultados = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        caja.addView(
+            ScrollView(this).apply { addView(resultados) },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 240.dp)
+        )
+
+        fun pintarElegidos() {
+            filaIconos.removeAllViews()
+            if (elegidos.isEmpty()) {
+                filaIconos.addView(TextView(this).apply {
+                    text = "Ninguno elegido"
+                    textSize = 12f
+                    setTextColor(ContextCompat.getColor(context, R.color.text_dim))
+                })
+                return
+            }
+            elegidos.forEach { slug ->
+                val vista = ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    setPadding(4.dp, 4.dp, 4.dp, 4.dp)
+                }
+                com.jfrmedia.switcher.studio.tcg.Mazos.miniaturaGuardada(this, slug)?.let {
+                    vista.setImageBitmap(it)
+                }
+                filaIconos.addView(
+                    vista,
+                    LinearLayout.LayoutParams(52.dp, 52.dp).apply { rightMargin = 8.dp }
+                )
+            }
+        }
+
+        fun pintar(filtro: String) {
+            resultados.removeAllViews()
+            val texto = filtro.trim()
+            val lista = if (texto.isEmpty()) {
+                catalogo.take(10)
+            } else {
+                catalogo.filter { it.nombre.contains(texto, ignoreCase = true) }.take(40)
+            }
+            if (lista.isEmpty()) {
+                resultados.addView(TextView(this).apply {
+                    text = "Ningún Pokémon se llama así"
+                    textSize = 12f
+                    setTextColor(ContextCompat.getColor(context, R.color.text_dim))
+                    setPadding(6.dp, 8.dp, 6.dp, 8.dp)
+                })
+                return
+            }
+            lista.forEach { icono ->
+                val fila = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(6.dp, 4.dp, 6.dp, 4.dp)
+                    setOnClickListener {
+                        val ya = elegidos.indexOf(icono.slug)
+                        if (ya >= 0) elegidos.removeAt(ya)
+                        else if (elegidos.size < 2) elegidos.add(icono.slug)
+                        else toast("Solo dos iconos por mazo")
+                        pintarElegidos()
+                        pintar(campoBuscar.text.toString())
+                    }
+                }
+                val vista = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+                fila.addView(
+                    vista,
+                    LinearLayout.LayoutParams(38.dp, 38.dp).apply { rightMargin = 8.dp }
+                )
+                fila.addView(
+                    TextView(this).apply {
+                        text = icono.nombre
+                        textSize = 14f
+                        setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                    },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                )
+                if (elegidos.contains(icono.slug)) {
+                    fila.addView(TextView(this).apply {
+                        text = "✓"
+                        textSize = 16f
+                        setTextColor(ContextCompat.getColor(context, R.color.accent))
+                    })
+                }
+                resultados.addView(fila)
+                // La miniatura se baja en segundo plano y se pone cuando llega.
+                Thread {
+                    val bmp = com.jfrmedia.switcher.studio.tcg.Mazos.bajarMiniatura(this, icono.slug)
+                    if (bmp != null) runOnUiThread { vista.setImageBitmap(bmp) }
+                }.apply { isDaemon = true }.start()
+            }
+        }
+
+        campoBuscar.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) =
+                pintar(s?.toString().orEmpty())
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+        pintarElegidos()
+        pintar("")
+
+        val cuadro = AlertDialog.Builder(this)
+            .setTitle("Nuevo mazo personalizado")
+            .setView(ScrollView(this).apply { addView(caja) })
+            .setPositiveButton("Guardar", null)
+            .setNegativeButton("Cancelar") { _, _ -> alTerminar(null) }
+            .create()
+        cuadro.setOnShowListener {
+            runCatching {
+                cuadro.window?.setSoftInputMode(
+                    android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                )
+            }
+            cuadro.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val nombre = campoNombre.text.toString().trim()
+                if (nombre.isEmpty()) {
+                    toast("Escribe el nombre del mazo")
+                    return@setOnClickListener
+                }
+                if (elegidos.isEmpty()) {
+                    toast("Elige al menos un icono")
+                    return@setOnClickListener
+                }
+                val mazo = com.jfrmedia.switcher.studio.tcg.Mazos.MazoCustom(
+                    id = "propio_" + System.currentTimeMillis(),
+                    nombre = nombre,
+                    slugs = elegidos.toList(),
+                )
+                runCatching { cuadro.dismiss() }
+                toast("Guardando el mazo…")
+                Thread {
+                    com.jfrmedia.switcher.studio.tcg.Mazos.guardarPersonalizado(this, mazo)
+                    runOnUiThread {
+                        val creado = com.jfrmedia.switcher.studio.tcg.Mazo(
+                            id = mazo.id,
+                            nombre = mazo.nombre,
+                            iconos = mazo.slugs.map {
+                                "https://r2.limitlesstcg.net/pokemon/gen9/$it.png"
+                            },
+                        )
+                        alTerminar(creado)
+                    }
+                }.apply { isDaemon = true }.start()
+            }
+        }
+        cuadro.show()
+        cuadroALaIzquierda(cuadro)
+    }
+
+    /** Una fila del selector de mazos: icono, nombre, uso y resaltado si es el actual. */    private fun filaMazoDialogo(
         mazo: com.jfrmedia.switcher.studio.tcg.Mazo,
         actual: Boolean,
         alTocar: () -> Unit,
