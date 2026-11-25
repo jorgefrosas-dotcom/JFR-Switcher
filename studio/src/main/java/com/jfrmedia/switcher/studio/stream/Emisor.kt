@@ -158,6 +158,11 @@ class Emisor(
      */
     fun preparar(anchoVideo: Int, altoVideo: Int, kbps: Int, fps: Int, vertical: Boolean): Surface? {
         if (listo) return superficie?.let { Surface(it) }
+        // RootEncoder se niega a preparar («Stream, record and preview must be stopped before
+        // prepareVideo») si quedó una sesión a medias — pasa cuando la grabación de respaldo no pudo
+        // crearse por falta de micrófono. Se limpia antes de preparar (Jorge, 25/11/2026).
+        runCatching { if (flujo.isRecording) flujo.stopRecord() }
+        runCatching { if (flujo.isStreaming) flujo.stopStream() }
         ancho = anchoVideo
         alto = altoVideo
         return try {
@@ -256,8 +261,14 @@ class Emisor(
         return try {
             flujo.startRecord(
             ruta,
-            // Con NoVideoSource la biblioteca grabaría solo audio: se piden ambas pistas.
-            tracks = com.pedro.library.base.recording.RecordController.RecordTracks.ALL,
+            // Con NoVideoSource la biblioteca grabaría solo audio: se piden ambas pistas. Si el
+            // equipo no tiene micrófono usable (pasa en el emulador) se graba solo el video, en
+            // lugar de quedarse sin grabación y con el codificador a medias.
+            tracks = if (sinAudio) {
+                com.pedro.library.base.recording.RecordController.RecordTracks.VIDEO
+            } else {
+                com.pedro.library.base.recording.RecordController.RecordTracks.ALL
+            },
                 listener = object : com.pedro.library.base.recording.RecordController.Listener {
                     override fun onStatusChange(
                         status: com.pedro.library.base.recording.RecordController.Status

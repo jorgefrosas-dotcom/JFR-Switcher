@@ -34,16 +34,28 @@ object FacebookLive {
         if (id.isBlank()) null else id to nombre
     }.getOrNull()
 
-    /** Id del video en vivo de la página (el que está al aire ahora). */    fun videoEnVivo(pageId: String, token: String): String? {
-        val json = bajar("$BASE/$pageId/live_videos?fields=id,status&limit=5&access_token=$token")
-        val datos = JSONObject(json).optJSONArray("data") ?: return null
+    /**
+     * Id del video en vivo **al aire ahora**.
+     *
+     * Busca primero en la Página configurada y luego en la Página dueña del token (`/me`), porque es
+     * fácil tener dos Páginas y transmitir en la que no está cargada en la app (pasó el 25/11/2026:
+     * el token era de «Mundo 9» y la app consultaba «Producciones D'Angel Film»).
+     * Ojo: si el directo se creó en el **perfil personal**, la API con token de Página no lo ve.
+     */
+    fun videoEnVivo(pageId: String, token: String): String? {
         var reciente = ""
-        for (i in 0 until datos.length()) {
-            val o = datos.optJSONObject(i) ?: continue
-            val id = o.optString("id", "")
-            if (id.isBlank()) continue
-            if (reciente.isBlank()) reciente = id
-            if (o.optString("status", "").equals("LIVE", ignoreCase = true)) return id
+        for (pagina in listOfNotNull(pageId.takeIf { it.isNotBlank() }, "me")) {
+            val json = runCatching {
+                bajar("$BASE/$pagina/live_videos?fields=id,status&limit=5&access_token=$token")
+            }.getOrNull() ?: continue
+            val datos = runCatching { JSONObject(json).optJSONArray("data") }.getOrNull() ?: continue
+            for (i in 0 until datos.length()) {
+                val o = datos.optJSONObject(i) ?: continue
+                val id = o.optString("id", "")
+                if (id.isBlank()) continue
+                if (o.optString("status", "").equals("LIVE", ignoreCase = true)) return id
+                if (reciente.isBlank()) reciente = id
+            }
         }
         // Sin ninguno al aire se devuelve el más reciente: sirve para probar el token.
         return reciente.takeIf { it.isNotBlank() }
