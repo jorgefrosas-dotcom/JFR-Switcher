@@ -251,79 +251,93 @@ object Banners {
      * Un chip (Energy / Supporter / Retreat) para dibujarlo **dentro de la cámara del jugador**.
      * Apagado = ya se usó: se pinta translúcido, pero se sigue viendo su punta.
      */
+    /**
+     * Base de **todos** los chips: la misma forma, el mismo borde y el mismo texto centrado.
+     *
+     * Una sola función para que el cronómetro y los chips de Energy/Supporter/Retreat se vean
+     * exactamente iguales: la única diferencia entre ellos es el tamaño y el texto
+     * (Jorge, 25/11/2026).
+     */
+    private fun pildora(
+        ancho: Int,
+        alto: Int,
+        relleno: Int,
+        borde: Int,
+        texto: String,
+        colorTexto: Int,
+        tamanoTexto: Float,
+        tipo: Typeface,
+        sombra: Boolean = false,
+    ): Bitmap {
+        val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(bmp)
+        // Se toma 120 como referencia de alto, igual para los dos tamaños.
+        val u = alto / 120f
+        val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
+        // Radio sobre el alto REAL de la caja: si se pide más de la mitad, Android recorta la curva
+        // y los extremos salen picudos.
+        val caja = RectF(3f * u, 3f * u, ancho - 3f * u, alto - 3f * u)
+        val radio = caja.height() / 2f
+        pintura.color = relleno
+        cv.drawRoundRect(caja, radio, radio, pintura)
+        pintura.style = Paint.Style.STROKE
+        pintura.strokeWidth = 5f * u
+        pintura.color = borde
+        cv.drawRoundRect(caja, radio, radio, pintura)
+        pintura.style = Paint.Style.FILL
+        val letra = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = tipo
+            textAlign = Paint.Align.CENTER
+            textSize = tamanoTexto
+            color = colorTexto
+            if (sombra) setShadowLayer(6f * u, 0f, 2f * u, 0xAA000000.toInt())
+        }
+        // Centrado vertical real, sin números mágicos por chip.
+        val linea = alto / 2f - (letra.descent() + letra.ascent()) / 2f
+        cv.drawText(texto, ancho / 2f, linea, letra)
+        return bmp
+    }
+
+    /** Chip de la mesa (Energy, Supporter, Retreat): píldora con el texto centrado. */
     fun dibujarChip(
         nombre: String,
         color: Int,
         activo: Boolean,
         ancho: Int = 520,
         alto: Int = 120,
-    ): Bitmap {
-        val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
-        val cv = Canvas(bmp)
-        val u = alto / 120f
-        val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
-        // Radio sobre el alto REAL de la caja: si se usa alto/2 y la caja está encogida, Android
-        // recorta la curva y los extremos salen picudos. Así es una píldora perfecta.
-        val caja = RectF(3f * u, 3f * u, ancho - 3f * u, alto - 3f * u)
-        val radio = caja.height() / 2f
-        pintura.color = if (activo) color else Color.argb(150, 26, 30, 40)
-        cv.drawRoundRect(caja, radio, radio, pintura)
-        pintura.style = Paint.Style.STROKE
-        pintura.strokeWidth = 5f * u
-        pintura.color = if (activo) Color.WHITE else Color.argb(150, 74, 80, 94)
-        cv.drawRoundRect(caja, radio, radio, pintura)
-        pintura.style = Paint.Style.FILL
-        val texto = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            textAlign = Paint.Align.CENTER
-            textSize = 52f * u
-            this.color = if (activo) Color.rgb(16, 16, 18) else Color.argb(170, 158, 166, 180)
-        }
-        cv.drawText(nombre, ancho / 2f, alto / 2f + 18f * u, texto)
-        return bmp
-    }
+    ): Bitmap = pildora(
+        ancho = ancho,
+        alto = alto,
+        relleno = if (activo) color else Color.argb(150, 26, 30, 40),
+        borde = if (activo) Color.WHITE else Color.argb(150, 74, 80, 94),
+        texto = nombre,
+        colorTexto = if (activo) Color.rgb(16, 16, 18) else Color.argb(170, 158, 166, 180),
+        tamanoTexto = alto / 120f * 52f,
+        tipo = Typeface.create(Typeface.DEFAULT, Typeface.BOLD),
+    )
 
     /**
-     * Cronómetro de la partida: un chip **con la forma de los de Energy/Supporter** (píldora con
-     * esquinas redondeadas), del color del banner elegido y con los números grandes en amarillo
-     * (Jorge, 25/11/2026).
+     * Cronómetro de la partida: **la misma píldora de los chips de la mesa**, del color del banner
+     * elegido y con los números grandes en amarillo (Jorge, 25/11/2026).
+     *
+     * La proporción es 520:120, igual que los chips, para que los extremos se vean idénticos.
      */
     fun dibujarCronometro(
         texto: String,
         numeroPaleta: Int,
-        ancho: Int = 760,
-        alto: Int = 200,
-    ): Bitmap {
-        val p = paleta(numeroPaleta)
-        val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
-        val cv = Canvas(bmp)
-        val u = alto / 200f
-        val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
-        // Píldora perfecta: el radio se calcula sobre el alto REAL de la caja (no sobre el alto del
-        // mapa de bits). Antes daba más que la mitad de la caja, Android recortaba la curva y los
-        // extremos salían picudos (Jorge, 25/11/2026).
-        val margen = 7f * u
-        val caja = RectF(margen, margen, ancho - margen, alto - margen)
-        val radio = caja.height() / 2f
-        pintura.color = p.fondo
-        cv.drawRoundRect(caja, radio, radio, pintura)
-        pintura.style = Paint.Style.STROKE
-        // Mismo borde que los chips de la mesa (blanco), para que se vea de lejos.
-        pintura.strokeWidth = 6f * u
-        pintura.color = 0xFFFFFFFF.toInt()
-        cv.drawRoundRect(caja, radio, radio, pintura)
-        pintura.style = Paint.Style.FILL
-        val numeros = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            textAlign = Paint.Align.CENTER
-            textSize = 132f * u
-            color = 0xFFFFD21F.toInt()
-            // Un halo oscuro para que se lea sobre cualquier color de banner.
-            setShadowLayer(7f * u, 0f, 2f * u, 0xAA000000.toInt())
-        }
-        cv.drawText(texto, ancho / 2f, alto / 2f + 47f * u, numeros)
-        return bmp
-    }
+        ancho: Int = 1040,
+        alto: Int = 240,
+    ): Bitmap = pildora(
+        ancho = ancho,
+        alto = alto,
+        relleno = paleta(numeroPaleta).fondo,
+        borde = Color.WHITE,
+        texto = texto,
+        colorTexto = 0xFFFFD21F.toInt(),
+        tamanoTexto = alto / 120f * 54f,
+        tipo = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD),
+        sombra = true,
+    )
 
     /**
      * Chip chiquito con la **batería** del dispositivo de una cámara, para dibujarlo dentro de su

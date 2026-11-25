@@ -7949,7 +7949,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val imagen = com.jfrmedia.switcher.studio.tcg.Banners
             .dibujarCronometro(texto, estadoTcg.paleta)
         val ancho = 0.30f
-        val alto = ancho * 200f / 760f
+        val alto = ancho * 120f / 520f
         val ref = previo?.let { RectF(it.rect) }
             ?: RectF(0.5f - ancho / 2f, 0.9f, 0.5f + ancho / 2f, 0.9f + alto)
         previo?.let { runCatching { b.canvas.scene.remove(it) } }
@@ -7971,7 +7971,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
         val mesa = rectMesaTcg()
         val ancho = 0.30f
-        val alto = ancho * 200f / 760f
+        val alto = ancho * 120f / 520f
         val margen = 0.012f
         // Se permite encimarse a la mesa: queda montado sobre su borde inferior.
         var y0 = mesa.bottom - alto * 0.45f
