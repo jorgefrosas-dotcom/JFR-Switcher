@@ -371,6 +371,26 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         }
     }
 
+    /**
+     * Reloj de un segundo para el **cronómetro de la partida** y la **batería de cada cámara**.
+     * Solo hace trabajo en el Modo Pokémon con la vista de mesa; fuera de ahí se mantiene dormido.
+     */
+    private val relojTcg = object : Runnable {
+        override fun run() {
+            runCatching {
+                if (modoTcg) {
+                    tickCronometroTcg()
+                    // La batería cambia despacio: se refresca cada 5 segundos.
+                    relojTcgVueltas++
+                    if (relojTcgVueltas % 5 == 0) actualizarBateriasTcg()
+                }
+            }
+            uiHandler.postDelayed(this, 1_000)
+        }
+    }
+
+    private var relojTcgVueltas = 0
+
     // ------------------------------------------------------------------ uso del equipo
 
     private var cpuAnteriorMs = -1L
@@ -3058,6 +3078,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         b.btnRecord.setBackgroundResource(R.drawable.bg_pill_ghost)
         b.btnRecord.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
         uiHandler.post(ticker)
+
     }
 
     private fun stopRecording() {
@@ -7874,6 +7895,153 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** 30 px de redondeado en las esquinas, medidos en la composición de 1080 (Jorge, 23/11/2026). */
     private fun radioCamaraTcg(): Float = 30f / resources.displayMetrics.density
 
+    // ---- Cronómetro de la partida (45 min, dentro de un chip bajo la mesa) ----
+
+    /** Máximo por partida: 45 minutos. */
+    private val cronoMaximoMs = 45L * 60L * 1000L
+
+    /** Momento (elapsedRealtime) en que arrancó la partida. */
+    private var cronoInicioMs = 0L
+
+    /** El cronómetro corre desde que hay partida nueva. */
+    private var cronoAndando = false
+
+    private var cronoItem: CanvasItem? = null
+
+    /** Último texto dibujado, para no rehacer el mapa de bits si no cambió el segundo. */
+    private var cronoTexto = ""
+
+    /** Milisegundos que lleva la partida (tope 45 min). */
+    private fun cronoTranscurridoMs(): Long {
+        if (!cronoAndando || cronoInicioMs == 0L) return 0L
+        return (android.os.SystemClock.elapsedRealtime() - cronoInicioMs)
+            .coerceIn(0L, cronoMaximoMs)
+    }
+
+    /** Arranca el cronómetro de una partida nueva. */
+    private fun reiniciarCronometroTcg() {
+        cronoInicioMs = android.os.SystemClock.elapsedRealtime()
+        cronoAndando = true
+        cronoTexto = ""
+        dibujarCronometroTcg()
+    }
+
+    /** Lo llama el reloj cada segundo mientras la vista es la de mesa. */
+    private fun tickCronometroTcg() {
+        if (!cronoAndando) return
+        if (cronoTranscurridoMs() >= cronoMaximoMs) cronoAndando = false
+        dibujarCronometroTcg()
+        acomodarCronometroTcg()
+    }
+
+    /** Dibuja (o redibuja) el chip del cronómetro con el color del banner elegido. */
+    private fun dibujarCronometroTcg() {
+        if (!modoTcg || vistaTcg != VISTA_MESA) {
+            cronoItem?.let { runCatching { b.canvas.scene.remove(it) } }
+            cronoItem = null
+            return
+        }
+        val total = cronoTranscurridoMs() / 1000
+        val texto = String.format(java.util.Locale.US, "%02d:%02d", total / 60, total % 60)
+        if (texto == cronoTexto && cronoItem != null) return
+        cronoTexto = texto
+        val previo = cronoItem
+        val imagen = com.jfrmedia.switcher.studio.tcg.Banners
+            .dibujarCronometro(texto, estadoTcg.paleta)
+        val ancho = 0.30f
+        val alto = ancho * 200f / 760f
+        val ref = previo?.let { RectF(it.rect) }
+            ?: RectF(0.5f - ancho / 2f, 0.9f, 0.5f + ancho / 2f, 0.9f + alto)
+        previo?.let { runCatching { b.canvas.scene.remove(it) } }
+        val item = b.canvas.scene.addImage(imagen, "Cronómetro", null, ref)
+        item.radiusDp = 0f
+        // Sin esto el compositor dibuja el marco de selección (el borde rojo) encima del chip.
+        b.canvas.scene.selectedId = null
+        cronoItem = item
+        acomodarCronometroTcg()
+    }
+
+    /** Lo deja centrado **debajo del área de mesa**, dentro del lienzo. */
+    private fun acomodarCronometroTcg() {
+        val item = cronoItem ?: return
+        if (!modoTcg || vistaTcg != VISTA_MESA) {
+            runCatching { b.canvas.scene.remove(item) }
+            cronoItem = null
+            return
+        }
+        val mesa = rectMesaTcg()
+        val ancho = 0.30f
+        val alto = ancho * 200f / 760f
+        val margen = 0.012f
+        // Se permite encimarse a la mesa: queda montado sobre su borde inferior.
+        var y0 = mesa.bottom - alto * 0.45f
+        if (y0 + alto > 0.995f) y0 = 0.995f - alto
+        if (y0 < margen) y0 = margen
+        item.rect.set(0.5f - ancho / 2f, y0, 0.5f + ancho / 2f, y0 + alto)
+        b.canvas.requestRender()
+    }
+
+    // ---- Batería de cada cámara, dentro de su recuadro ----
+
+    /** Chip de batería por cámara (clave = slot). */
+    private val bateriaItems = HashMap<Int, CanvasItem>()
+
+    /** Último nivel dibujado por slot, para no rehacer el mapa de bits sin cambios. */
+    private val bateriaNiveles = HashMap<Int, Int>()
+
+    /**
+     * Dibuja el porcentaje de batería **dentro del recuadro de cada cámara** en el programa.
+     * El nivel llega del propio celular en su mensaje de estado (Jorge, 25/11/2026).
+     */
+    private fun actualizarBateriasTcg() {
+        val escena = b.canvas.scene
+        for (slot in 0..3) {
+            val session = hub.session(slot)
+            val nivel = session?.battery ?: -1
+            val cam = escena.camAt(slot)
+            val visible = modoTcg && cam != null && session != null &&
+                session.state == com.jfrmedia.switcher.studio.rtc.CamState.CONNECTED &&
+                nivel in 1..100
+            if (!visible || cam == null) {
+                bateriaItems.remove(slot)?.let { runCatching { escena.remove(it) } }
+                bateriaNiveles.remove(slot)
+                continue
+            }
+            if (bateriaNiveles[slot] == nivel && bateriaItems[slot] != null) {
+                acomodarBateriaTcg(slot, cam.rect)
+                continue
+            }
+            bateriaNiveles[slot] = nivel
+            val imagen = com.jfrmedia.switcher.studio.tcg.Banners.dibujarBateria(nivel)
+            val alto = 0.030f
+            val ancho = alto * 300f / 110f
+            val ref = bateriaItems[slot]?.let { RectF(it.rect) }
+                ?: RectF(
+                    cam.rect.right - ancho - 0.008f, cam.rect.top + 0.008f,
+                    cam.rect.right - 0.008f, cam.rect.top + 0.008f + alto
+                )
+            bateriaItems.remove(slot)?.let { runCatching { escena.remove(it) } }
+            val item = escena.addImage(imagen, "Batería ${slot + 1}", null, ref)
+            item.radiusDp = 0f
+            // Sin esto el compositor dibuja el marco de selección encima del chip.
+            escena.selectedId = null
+            bateriaItems[slot] = item
+            acomodarBateriaTcg(slot, cam.rect)
+        }
+        b.canvas.requestRender()
+    }
+
+    /** Coloca el chip de batería arriba a la derecha, **dentro** del recuadro de la cámara. */
+    private fun acomodarBateriaTcg(slot: Int, rect: RectF) {
+        val item = bateriaItems[slot] ?: return
+        val alto = 0.030f
+        val ancho = alto * 300f / 110f
+        val margen = 0.008f
+        val x2 = (rect.right - margen).coerceAtLeast(rect.left + ancho + margen)
+        val y0 = rect.top + margen
+        item.rect.set(x2 - ancho, y0, x2, y0 + alto)
+    }
+
     /**
      * Coloca las tres cámaras de la vista de mesa: **jugador 1 a la izquierda**, **jugador 2 a la
      * derecha** (las dos de arriba a abajo del monitor) y **la mesa al centro** (horizontal, con el
@@ -9453,7 +9621,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 dos = estadoTcg.dos.copy(debilitados = 0, chips = booleanArrayOf(true, true, true)),
             )
         )
-        toast("Partida nueva: pokebolas y chips en cero")
+        // Cada partida nueva arranca el cronómetro de 45 minutos desde cero.
+        reiniciarCronometroTcg()
+        toast("Partida nueva: pokebolas, chips y cronómetro en cero")
     }
 
     private fun reiniciarMarcadorTcg() {
@@ -10167,6 +10337,15 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         acomodarBannerTcg()
         actualizarMarcosTcg()
         dibujarChipsTcg()
+        // Cronómetro de la partida debajo de la mesa y batería dentro de cada cámara.
+        // Si no venía corriendo (por ejemplo al abrir la app con el modo ya puesto), arranca aquí.
+        if (!cronoAndando) reiniciarCronometroTcg() else dibujarCronometroTcg()
+        actualizarBateriasTcg()
+        // El reloj que hace correr el cronómetro y refresca la batería cada segundo.
+        runCatching {
+            uiHandler.removeCallbacks(relojTcg)
+            uiHandler.postDelayed(relojTcg, 1_000)
+        }
         // Reenganchar el video de las cámaras que ya estaban conectadas (al rehacer la escena
         // se suelta la pista y sin esto el PiP quedaba en negro).
         escena.cams().forEach { c -> runCatching { engancharFuente(c.slot) } }

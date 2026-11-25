@@ -281,8 +281,97 @@ object Banners {
         return bmp
     }
 
-    /** Las 6 pokebolas de un jugador para la banda de control (encendidas = premios vivos). */
-    fun dibujarPokebolas(debilitados: Int, ancho: Int = 420, alto: Int = 64): Bitmap {
+    /**
+     * Cronómetro de la partida: un chip **con la forma de los de Energy/Supporter** (píldora con
+     * esquinas redondeadas), del color del banner elegido y con los números grandes en amarillo
+     * (Jorge, 25/11/2026).
+     */
+    fun dibujarCronometro(
+        texto: String,
+        numeroPaleta: Int,
+        ancho: Int = 760,
+        alto: Int = 200,
+    ): Bitmap {
+        val p = paleta(numeroPaleta)
+        val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(bmp)
+        val u = alto / 200f
+        val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
+        // Radio = mitad del alto: la misma píldora que los chips de la mesa.
+        val radio = alto / 2f
+        val caja = RectF(4f * u, 4f * u, ancho - 4f * u, alto - 4f * u)
+        pintura.color = p.fondo
+        cv.drawRoundRect(caja, radio, radio, pintura)
+        pintura.style = Paint.Style.STROKE
+        // Mismo borde que los chips de la mesa (blanco), para que se vea de lejos.
+        pintura.strokeWidth = 6f * u
+        pintura.color = 0xFFFFFFFF.toInt()
+        cv.drawRoundRect(caja, radio, radio, pintura)
+        pintura.style = Paint.Style.FILL
+        val numeros = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+            textSize = 132f * u
+            color = 0xFFFFD21F.toInt()
+            // Un halo oscuro para que se lea sobre cualquier color de banner.
+            setShadowLayer(7f * u, 0f, 2f * u, 0xAA000000.toInt())
+        }
+        cv.drawText(texto, ancho / 2f, alto / 2f + 47f * u, numeros)
+        return bmp
+    }
+
+    /**
+     * Chip chiquito con la **batería** del dispositivo de una cámara, para dibujarlo dentro de su
+     * recuadro en el programa. Verde con carga, ámbar a media y rojo cuando queda poca.
+     */
+    fun dibujarBateria(nivel: Int, ancho: Int = 300, alto: Int = 110): Bitmap {
+        val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(bmp)
+        val u = alto / 110f
+        val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
+        val radio = 22f * u
+        val caja = RectF(3f * u, 3f * u, ancho - 3f * u, alto - 3f * u)
+        val color = when {
+            nivel <= 15 -> 0xFFD64545.toInt()
+            nivel <= 35 -> 0xFFE0A227.toInt()
+            else -> 0xFF2E9E63.toInt()
+        }
+        pintura.color = 0xCC0E1116.toInt()
+        cv.drawRoundRect(caja, radio, radio, pintura)
+        pintura.style = Paint.Style.STROKE
+        pintura.strokeWidth = 4f * u
+        pintura.color = color
+        cv.drawRoundRect(caja, radio, radio, pintura)
+        // Barrita de nivel a la izquierda del número.
+        val anchoBarra = 54f * u
+        val barra = RectF(
+            caja.left + 14f * u,
+            caja.top + 20f * u,
+            caja.left + 14f * u + anchoBarra,
+            caja.bottom - 20f * u
+        )
+        pintura.style = Paint.Style.FILL
+        pintura.color = 0x55FFFFFF
+        cv.drawRoundRect(barra, 6f * u, 6f * u, pintura)
+        val relleno = RectF(
+            barra.left,
+            barra.bottom - (barra.height() * (nivel.coerceIn(0, 100) / 100f)),
+            barra.right,
+            barra.bottom
+        )
+        pintura.color = color
+        cv.drawRoundRect(relleno, 6f * u, 6f * u, pintura)
+        val texto = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.LEFT
+            textSize = 54f * u
+            this.color = 0xFFFFFFFF.toInt()
+        }
+        cv.drawText("$nivel%", barra.right + 16f * u, alto / 2f + 19f * u, texto)
+        return bmp
+    }
+
+    /** Las 6 pokebolas de un jugador para la banda de control (encendidas = premios vivos). */    fun dibujarPokebolas(debilitados: Int, ancho: Int = 420, alto: Int = 64): Bitmap {
         val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
         val cv = Canvas(bmp)
         val r = alto / 2f - 3f
