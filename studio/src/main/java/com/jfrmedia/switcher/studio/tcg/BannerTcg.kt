@@ -262,8 +262,10 @@ object Banners {
         val cv = Canvas(bmp)
         val u = alto / 120f
         val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
-        val radio = alto / 2f
+        // Radio sobre el alto REAL de la caja: si se usa alto/2 y la caja está encogida, Android
+        // recorta la curva y los extremos salen picudos. Así es una píldora perfecta.
         val caja = RectF(3f * u, 3f * u, ancho - 3f * u, alto - 3f * u)
+        val radio = caja.height() / 2f
         pintura.color = if (activo) color else Color.argb(150, 26, 30, 40)
         cv.drawRoundRect(caja, radio, radio, pintura)
         pintura.style = Paint.Style.STROKE
@@ -297,9 +299,12 @@ object Banners {
         val cv = Canvas(bmp)
         val u = alto / 200f
         val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
-        // Radio = mitad del alto: la misma píldora que los chips de la mesa.
-        val radio = alto / 2f
-        val caja = RectF(4f * u, 4f * u, ancho - 4f * u, alto - 4f * u)
+        // Píldora perfecta: el radio se calcula sobre el alto REAL de la caja (no sobre el alto del
+        // mapa de bits). Antes daba más que la mitad de la caja, Android recortaba la curva y los
+        // extremos salían picudos (Jorge, 25/11/2026).
+        val margen = 7f * u
+        val caja = RectF(margen, margen, ancho - margen, alto - margen)
+        val radio = caja.height() / 2f
         pintura.color = p.fondo
         cv.drawRoundRect(caja, radio, radio, pintura)
         pintura.style = Paint.Style.STROKE
