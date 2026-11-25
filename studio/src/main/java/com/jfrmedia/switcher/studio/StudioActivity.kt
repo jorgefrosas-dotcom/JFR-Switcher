@@ -384,7 +384,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
                 // Autorizó, pero esa cuenta no tiene canal: no se puede transmitir así.
                 rotuloYoutube?.text =
-                    "YouTube: la cuenta no tiene canal · desconecta y elige la CUENTA DE MARCA"
+                    "YouTube: esa cuenta no tiene canal · desconecta y entra con la cuenta del canal"
             }
         }
     }

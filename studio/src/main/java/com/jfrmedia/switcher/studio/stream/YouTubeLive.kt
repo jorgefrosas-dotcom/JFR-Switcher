@@ -232,8 +232,8 @@ object YouTubeLive {
                 val bruto = t.message ?: "no se pudo crear la transmisión"
                 // Este error es el más confuso: la cuenta autorizó pero no tiene canal.
                 val claro = if (bruto.contains("youtubeSignupRequired")) {
-                    "esa cuenta no tiene canal de YouTube: desconecta y vuelve a conectar " +
-                        "eligiendo la CUENTA DE MARCA (no la personal)"
+                    "esa cuenta no tiene canal de YouTube: desconecta y entra con la cuenta " +
+                        "(o la cuenta de marca) que SÍ tiene el canal"
                 } else {
                     bruto
                 }
