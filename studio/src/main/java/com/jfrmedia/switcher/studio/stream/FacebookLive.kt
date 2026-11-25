@@ -282,6 +282,16 @@ object FacebookLive {
         return partes[1].takeIf { it.isNotBlank() && it.all { c -> c.isDigit() } }
     }
 
-    /** También sirve con la URL completa que devuelve [crearDirecto]. */
-    fun videoDeLaUrl(url: String): String? = videoDeLaClave(url.substringAfterLast('/'))
+    /**
+     * Saca el id del directo de la dirección de emisión. Hay **dos formas** y las dos se aceptan:
+     *
+     * - La del Live Producer: `rtmps://…/rtmp/FB-<id>-0-<secreto>`
+     * - La que devuelve la API al crear el directo: `rtmps://…/rtmp/<id>?s_bl=1&…&a=<secreto>`
+     */
+    fun videoDeLaUrl(url: String): String? {
+        val ultimo = url.substringAfterLast('/')
+        videoDeLaClave(ultimo)?.let { return it }
+        val id = ultimo.substringBefore('?')
+        return id.takeIf { it.isNotBlank() && it.all { c -> c.isDigit() } }
+    }
 }

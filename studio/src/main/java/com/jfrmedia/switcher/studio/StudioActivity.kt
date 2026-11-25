@@ -5343,9 +5343,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         iniciarProteccionSesion()
         toast("Conectando con Facebook…")
         // Al salir al aire se arranca la lectura. El id del directo va dentro de la dirección
-        // (`.../rtmp/FB-<idVideo>-0-…`), así se lee el video correcto sin adivinar.
+        // (`.../rtmp/<id>?…` o `.../rtmp/FB-<id>-0-…`); si no saliera, se usa el que guardó la app.
         iniciarConsultasFacebook(
             com.jfrmedia.switcher.studio.stream.FacebookLive.videoDeLaUrl(url).orEmpty()
+                .ifBlank { prefs.getString(CLAVE_FB_DIRECTO_ID, "").orEmpty().trim() }
         )
         // Cronómetro del directo: si no hay grabación local, cuenta el tiempo en el aire.
         if (!recorder.isRecording) {
@@ -8840,6 +8841,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         fbLista.clear()
         fbVideoId = videoDeLaClave
         fbLeyendo = true
+        // Se repinta de inmediato: si no, el panel se queda mostrando los comentarios del directo
+        // anterior hasta que llegue la primera consulta (visto el 25/11/2026).
+        panelTcg?.comentariosFacebook("", emptyList())
+        L.i("fb", "lectura para el directo '${videoDeLaClave.ifBlank { "(se busca en la Página)" }}'")
         // Una primera vuelta casi inmediata para que el panel no arranque vacío.
         fbHandler.postDelayed(fbTareaComentarios, 1_500L)
         fbHandler.postDelayed(fbTareaEspectadores, 2_500L)
