@@ -10,7 +10,8 @@ import com.pedro.common.ConnectChecker
 import com.pedro.encoder.input.audio.CustomAudioEffect
 import com.pedro.encoder.input.sources.audio.MicrophoneSource
 import com.pedro.encoder.input.sources.video.NoVideoSource
-import com.pedro.library.rtmp.RtmpStream
+import com.pedro.library.multiple.MultiStream
+import com.pedro.library.multiple.MultiType
 import kotlin.math.abs
 
 /**
@@ -51,7 +52,45 @@ class Emisor(
     enum class Estado { LISTO, CONECTANDO, TRANSMITIENDO, GRABANDO, ERROR, DETENIDO }
 
     private val microfono = MicrophoneSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-    private val flujo = RtmpStream(contexto, this, NoVideoSource(), microfono)
+
+    /** Destinos RTMP al aire (0 = principal, 1 = adicional, para el multistream). */
+    private val destinosActivos = ArrayList<Int>()
+
+    /** Quiénes están al aire ahora mismo, para la interfaz. */
+    val destinosAlAire: List<Int> get() = destinosActivos.toList()
+
+    /**
+     * Motor de salida. Se pide **multi** para poder repartir el mismo cuadro a dos direcciones.
+     * Los cuatro arreglos son los vigilantes de cada protocolo (RTMP, RTSP, SRT, UDP); solo se usan
+     * los dos primeros puestos de RTMP.
+     */
+    private val flujo = MultiStream(
+        contexto,
+        arrayOf(Vigilante(0), Vigilante(1)),
+        emptyArray(),
+        emptyArray(),
+        emptyArray(),
+        NoVideoSource(),
+        microfono
+    )
+
+    /** Avisa de lo que pasa en cada destino, sin que la pantalla tenga que saber los índices. */
+    private inner class Vigilante(private val indice: Int) : ConnectChecker {
+        override fun onConnectionStarted(url: String) = this@Emisor.onConnectionStarted(url)
+
+        override fun onConnectionSuccess() = this@Emisor.onConnectionSuccess()
+
+        override fun onConnectionFailed(reason: String) =
+            this@Emisor.onConnectionFailed(if (indice == 0) reason else "destino 2: $reason")
+
+        override fun onNewBitrate(bitrate: Long) {}
+
+        override fun onDisconnect() = this@Emisor.onDisconnect()
+
+        override fun onAuthError() = this@Emisor.onAuthError()
+
+        override fun onAuthSuccess() = this@Emisor.onAuthSuccess()
+    }
 
     /** Ecualizador que se aplica al audio antes de codificar. */
     val eq = AudioEq(44100)
@@ -222,23 +261,35 @@ class Emisor(
 
     // --------------------------------------------------------------- transmisión
 
-    fun transmitir(url: String): Boolean {
-        if (transmitiendo) return true
-        return try {
-            flujo.startStream(url)
-            transmitiendo = true
-            alEstado(Estado.CONECTANDO, "Conectando…")
-            true
-        } catch (t: Throwable) {
-            L.e(TAG, "transmitir: ${t.message}", t)
-            alEstado(Estado.ERROR, t.message ?: "No se pudo transmitir")
-            false
-        }
+    /**
+     * Sale al aire en el **destino 0** (índice 0 de la lista de emisores).
+     *
+     * El motor es un [MultiStream]: codifica una sola vez y puede repartir el mismo video a **dos
+     * direcciones** a la vez (por ejemplo Facebook y YouTube), que es lo que hacía falta para el
+     * multistream (Jorge, 25/11/2026).
+     */
+    fun transmitir(url: String): Boolean = transmitirEn(0, url)
+
+    /** Agrega un **segundo** destino a la transmisión que ya está al aire. */
+    fun transmitirAdemas(url: String): Boolean = transmitirEn(1, url)
+
+    private fun transmitirEn(indice: Int, url: String): Boolean = try {
+        flujo.startStream(MultiType.RTMP, indice, url)
+        if (!destinosActivos.contains(indice)) destinosActivos.add(indice)
+        transmitiendo = true
+        alEstado(Estado.CONECTANDO, "Conectando…")
+        L.i(TAG, "destino $indice: ${if (indice == 0) "principal" else "adicional"} → $url")
+        true
+    } catch (t: Throwable) {
+        L.e(TAG, "transmitir destino $indice: ${t.message}", t)
+        alEstado(Estado.ERROR, t.message ?: "No se pudo transmitir")
+        false
     }
 
     fun detenerTransmision() {
         if (!transmitiendo) return
         runCatching { flujo.stopStream() }
+        destinosActivos.clear()
         transmitiendo = false
         // RootEncoder suelta su GL y su SurfaceTexture al parar. Si no se olvida la
         // superficie, la siguiente transmisión del mismo proceso cree que ya está lista y
