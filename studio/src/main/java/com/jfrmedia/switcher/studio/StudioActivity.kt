@@ -378,18 +378,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private val relojTcg = object : Runnable {
         override fun run() {
             runCatching {
-                if (modoTcg) {
-                    tickCronometroTcg()
-                    // La batería cambia despacio: se refresca cada 5 segundos.
-                    relojTcgVueltas++
-                    if (relojTcgVueltas % 5 == 0) actualizarBateriasTcg()
-                }
+                // Solo el cronómetro: la batería de cada cámara se muestra únicamente en las
+                // tarjetas de la izquierda, no en el programa (Jorge, 25/11/2026).
+                if (modoTcg) tickCronometroTcg()
             }
             uiHandler.postDelayed(this, 1_000)
         }
     }
 
-    private var relojTcgVueltas = 0
 
     // ------------------------------------------------------------------ uso del equipo
 
@@ -8015,68 +8011,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (y0 + alto > 0.995f) y0 = 0.995f - alto
         if (y0 < margen) y0 = margen
         item.rect.set(0.5f - ancho / 2f, y0, 0.5f + ancho / 2f, y0 + alto)
+        traerAlFrente(item)
         b.canvas.requestRender()
     }
 
-    // ---- Batería de cada cámara, dentro de su recuadro ----
-
-    /** Chip de batería por cámara (clave = slot). */
-    private val bateriaItems = HashMap<Int, CanvasItem>()
-
-    /** Último nivel dibujado por slot, para no rehacer el mapa de bits sin cambios. */
-    private val bateriaNiveles = HashMap<Int, Int>()
-
-    /**
-     * Dibuja el porcentaje de batería **dentro del recuadro de cada cámara** en el programa.
-     * El nivel llega del propio celular en su mensaje de estado (Jorge, 25/11/2026).
-     */
-    private fun actualizarBateriasTcg() {
+    private fun traerAlFrente(item: CanvasItem) {
         val escena = b.canvas.scene
-        for (slot in 0..3) {
-            val session = hub.session(slot)
-            val nivel = session?.battery ?: -1
-            val cam = escena.camAt(slot)
-            val visible = modoTcg && cam != null && session != null &&
-                session.state == com.jfrmedia.switcher.studio.rtc.CamState.CONNECTED &&
-                nivel in 1..100
-            if (!visible || cam == null) {
-                bateriaItems.remove(slot)?.let { runCatching { escena.remove(it) } }
-                bateriaNiveles.remove(slot)
-                continue
-            }
-            if (bateriaNiveles[slot] == nivel && bateriaItems[slot] != null) {
-                acomodarBateriaTcg(slot, cam.rect)
-                continue
-            }
-            bateriaNiveles[slot] = nivel
-            val imagen = com.jfrmedia.switcher.studio.tcg.Banners.dibujarBateria(nivel)
-            val alto = 0.030f
-            val ancho = alto * 300f / 110f
-            val ref = bateriaItems[slot]?.let { RectF(it.rect) }
-                ?: RectF(
-                    cam.rect.right - ancho - 0.008f, cam.rect.top + 0.008f,
-                    cam.rect.right - 0.008f, cam.rect.top + 0.008f + alto
-                )
-            bateriaItems.remove(slot)?.let { runCatching { escena.remove(it) } }
-            val item = escena.addImage(imagen, "Batería ${slot + 1}", null, ref)
-            item.radiusDp = 0f
-            // Sin esto el compositor dibuja el marco de selección encima del chip.
-            escena.selectedId = null
-            bateriaItems[slot] = item
-            acomodarBateriaTcg(slot, cam.rect)
+        if (escena.items.lastOrNull()?.id == item.id) return
+        runCatching {
+            escena.items.remove(item)
+            escena.items.add(item)
+            b.canvas.requestRender()
         }
-        b.canvas.requestRender()
-    }
-
-    /** Coloca el chip de batería arriba a la derecha, **dentro** del recuadro de la cámara. */
-    private fun acomodarBateriaTcg(slot: Int, rect: RectF) {
-        val item = bateriaItems[slot] ?: return
-        val alto = 0.030f
-        val ancho = alto * 300f / 110f
-        val margen = 0.008f
-        val x2 = (rect.right - margen).coerceAtLeast(rect.left + ancho + margen)
-        val y0 = rect.top + margen
-        item.rect.set(x2 - ancho, y0, x2, y0 + alto)
     }
 
     /**
@@ -10584,7 +10530,6 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // El cronómetro NO arranca solo: se dibuja con lo que lleve y lo controla Jorge desde el panel.
         dibujarCronometroTcg()
         panelTcg?.cronometro(cronoTextoActual(), cronoAndando)
-        actualizarBateriasTcg()
         // El reloj que hace correr el cronómetro y refresca la batería cada segundo.
         runCatching {
             uiHandler.removeCallbacks(relojTcg)
@@ -10697,5 +10642,4 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         private const val VISTA_MESA = -1
     }
 }
-
 

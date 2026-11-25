@@ -45,7 +45,7 @@ android {
         // Esquema de vuelta del login de Google (AppAuth). Lleva el ID de cliente OAuth de tipo
         // Android; los de Android no tienen secreto, así que no es información delicada.
         manifestPlaceholders["appAuthRedirectScheme"] =
-            "com.googleusercontent.apps.299565880934-0g0n4o4ffcdlpssa5mb6pn98ka20fdb6"
+            "com.googleusercontent.apps.299565880934-5eq17m5n7t7qqe03ua8j6u6rdnlme8go"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")

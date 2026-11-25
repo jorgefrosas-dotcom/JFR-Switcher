@@ -339,58 +339,8 @@ object Banners {
         sombra = true,
     )
 
-    /**
-     * Chip chiquito con la **batería** del dispositivo de una cámara, para dibujarlo dentro de su
-     * recuadro en el programa. Verde con carga, ámbar a media y rojo cuando queda poca.
-     */
-    fun dibujarBateria(nivel: Int, ancho: Int = 300, alto: Int = 110): Bitmap {
-        val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
-        val cv = Canvas(bmp)
-        val u = alto / 110f
-        val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
-        val radio = 22f * u
-        val caja = RectF(3f * u, 3f * u, ancho - 3f * u, alto - 3f * u)
-        val color = when {
-            nivel <= 15 -> 0xFFD64545.toInt()
-            nivel <= 35 -> 0xFFE0A227.toInt()
-            else -> 0xFF2E9E63.toInt()
-        }
-        pintura.color = 0xCC0E1116.toInt()
-        cv.drawRoundRect(caja, radio, radio, pintura)
-        pintura.style = Paint.Style.STROKE
-        pintura.strokeWidth = 4f * u
-        pintura.color = color
-        cv.drawRoundRect(caja, radio, radio, pintura)
-        // Barrita de nivel a la izquierda del número.
-        val anchoBarra = 54f * u
-        val barra = RectF(
-            caja.left + 14f * u,
-            caja.top + 20f * u,
-            caja.left + 14f * u + anchoBarra,
-            caja.bottom - 20f * u
-        )
-        pintura.style = Paint.Style.FILL
-        pintura.color = 0x55FFFFFF
-        cv.drawRoundRect(barra, 6f * u, 6f * u, pintura)
-        val relleno = RectF(
-            barra.left,
-            barra.bottom - (barra.height() * (nivel.coerceIn(0, 100) / 100f)),
-            barra.right,
-            barra.bottom
-        )
-        pintura.color = color
-        cv.drawRoundRect(relleno, 6f * u, 6f * u, pintura)
-        val texto = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            textAlign = Paint.Align.LEFT
-            textSize = 54f * u
-            this.color = 0xFFFFFFFF.toInt()
-        }
-        cv.drawText("$nivel%", barra.right + 16f * u, alto / 2f + 19f * u, texto)
-        return bmp
-    }
-
-    /** Las 6 pokebolas de un jugador para la banda de control (encendidas = premios vivos). */    fun dibujarPokebolas(debilitados: Int, ancho: Int = 420, alto: Int = 64): Bitmap {
+    /** Las 6 pokebolas de un jugador para la banda de control (encendidas = premios vivos). */
+    fun dibujarPokebolas(debilitados: Int, ancho: Int = 420, alto: Int = 64): Bitmap {
         val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
         val cv = Canvas(bmp)
         val r = alto / 2f - 3f

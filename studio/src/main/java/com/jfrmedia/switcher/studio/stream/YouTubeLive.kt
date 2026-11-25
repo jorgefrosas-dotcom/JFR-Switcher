@@ -28,10 +28,17 @@ import java.net.URL
  */
 object YouTubeLive {
 
-    /** ID de cliente OAuth de tipo Android (no es un secreto: los de Android no llevan). */
-    const val CLIENTE_ID = "299565880934-0g0n4o4ffcdlpssa5mb6pn98ka20fdb6.apps.googleusercontent.com"
+    /**
+     * ID de cliente OAuth de tipo **iOS** (no es un secreto: los de app nativa no llevan).
+     *
+     * Se usa uno de tipo iOS y no de Android porque Android solo sirve para el SDK de Google
+     * Sign-In; el flujo de navegador con regreso por `com.googleusercontent.apps.<id>` es el que
+     * Google admite en los clientes de app nativa, y con el de Android respondía
+     * «400: invalid_request» (Jorge, 25/11/2026).
+     */
+    const val CLIENTE_ID = "299565880934-5eq17m5n7t7qqe03ua8j6u6rdnlme8go.apps.googleusercontent.com"
 
-    private const val ESQUEMA = "com.googleusercontent.apps.299565880934-0g0n4o4ffcdlpssa5mb6pn98ka20fdb6"
+    private const val ESQUEMA = "com.googleusercontent.apps.299565880934-5eq17m5n7t7qqe03ua8j6u6rdnlme8go"
     private const val PREFS = "youtube_auth"
     private const val CLAVE_ESTADO = "auth_state"
     private const val API = "https://www.googleapis.com/youtube/v3"
