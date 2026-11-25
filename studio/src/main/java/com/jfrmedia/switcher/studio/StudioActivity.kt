@@ -309,27 +309,57 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private val loginYouTube = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { resultado ->
-        val datos = resultado.data
-        val respuesta = datos?.let { net.openid.appauth.AuthorizationResponse.fromIntent(it) }
-        val fallo = datos?.let { net.openid.appauth.AuthorizationException.fromIntent(it) }
+        procesarRespuestaYouTube(resultado.data)
+    }
+
+    /**
+     * Termina el login de Google con lo que devolvió el navegador.
+     *
+     * Se llama desde el resultado de actividad **y** desde [onNewIntent]: esta pantalla es
+     * `singleTask`, así que cuando el flujo vuelve del navegador la respuesta llega como intento
+     * nuevo, no como resultado. Sin esto el login se autorizaba pero la app se quedaba en
+     * «sin conectar» (visto el 25/11/2026).
+     */
+    private fun procesarRespuestaYouTube(datos: android.content.Intent?) {
+        if (datos == null) return
+        val respuesta = net.openid.appauth.AuthorizationResponse.fromIntent(datos)
+        val fallo = net.openid.appauth.AuthorizationException.fromIntent(datos)
         if (respuesta == null) {
-            toast("Login de Google sin respuesta: ${fallo?.errorDescription ?: "cancelado"}")
-            return@registerForActivityResult
+            if (fallo != null) {
+                com.jfrmedia.switcher.core.util.L.w(
+                    "yt", "login: ${fallo.error} ${fallo.errorDescription.orEmpty()}"
+                )
+                toast("Login de Google sin respuesta: ${fallo.errorDescription ?: fallo.error}")
+            }
+            return
         }
         val servicio = servicioYt
             ?: com.jfrmedia.switcher.studio.stream.YouTubeLive.servicio(this)
+        servicioYt = servicio
         val estado = net.openid.appauth.AuthState(respuesta, fallo)
         estado.performActionWithFreshTokens(servicio) { token, _, excepcion ->
             if (token.isNullOrBlank() || excepcion != null) {
-                toast("Google no dio el permiso: ${excepcion?.message ?: "sin token"}")
+                com.jfrmedia.switcher.core.util.L.w(
+                    "yt", "token: ${excepcion?.message ?: "sin token"}"
+                )
+                runOnUiThread {
+                    toast("Google no dio el permiso: ${excepcion?.message ?: "sin token"}")
+                }
                 return@performActionWithFreshTokens
             }
             com.jfrmedia.switcher.studio.stream.YouTubeLive.guardar(this, estado)
+            com.jfrmedia.switcher.core.util.L.i("yt", "cuenta conectada")
             runOnUiThread {
                 toast("YouTube conectado")
                 actualizarRotuloYouTube()
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        // Vuelta del login de Google (la pantalla es singleTask).
+        procesarRespuestaYouTube(intent)
     }
 
     /** Describe cómo está YouTube en el cuadro (conectado con qué canal, o sin conectar). */
