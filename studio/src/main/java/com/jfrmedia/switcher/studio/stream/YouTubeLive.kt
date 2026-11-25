@@ -59,8 +59,10 @@ object YouTubeLive {
         REDIRECCION
     )
         .setScope(PERMISO)
-        // «offline» para recibir refresh token; «consent» fuerza a que Google lo entregue.
-        .setPrompt("consent")
+        // «offline» para recibir refresh token. «select_account» obliga a Google a mostrar el
+        // selector de cuenta (sin eso usa la sesión del navegador y no deja cambiar al canal);
+        // «consent» fuerza a que entregue el refresh token.
+        .setPrompt("select_account consent")
         .setAdditionalParameters(mapOf("access_type" to "offline"))
         .build()
 
