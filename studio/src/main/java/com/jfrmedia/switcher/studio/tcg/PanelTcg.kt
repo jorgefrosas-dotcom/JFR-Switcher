@@ -174,18 +174,18 @@ class PanelTcg(
         )
         val botonCrono = TextView(contexto).apply {
             text = if (cronoCorriendo) "⏸" else "▶"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             setTextColor(0xFFFFFFFF.toInt())
-            setPadding(dp(contexto, 14f), dp(contexto, 4f), dp(contexto, 14f), dp(contexto, 4f))
+            setPadding(dp(contexto, 9f), dp(contexto, 4f), dp(contexto, 9f), dp(contexto, 4f))
             background = caja(contexto, 0xFF2C303A.toInt(), 0xFF3E4552.toInt(), 8f)
             setOnClickListener { escucha.onCronometro(!cronoCorriendo) }
         }
         filaCrono.addView(botonCrono)
         val botonReiniciar = TextView(contexto).apply {
             text = "↺"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             setTextColor(0xFFE0E4EC.toInt())
-            setPadding(dp(contexto, 12f), dp(contexto, 4f), dp(contexto, 12f), dp(contexto, 4f))
+            setPadding(dp(contexto, 9f), dp(contexto, 4f), dp(contexto, 9f), dp(contexto, 4f))
             setOnClickListener { escucha.onCronometro(false) }
         }
         filaCrono.addView(
@@ -193,7 +193,7 @@ class PanelTcg(
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { leftMargin = dp(contexto, 6f) }
+            ).apply { leftMargin = dp(contexto, 5f) }
         )
         c.addView(filaCrono)
         cronoTexto = valorCrono
