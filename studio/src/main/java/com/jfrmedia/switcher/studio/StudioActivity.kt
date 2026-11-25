@@ -9112,18 +9112,22 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         fbHandler.removeCallbacks(fbTareaComentarios)
         fbHandler.removeCallbacks(fbTareaEspectadores)
         fbHandler.removeCallbacks(ytTareaComentarios)
+        fbHandler.removeCallbacks(ytTareaEspectadores)
         ytChatId = ""
         fbEspectadores = ""
+        fbNumero = null
+        ytNumero = null
         fbLista.clear()
         fbVideoId = videoDeLaClave
         fbLeyendo = true
         // Se repinta de inmediato: si no, el panel se queda mostrando los comentarios del directo
         // anterior hasta que llegue la primera consulta (visto el 25/11/2026).
-        panelTcg?.comentarios("", emptyList())
+        refrescarPanel()
         L.i("fb", "lectura para el directo '${videoDeLaClave.ifBlank { "(se busca en la Página)" }}'")
         // Una primera vuelta casi inmediata para que el panel no arranque vacío.
         fbHandler.postDelayed(fbTareaComentarios, 1_500L)
         fbHandler.postDelayed(fbTareaEspectadores, 2_500L)
+        fbHandler.postDelayed(ytTareaEspectadores, 20_000L)
     }
 
     private fun detenerConsultasFacebook() {
@@ -9131,7 +9135,10 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         fbHandler.removeCallbacks(fbTareaComentarios)
         fbHandler.removeCallbacks(fbTareaEspectadores)
         fbHandler.removeCallbacks(ytTareaComentarios)
+        fbHandler.removeCallbacks(ytTareaEspectadores)
         ytChatId = ""
+        fbNumero = null
+        ytNumero = null
         runCatching { com.jfrmedia.switcher.studio.stream.FacebookLive.cortarEscucha() }
     }
 
@@ -9160,7 +9167,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                         com.jfrmedia.switcher.studio.stream.YouTubeLive.chatDe(this, directo.id)
                             .orEmpty()
                     }
-                    runOnUiThread { iniciarChatYouTube(chat) }
+                    runOnUiThread { iniciarChatYouTube(chat, directo.id) }
                     runOnUiThread {
                         val ok = if (indice == 0) {
                             // Solo YouTube: es la transmisión principal, con toda la preparación.
@@ -9394,11 +9401,65 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 }
                 if (numero != null && fbLeyendo) {
                     fbEspectadores = numero.toString()
-                    panelTcg?.comentarios(fbEspectadores, fbLista.toList())
+                    fbNumero = numero
+                    refrescarPanel()
                     L.i("fb", "$numero viendo")
                 }
             }
         }.apply { isDaemon = true }.start()
+    }
+
+    /** Id de la transmisión de YouTube (sirve para pedir sus espectadores). */
+    private var ytEmisionId = ""
+
+    /** Espectadores de cada plataforma; `null` = todavía sin dato. */
+    private var fbNumero: Int? = null
+    private var ytNumero: Int? = null
+
+    private var ytOcupadoEspectadores = false
+
+    private val ytTareaEspectadores = object : Runnable {
+        override fun run() {
+            if (!fbLeyendo) return
+            consultarEspectadoresYouTube()
+            fbHandler.postDelayed(this, 90_000L)
+        }
+    }
+
+    private fun consultarEspectadoresYouTube() {
+        val video = ytEmisionId
+        if (video.isBlank() || ytOcupadoEspectadores) return
+        ytOcupadoEspectadores = true
+        Thread {
+            val cuantos = runCatching {
+                com.jfrmedia.switcher.studio.stream.YouTubeLive.espectadores(this, video)
+            }.getOrNull()
+            runOnUiThread {
+                ytOcupadoEspectadores = false
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (cuantos != null) {
+                    ytNumero = cuantos
+                    refrescarPanel()
+                    L.i("yt", "$cuantos viendo")
+                }
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /**
+     * Pinta el panel con los espectadores **sumados** y el desglose por plataforma.
+     *
+     * Jorge lo pidió así: un número grande con el total y, debajo, cuántos van por Facebook y
+     * cuántos por YouTube (25/11/2026).
+     */
+    private fun refrescarPanel() {
+        val fb = fbNumero
+        val yt = ytNumero
+        val total = if (fb == null && yt == null) "" else ((fb ?: 0) + (yt ?: 0)).toString()
+        val partes = ArrayList<String>(2)
+        if (fb != null) partes.add("Facebook $fb")
+        if (yt != null) partes.add("YouTube $yt")
+        panelTcg?.comentarios(total, fbLista.toList(), partes.joinToString("  ·  "))
     }
 
     /**
@@ -9454,13 +9515,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     /** Empieza a leer el chat de YouTube (se llama al crear la transmisión). */
-    private fun iniciarChatYouTube(chat: String) {
+    private fun iniciarChatYouTube(chat: String, emision: String = "") {
         ytChatId = chat
+        ytEmisionId = emision
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
             .putString(CLAVE_YT_CHAT_ID, chat)
             .apply()
         fbHandler.removeCallbacks(ytTareaComentarios)
         if (chat.isNotBlank()) fbHandler.postDelayed(ytTareaComentarios, 4_000L)
+        // Los espectadores de YouTube se piden aparte, con más calma (cada 90 s).
+        fbHandler.removeCallbacks(ytTareaEspectadores)
+        if (emision.isNotBlank()) fbHandler.postDelayed(ytTareaEspectadores, 25_000L)
     }
 
     /** Suma comentarios de una plataforma al panel; devuelve si hubo algo nuevo. */    private fun agregarAlPanel(
@@ -9483,7 +9548,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
         }
         while (fbLista.size > 8) fbLista.removeAt(fbLista.lastIndex)
-        if (cambio) panelTcg?.comentarios(fbEspectadores, fbLista.toList())
+        if (cambio) refrescarPanel()
         return cambio
     }
 

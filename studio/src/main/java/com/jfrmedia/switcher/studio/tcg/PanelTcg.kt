@@ -99,14 +99,21 @@ class PanelTcg(
 
     // ------------------------------------------------------------------ comentarios
 
-    /** Cuántos están viendo en Facebook (texto ya formateado; vacío = sin conectar). */
+    /** Cuántos están viendo (número grande: la suma de las dos plataformas). */
     private var espectadores: String = ""
+
+    /** Desglose por plataforma, debajo del número grande («Facebook 3 · YouTube 5»). */
+    private var detalleEspectadores: String = ""
 
     /** Últimos comentarios, con la plataforma de donde vienen. */
     private var comentarios: List<ComentarioPanel> = emptyList()
 
     /** Lo llama la pantalla cuando llegan datos de Facebook o de YouTube. */
-    fun comentarios(espectadores: String, lista: List<ComentarioPanel>) {
+    fun comentarios(
+        espectadores: String,
+        lista: List<ComentarioPanel>,
+        detalleEspectadores: String = "",
+    ) {
         // Se cuentan los comentarios nuevos de arriba para animarlos: si no, el bloque cambiaba de
         // golpe cada 30 segundos y no se sabía cuál había entrado.
         val nuevos = if (lista == comentarios) {
@@ -117,6 +124,7 @@ class PanelTcg(
             if (i >= 0) i else lista.size
         }
         this.espectadores = espectadores
+        this.detalleEspectadores = detalleEspectadores
         this.comentarios = lista
         pintarComentarios(animar = nuevos)
     }
@@ -216,6 +224,17 @@ class PanelTcg(
             }
         )
         if (espectadores.isNotBlank()) {
+            // Desglose por plataforma: «Facebook 3 · YouTube 5».
+            if (detalleEspectadores.isNotBlank()) {
+                c.addView(
+                    TextView(contexto).apply {
+                        text = detalleEspectadores
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                        setTextColor(0xFFB9C2D2.toInt())
+                        setPadding(0, dp(contexto, -4f), 0, dp(contexto, 2f))
+                    }
+                )
+            }
             c.addView(
                 TextView(contexto).apply {
                     text = "viendo ahora"

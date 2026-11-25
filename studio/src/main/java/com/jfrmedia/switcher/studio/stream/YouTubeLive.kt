@@ -318,6 +318,26 @@ object YouTubeLive {
     }
 
     /**
+     * Espectadores viendo **ahora** la transmisión de YouTube.
+     *
+     * YouTube lo publica en `videos.liveStreamingDetails.concurrentViewers` (no en `liveBroadcasts`).
+     * Devuelve `null` cuando todavía no hay dato. Bloqueante: se llama desde un hilo.
+     */
+    fun espectadores(contexto: Context, videoId: String): Int? {
+        var cuantos: Int? = null
+        conToken(contexto, alListo = { token ->
+            val json = pedir(
+                "$API/videos?part=liveStreamingDetails&id=$videoId&access_token=$token"
+            )
+            val detalles = JSONObject(json).optJSONArray("items")?.optJSONObject(0)
+                ?.optJSONObject("liveStreamingDetails")
+            val texto = detalles?.optString("concurrentViewers", "").orEmpty()
+            cuantos = texto.toIntOrNull()
+        }, alError = { mensaje -> L.w("yt", "espectadores: $mensaje") })
+        return cuantos
+    }
+
+    /**
      * Manda la transmisión a **en vivo** (`transition`). Con `enableAutoStart` YouTube debería
      * hacerlo solo, pero en la prueba del 25/11/2026 se quedó en `created` aunque el RTMP estaba
      * conectado, así que se ordena explícitamente. Bloqueante.
