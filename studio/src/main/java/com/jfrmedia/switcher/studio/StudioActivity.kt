@@ -9171,6 +9171,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                         }
                         L.i("yt", "destino $indice (YouTube): ${if (ok) "conectando" else "no aceptó"}")
                         toast(if (ok) "YouTube: conectando…" else "YouTube no aceptó la conexión")
+                        // A los 20 y a los 50 segundos se le pregunta a YouTube cómo ve la
+                        // transmisión: es la única forma de saber si el video está llegando.
+                        listOf(20_000L, 50_000L).forEach { espera ->
+                            uiHandler.postDelayed({
+                                Thread {
+                                    val estado = com.jfrmedia.switcher.studio.stream.YouTubeLive
+                                        .estadoTransmision(this, directo.id)
+                                    L.i("yt", "estado a ${espera / 1000}s: $estado")
+                                }.apply { isDaemon = true }.start()
+                            }, espera)
+                        }
                     }
                 },
                 alError = { mensaje ->

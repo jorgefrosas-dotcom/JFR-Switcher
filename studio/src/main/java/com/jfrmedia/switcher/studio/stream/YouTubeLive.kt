@@ -234,9 +234,31 @@ object YouTubeLive {
                     alError("YouTube no devolvió la transmisión")
                     return@conToken
                 }
+                // **Paso obligatorio**: atar la transmisión al stream. Al crear la transmisión,
+                // YouTube ignora `boundStreamId`; hay que llamar a `bind` o la transmisión se queda
+                // en `created` para siempre aunque el RTMP esté conectado (visto el 25/11/2026).
+                val atado = runCatching {
+                    pedir(
+                        "$API/liveBroadcasts/bind?part=id,contentDetails" +
+                            "&id=$idEmision&streamId=$idStream&access_token=$token",
+                        metodo = "POST"
+                    )
+                    true
+                }.getOrElse { t ->
+                    L.w("yt", "bind: ${t.message}")
+                    false
+                }
+                if (!atado) {
+                    alError("YouTube no dejó atar la transmisión al stream")
+                    return@conToken
+                }
                 // El chat puede no venir todavía; se pide después si falta.
                 val chat = emision.optJSONObject("snippet")?.optString("liveChatId", "").orEmpty()
-                L.i("yt", "transmisión $idEmision creada (stream $idStream, chat ${chat.ifBlank { "pendiente" }})")
+                L.i(
+                    "yt",
+                    "transmisión $idEmision atada al stream $idStream " +
+                        "(chat ${chat.ifBlank { "pendiente" }})"
+                )
                 alListo(DirectoFbYt(idEmision, "$direccion/$clave", chat))
             } catch (t: Throwable) {
                 val bruto = t.message ?: "no se pudo crear la transmisión"
@@ -293,6 +315,48 @@ object YouTubeLive {
             salida = lista
         }, alError = { mensaje -> L.w("yt", "chat mensajes: $mensaje") })
         return salida
+    }
+
+    /**
+     * Manda la transmisión a **en vivo** (`transition`). Con `enableAutoStart` YouTube debería
+     * hacerlo solo, pero en la prueba del 25/11/2026 se quedó en `created` aunque el RTMP estaba
+     * conectado, así que se ordena explícitamente. Bloqueante.
+     */
+    fun pasarAEnVivo(contexto: Context, emisionId: String): String {
+        var texto = ""
+        conToken(contexto, alListo = { token ->
+            texto = runCatching {
+                pedir(
+                    "$API/liveBroadcasts/transition?broadcastStatus=live&part=status,id" +
+                        "&id=$emisionId&access_token=$token",
+                    metodo = "POST"
+                )
+                "ok"
+            }.getOrElse { t -> "error: ${t.message}" }
+        }, alError = { texto = "error: $it" })
+        return texto
+    }
+
+    /**
+     * Lo que **YouTube** ve de la transmisión. Sirve de diagnóstico: si aquí dice `ready` y
+     * `inactive`, el video no está llegando aunque la app crea que sí. Bloqueante.
+     */
+    fun estadoTransmision(contexto: Context, emisionId: String): String {
+        var texto = ""
+        conToken(contexto, alListo = { token ->
+            val json = pedir(
+                "$API/liveBroadcasts?id=$emisionId&part=status,contentDetails&access_token=$token"
+            )
+            val o = JSONObject(json).optJSONArray("items")?.optJSONObject(0)
+            val st = o?.optJSONObject("status")
+            val contenido = o?.optJSONObject("contentDetails")
+            texto = "lifeCycle=${st?.optString("lifeCycleStatus").orEmpty()} " +
+                "stream=${st?.optString("streamStatus").orEmpty()} " +
+                "grabando=${st?.optString("recordingStatus").orEmpty()} " +
+                "privacidad=${st?.optString("privacyStatus").orEmpty()} " +
+                "atado=${contenido?.optString("boundStreamId").orEmpty()}"
+        }, alError = { texto = "error: $it" })
+        return texto
     }
 
     /** Cierra la transmisión en YouTube. Bloqueante: se llama desde un hilo aparte. */
