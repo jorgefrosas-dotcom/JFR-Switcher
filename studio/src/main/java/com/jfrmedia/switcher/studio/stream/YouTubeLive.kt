@@ -98,14 +98,21 @@ object YouTubeLive {
     /** Cómo se llama la cuenta conectada, si se puede leer (para mostrarlo en el cuadro). */
     fun nombreCanal(contexto: Context, alListo: (String?) -> Unit) {
         conToken(contexto, alListo = { token ->
-            val json = runCatching {
-                pedir("$API/channels?part=snippet&mine=true&access_token=$token")
-            }.getOrNull()
-            val nombre = json?.let {
-                JSONObject(it).optJSONArray("items")?.optJSONObject(0)
-                    ?.optJSONObject("snippet")?.optString("title", "")
-            }
-            alListo(nombre?.takeIf { it.isNotBlank() })
+            // La consulta va en su propio hilo: si se hace desde el hilo de la interfaz, Android
+            // lanza NetworkOnMainThreadException y la app se queda creyendo que no hay canal
+            // (visto el 25/11/2026, y solo se detectó al registrar el error).
+            Thread {
+                val crudo = runCatching {
+                    pedir("$API/channels?part=snippet&mine=true&access_token=$token")
+                }.onFailure { L.w("yt", "canal: ${it.javaClass.simpleName} ${it.message}") }
+                    .getOrNull()
+                L.i("yt", "canal crudo: ${crudo?.take(260) ?: "(sin respuesta)"}")
+                val nombre = crudo?.let {
+                    JSONObject(it).optJSONArray("items")?.optJSONObject(0)
+                        ?.optJSONObject("snippet")?.optString("title", "")
+                }
+                alListo(nombre?.takeIf { it.isNotBlank() })
+            }.apply { isDaemon = true }.start()
         }) { mensaje ->
             L.w("yt", "canal: $mensaje")
             alListo(null)
@@ -199,6 +206,9 @@ object YouTubeLive {
                         JSONObject()
                             .put("title", titulo.ifBlank { "JFR Media" })
                             .put("description", descripcion)
+                            // YouTube obliga a mandar la hora de inicio aunque el arranque sea
+                            // automático: con `enableAutoStart` empieza en cuanto llega el video.
+                            .put("scheduledStartTime", horaUtc())
                     )
                     .put("status", JSONObject().put("privacyStatus", "public"))
                     .put(
@@ -301,6 +311,13 @@ object YouTubeLive {
     }.getOrDefault(false)
 
     // ------------------------------------------------------------------ HTTP
+
+    /** Hora actual en el formato que pide YouTube (`2026-11-25T05:15:00Z`, en UTC). */
+    private fun horaUtc(): String {
+        val formato = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+        formato.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        return formato.format(java.util.Date())
+    }
 
     private fun pedir(url: String, metodo: String = "GET"): String {
         val conexion = (URL(url).openConnection() as HttpURLConnection).apply {
