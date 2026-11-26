@@ -5809,6 +5809,66 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         )
         actualizarRotuloYouTube()
 
+        // --- TikTok: no tiene API pública, pero sí RTMP. Se pegan la dirección y la clave ---
+        caja.addView(TextView(this).apply {
+            text = "TikTok (RTMP)"
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
+            setPadding(0, 16.dp, 0, 2.dp)
+        })
+        val rotuloTikTok = TextView(this).apply {
+            text = tiktokEstadoTexto()
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_secondary))
+            setPadding(0, 2.dp, 0, 6.dp)
+        }
+        caja.addView(rotuloTikTok)
+        val campoUrlTikTok = EditText(this).apply {
+            setText(prefs.getString(CLAVE_TIKTOK_URL, ""))
+            textSize = 12f
+            setSingleLine(true)
+            hint = "Dirección del servidor (rtmp://push-rtmp-live.tiktok.com/rtmp/)"
+        }
+        caja.addView(campoUrlTikTok)
+        val campoClaveTikTok = EditText(this).apply {
+            setText(prefs.getString(CLAVE_TIKTOK_CLAVE, ""))
+            textSize = 12f
+            setSingleLine(true)
+            hint = "Clave de transmisión (la larga que da TikTok)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        caja.addView(
+            campoClaveTikTok,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 6.dp }
+        )
+        caja.addView(
+            textoAyuda(
+                "En la app de TikTok: «En vivo» → «Transmitir» → «RTMP». Copia la dirección y la " +
+                    "clave y pégalas aquí. La dirección no cambia entre transmisiones; la clave sí."
+            )
+        )
+        val guardarTikTok = {
+            prefs.edit()
+                .putString(CLAVE_TIKTOK_URL, campoUrlTikTok.text.toString().trim())
+                .putString(CLAVE_TIKTOK_CLAVE, campoClaveTikTok.text.toString().trim())
+                .apply()
+            rotuloTikTok.text = tiktokEstadoTexto()
+        }
+        guardarTikTok()
+        caja.addView(
+            botonFb("Guardar TikTok") {
+                guardarTikTok()
+                toast(
+                    if (urlTikTok() != null) "TikTok listo para transmitir"
+                    else "Faltan la dirección del servidor o la clave"
+                )
+            }
+        )
+
         // --- Salir al aire: primero pregunta a dónde ---
         caja.addView(
             botonFb("Salir al aire") {
@@ -5863,6 +5923,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     .putString(CLAVE_FB_URL, campoUrl.text.toString().trim())
                     .putString(CLAVE_FB_CLAVE, campoClave.text.toString().trim())
                     .putString(CLAVE_FB_TOKEN, campoToken.text.toString().trim())
+                    .putString(CLAVE_TIKTOK_URL, campoUrlTikTok.text.toString().trim())
+                    .putString(CLAVE_TIKTOK_CLAVE, campoClaveTikTok.text.toString().trim())
                     .apply()
                 if (transmitiendo) cortarTransmision() else iniciarTransmision()
             }
@@ -5876,6 +5938,37 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Cuadro abierto del Facebook, para poder cerrarlo desde un botón de adentro. */
     private var cuadroActual: AlertDialog? = null
+
+    /**
+     * Dirección completa de TikTok, o `null` si falta algo.
+     *
+     * TikTok da **dos datos**: la dirección del servidor (`rtmp://push-rtmp-live.tiktok.com/rtmp/`)
+     * y la clave de transmisión (la cadena larga). El cliente RTMP quiere las dos juntas, así que
+     * aquí se unen con una sola barra. La dirección suele ser la misma entre transmisiones; lo que
+     * cambia es la clave (Jorge, 26/11/2026).
+     */
+    private fun urlTikTok(): String? {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val url = prefs.getString(CLAVE_TIKTOK_URL, "").orEmpty().trim()
+        val clave = prefs.getString(CLAVE_TIKTOK_CLAVE, "").orEmpty().trim()
+        if (url.isBlank()) return null
+        // Sin clave se usa la dirección tal cual (sirve si ya viene completa).
+        if (clave.isBlank()) return if (url.startsWith("rtmp")) url else null
+        if (url.contains(clave)) return url
+        return url.trimEnd('/') + "/" + clave
+    }
+
+    /** Una línea con el estado de TikTok para el cuadro de «Conectar». */
+    private fun tiktokEstadoTexto(): String {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val url = prefs.getString(CLAVE_TIKTOK_URL, "").orEmpty().trim()
+        val clave = prefs.getString(CLAVE_TIKTOK_CLAVE, "").orEmpty().trim()
+        return when {
+            url.isBlank() -> "TikTok: sin configurar (pega la dirección y la clave)"
+            clave.isBlank() -> "TikTok: falta la clave de transmisión"
+            else -> "TikTok: listo · ${url.substringAfter("://").take(28)}…"
+        }
+    }
 
     /** Botón con el estilo de los demás del cuadro de Facebook. */
     private fun botonFb(texto: String, accion: () -> Unit): TextView = TextView(this).apply {
@@ -9539,91 +9632,63 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     /**
-     * Crea la transmisión en YouTube y la agrega como **segundo destino** (multistream).
+     * Paso 1 al salir al aire: **¿a dónde se transmite?**
      *
-     * Va en su propio hilo porque habla con Google; cuando llega la dirección con la clave se
-     * conecta el destino 1 del emisor. Si algo falla, Facebook sigue al aire y solo se avisa.
+     * Son casillas, no una sola opción: se puede salir a Facebook, YouTube y TikTok **a la vez**
+     * (Jorge, 26/11/2026). Vienen marcados los destinos que ya están configurados; TikTok se marca a
+     * mano para no transmitir ahí sin querer.
      */
-    private fun crearYoutubeYConectar(indice: Int = 1) {
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        if (!com.jfrmedia.switcher.studio.stream.YouTubeLive.conectado(this)) {
-            toast("YouTube elegido pero sin conectar: toca «Conectar con YouTube»")
-            return
-        }
-        val descripcion = prefs.getString(CLAVE_FB_DESCRIPCION, "").orEmpty().trim()
-        Thread {
-            com.jfrmedia.switcher.studio.stream.YouTubeLive.crearDirecto(
-                this,
-                "JFR Media",
-                descripcion,
-                alListo = { directo ->
-                    prefs.edit().putString(CLAVE_YT_DIRECTO_ID, directo.id).apply()
-                    // El chat se pide aparte si no vino al crear la transmisión.
-                    val chat = directo.chatId.ifBlank {
-                        com.jfrmedia.switcher.studio.stream.YouTubeLive.chatDe(this, directo.id)
-                            .orEmpty()
-                    }
-                    runOnUiThread { iniciarChatYouTube(chat, directo.id) }
-                    runOnUiThread {
-                        val ok = if (indice == 0) {
-                            // Solo YouTube: es la transmisión principal, con toda la preparación.
-                            iniciarTransmision(directo.url, conFacebook = false)
-                            emisor.transmitiendo
-                        } else {
-                            emisor.transmitirAdemas(directo.url)
-                        }
-                        L.i("yt", "destino $indice (YouTube): ${if (ok) "conectando" else "no aceptó"}")
-                        toast(if (ok) "YouTube: conectando…" else "YouTube no aceptó la conexión")
-                        // A los 20 y a los 50 segundos se le pregunta a YouTube cómo ve la
-                        // transmisión: es la única forma de saber si el video está llegando.
-                        listOf(20_000L, 50_000L).forEach { espera ->
-                            uiHandler.postDelayed({
-                                Thread {
-                                    val estado = com.jfrmedia.switcher.studio.stream.YouTubeLive
-                                        .estadoTransmision(this, directo.id)
-                                    L.i("yt", "estado a ${espera / 1000}s: $estado")
-                                }.apply { isDaemon = true }.start()
-                            }, espera)
-                        }
-                    }
-                },
-                alError = { mensaje ->
-                    L.w("yt", "crear: $mensaje")
-                    runOnUiThread { toast("YouTube: ${mensaje.take(120)}") }
-                }
-            )
-        }.apply { isDaemon = true }.start()
-    }
-
-    /** Paso 1 al salir al aire: ¿a dónde se transmite? */
     private fun elegirDestinoYSalir() {
-        val opciones = arrayOf("Facebook", "YouTube", "Facebook + YouTube")
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val nombres = arrayOf("Facebook", "YouTube", "TikTok (RTMP)")
+        val fbListo = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().isNotBlank() &&
+            prefs.getString(CLAVE_FB_PAGINA_TOKEN, "").orEmpty().isNotBlank()
+        val ytListo = com.jfrmedia.switcher.studio.stream.YouTubeLive.conectado(this)
+        val ttListo = urlTikTok() != null
+        val marcados = booleanArrayOf(fbListo, ytListo, false)
         AlertDialog.Builder(this)
             .setTitle("¿A dónde vas a transmitir?")
-            .setItems(opciones) { _, cual -> pedirDescripcionDelDirecto(cual) }
+            .setMultiChoiceItems(nombres, marcados) { _, cual, marcado -> marcados[cual] = marcado }
+            .setPositiveButton("Seguir") { _, _ ->
+                val elegidos = ArrayList<Int>()
+                for (i in marcados.indices) if (marcados[i]) elegidos.add(i)
+                when {
+                    elegidos.isEmpty() -> toast("Elige al menos un destino")
+                    elegidos.contains(0) && !fbListo -> toast("Facebook: falta elegir la Página")
+                    elegidos.contains(1) && !ytListo -> toast("YouTube: toca «Conectar con YouTube»")
+                    elegidos.contains(2) && !ttListo -> toast("TikTok: pega la dirección y la clave")
+                    else -> pedirDescripcionDelDirecto(elegidos)
+                }
+            }
             .setNegativeButton("Cancelar", null)
             .show()
             .also { cuadroALaIzquierda(it, altoCompleto = false) }
     }
 
-    /** Paso 2: la descripción (la misma para Facebook y para YouTube) y salir al aire. */
-    private fun pedirDescripcionDelDirecto(cual: Int) {
+    /** Nombre de cada destino para los avisos. */
+    private fun nombreDestino(cual: Int): String = when (cual) {
+        0 -> "Facebook"
+        1 -> "YouTube"
+        else -> "TikTok"
+    }
+
+    /**
+     * Paso 2: la descripción (la misma para todas las plataformas) y salir al aire.
+     * [elegidos] son los destinos en orden (0 = Facebook, 1 = YouTube, 2 = TikTok).
+     */
+    private fun pedirDescripcionDelDirecto(elegidos: List<Int>) {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val caja = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(22.dp, 10.dp, 22.dp, 10.dp)
         }
         caja.addView(TextView(this).apply {
-            text = when (cual) {
-                0 -> "Destino: Facebook."
-                1 -> "Destino: YouTube."
-                else -> "Destino: Facebook y YouTube a la vez."
-            }
+            text = "Destino: " + elegidos.joinToString(" + ") { nombreDestino(it) } + "."
             textSize = 12f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_primary))
         })
         caja.addView(TextView(this).apply {
-            text = "Descripción del directo (se usa en las dos plataformas)"
+            text = "Descripción del directo (se usa en todas las plataformas)"
             textSize = 11f
             setTextColor(ContextCompat.getColor(this@StudioActivity, R.color.text_dim))
             setPadding(0, 12.dp, 0, 0)
@@ -9640,25 +9705,84 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .setPositiveButton("Salir al aire") { _, _ ->
                 val texto = campo.text.toString().trim()
                 prefs.edit().putString(CLAVE_FB_DESCRIPCION, texto).apply()
-                arrancarSegunDestino(cual, texto)
+                arrancarDestinos(elegidos, texto)
             }
             .setNegativeButton("Cancelar", null)
             .show()
             .also { cuadroALaIzquierda(it, altoCompleto = false) }
     }
 
-    /** Crea lo que haga falta y sale al aire en el destino elegido. */
-    private fun arrancarSegunDestino(cual: Int, descripcion: String) {
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        if (cual == 1) {
-            // Solo YouTube: la transmisión de YouTube es la principal (destino 0).
-            crearYoutubeYConectar(0)
+    /**
+     * Crea lo que haga falta en cada plataforma y sale al aire.
+     *
+     * Primero se **preparan todas las direcciones** (Facebook y YouTube hay que crearlas; la de
+     * TikTok ya la tiene Jorge) y, cuando están todas, se abre la salida principal con la primera y
+     * se agregan las demás como destinos adicionales del emisor. Así funciona cualquier combinación
+     * —Facebook + YouTube, las tres, o TikTok sola— con el mismo camino
+     * (Jorge, 26/11/2026).
+     */
+    private fun arrancarDestinos(destinos: List<Int>, descripcion: String) {
+        if (destinos.isEmpty()) {
+            toast("Elige al menos un destino")
             return
         }
+        toast("Preparando " + destinos.joinToString(" + ") { nombreDestino(it) } + "…")
+        val listo = arrayOfNulls<String>(destinos.size)
+        val candado = Any()
+        var pendientes = destinos.size
+
+        fun terminado(indice: Int, url: String?) {
+            synchronized(candado) {
+                listo[indice] = url
+                pendientes--
+                if (pendientes > 0) return
+            }
+            val urls = listo.filterNotNull()
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (urls.isEmpty()) {
+                    toast("No se pudo preparar ningún destino")
+                    return@runOnUiThread
+                }
+                val urlFacebook = destinos.indexOf(0).takeIf { it >= 0 }?.let { listo.getOrNull(it) }
+                // La primera dirección preparada abre la salida principal; el resto se suma enseguida.
+                iniciarTransmision(urls.first(), conFacebook = urlFacebook != null)
+                if (urlFacebook != null && urlFacebook != urls.first()) {
+                    // Facebook no es la principal: se lee su directo igual, para los comentarios.
+                    iniciarConsultasFacebook(
+                        com.jfrmedia.switcher.studio.stream.FacebookLive
+                            .videoDeLaUrl(urlFacebook).orEmpty()
+                            .ifBlank {
+                                getSharedPreferences(PREFS, MODE_PRIVATE)
+                                    .getString(CLAVE_FB_DIRECTO_ID, "").orEmpty().trim()
+                            }
+                    )
+                }
+                urls.drop(1).forEachIndexed { i, u ->
+                    val ok = emisor.transmitirEnDestino(i + 1, u)
+                    L.i("stream", "destino adicional ${i + 1}: ${if (ok) "conectando" else "no aceptó"}")
+                }
+                if (urls.size > 1) toast("Al aire en ${urls.size} destinos")
+            }
+        }
+
+        destinos.forEachIndexed { i, cual ->
+            when (cual) {
+                0 -> crearDirectoFacebook(descripcion) { url -> terminado(i, url) }
+                1 -> crearDirectoYouTube(descripcion) { url -> terminado(i, url) }
+                else -> terminado(i, urlTikTok())
+            }
+        }
+    }
+
+    /** Crea el directo en Facebook y devuelve su dirección con clave (o `null` si falló). */
+    private fun crearDirectoFacebook(descripcion: String, alListo: (String?) -> Unit) {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val paginaId = prefs.getString(CLAVE_FB_PAGE_ID, "").orEmpty().trim()
         val tokenPagina = prefs.getString(CLAVE_FB_PAGINA_TOKEN, "").orEmpty().trim()
         if (paginaId.isBlank() || tokenPagina.isBlank()) {
             toast("Primero trae tus Páginas y elige una")
+            alListo(null)
             return
         }
         toast("Creando el directo en Facebook…")
@@ -9676,13 +9800,61 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 val listo = directo
                 if (listo == null) {
                     toast("Facebook: ${cuandoFallaFacebook(error)}")
+                    alListo(null)
                     return@runOnUiThread
                 }
                 prefs.edit().putString(CLAVE_FB_DIRECTO_ID, listo.id).apply()
-                iniciarTransmision(listo.url)
-                // Si eligió las dos, YouTube entra como segundo destino.
-                if (cual == 2) crearYoutubeYConectar(1)
+                alListo(listo.url)
             }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /** Crea la transmisión de YouTube y devuelve su dirección con clave (o `null` si falló). */
+    private fun crearDirectoYouTube(descripcion: String, alListo: (String?) -> Unit) {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        if (!com.jfrmedia.switcher.studio.stream.YouTubeLive.conectado(this)) {
+            toast("YouTube elegido pero sin conectar: toca «Conectar con YouTube»")
+            alListo(null)
+            return
+        }
+        Thread {
+            com.jfrmedia.switcher.studio.stream.YouTubeLive.crearDirecto(
+                this,
+                "JFR Media",
+                descripcion,
+                alListo = { directo ->
+                    prefs.edit().putString(CLAVE_YT_DIRECTO_ID, directo.id).apply()
+                    // El chat se pide aparte si no vino al crear la transmisión.
+                    val chat = directo.chatId.ifBlank {
+                        com.jfrmedia.switcher.studio.stream.YouTubeLive.chatDe(this, directo.id)
+                            .orEmpty()
+                    }
+                    runOnUiThread { iniciarChatYouTube(chat, directo.id) }
+                    // A los 20 y a los 50 segundos se le pregunta a YouTube cómo ve la transmisión:
+                    // es la única forma de saber si el video está llegando.
+                    listOf(20_000L, 50_000L).forEach { espera ->
+                        uiHandler.postDelayed({
+                            Thread {
+                                val estado = com.jfrmedia.switcher.studio.stream.YouTubeLive
+                                    .estadoTransmision(this, directo.id)
+                                L.i("yt", "estado a ${espera / 1000}s: $estado")
+                            }.apply { isDaemon = true }.start()
+                        }, espera)
+                    }
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) alListo(directo.url)
+                    }
+                },
+                alError = { mensaje ->
+                    L.w("yt", "crear: $mensaje")
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) {
+                            toast("YouTube: ${mensaje.take(120)}")
+                            alListo(null)
+                        }
+                    }
+                }
+            )
         }.apply { isDaemon = true }.start()
     }
 
@@ -11284,6 +11456,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
         /** Transmitir también a YouTube (multistream). */
         private const val CLAVE_YT_ACTIVO = "yt_activo"
+
+        /** Dirección del servidor RTMP de TikTok (la que no cambia entre transmisiones). */
+        private const val CLAVE_TIKTOK_URL = "tiktok_url"
+
+        /** Clave de transmisión de TikTok: cambia en cada directo. Solo vive en esta tablet. */
+        private const val CLAVE_TIKTOK_CLAVE = "tiktok_clave"
 
         /** Transmisión de YouTube creada por la app, para cerrarla al terminar. */
         private const val CLAVE_YT_DIRECTO_ID = "yt_directo_id"

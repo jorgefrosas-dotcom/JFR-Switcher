@@ -60,13 +60,13 @@ class Emisor(
     val destinosAlAire: List<Int> get() = destinosActivos.toList()
 
     /**
-     * Motor de salida. Se pide **multi** para poder repartir el mismo cuadro a dos direcciones.
+     * Motor de salida. Se pide **multi** para poder repartir el mismo cuadro a varias direcciones.
      * Los cuatro arreglos son los vigilantes de cada protocolo (RTMP, RTSP, SRT, UDP); solo se usan
-     * los dos primeros puestos de RTMP.
+     * los **tres** puestos de RTMP: Facebook, YouTube y TikTok a la vez (Jorge, 26/11/2026).
      */
     private val flujo = MultiStream(
         contexto,
-        arrayOf(Vigilante(0), Vigilante(1)),
+        arrayOf(Vigilante(0), Vigilante(1), Vigilante(2)),
         emptyArray(),
         emptyArray(),
         emptyArray(),
@@ -81,7 +81,7 @@ class Emisor(
         override fun onConnectionSuccess() = this@Emisor.onConnectionSuccess()
 
         override fun onConnectionFailed(reason: String) =
-            this@Emisor.onConnectionFailed(if (indice == 0) reason else "destino 2: $reason")
+            this@Emisor.onConnectionFailed(if (indice == 0) reason else "destino ${indice + 1}: $reason")
 
         override fun onNewBitrate(bitrate: Long) {}
 
@@ -272,6 +272,12 @@ class Emisor(
 
     /** Agrega un **segundo** destino a la transmisión que ya está al aire. */
     fun transmitirAdemas(url: String): Boolean = transmitirEn(1, url)
+
+    /**
+     * Agrega otro destino por su índice: 0 = principal, 1 y 2 = adicionales.
+     * Es lo que permite salir a **Facebook, YouTube y TikTok** a la vez.
+     */
+    fun transmitirEnDestino(indice: Int, url: String): Boolean = transmitirEn(indice, url)
 
     private fun transmitirEn(indice: Int, url: String): Boolean = try {
         flujo.startStream(MultiType.RTMP, indice, url)
