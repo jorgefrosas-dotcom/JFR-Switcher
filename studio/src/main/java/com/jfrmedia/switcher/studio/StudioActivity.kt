@@ -8011,37 +8011,45 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     /**
-     * Iconos del mazo en el formato **9:16**: van en la banda que queda **debajo de las cámaras y
-     * arriba de la mesa**, centrados en la columna de cada jugador y montados sobre los dos marcos
-     * (mitad sobre el borde de abajo de la cámara, mitad sobre el borde de arriba de la mesa).
+     * Iconos del mazo en el formato **9:16**: van en la unión **entre las cámaras y la mesa**,
+     * centrados en la columna de cada jugador y montados sobre los dos marcos (un poco sobre el borde
+     * de abajo de la cámara y otro poco sobre el borde de arriba de la mesa).
      *
-     * El icono es 9:16 como el del formato horizontal, así que en un lienzo de pie mide lo mismo en
-     * fracción de ancho que de alto (1080×1920).
+     * **Cada icono conserva su forma**: los sprites del mazo son cuadrados, así que en el lienzo de
+     * pie el ancho en fracción tiene que ser 16/9 mayor que el alto para no aplastarlos. Antes se
+     * dibujaban en una caja 9:16 y salían estirados (Jorge, 26/11/2026).
      */
     private fun dibujarIconosMazoVertical(escena: Scene) {
-        val altoCaja = 0.135f
-        val anchoIcono = altoCaja          // 9:16 dentro de un lienzo 9:16 ⇒ ancho = alto
+        val altoCaja = 0.0885f            // ≈170 px en un lienzo de 1920 de alto
         val entre = 0.012f
-        // Centro vertical de la banda: es el borde de la cámara por arriba y el de la mesa por abajo.
-        val centroY = (0.315f + 0.395f) / 2f
+        val cajaCamara = rectJugadorTcg(izquierda = true)
+        val mesa = rectMesaTcg()
+        // Centro vertical de la unión: el borde de abajo de la cámara y el de arriba de la mesa.
+        val centroY = (cajaCamara.bottom + mesa.top) / 2f
         listOf(estadoTcg.uno to true, estadoTcg.dos to false).forEach { par ->
             val jugador = par.first
             val izquierda = par.second
             val dibujos = com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, jugador.mazoId)
                 .filter { !it.isRecycled }.take(2)
             if (dibujos.isEmpty()) return@forEach
+            // Ancho de cada icono según SU forma (cuadrado = 16/9 del alto en fracciones del lienzo).
+            val anchos = dibujos.map { bmp ->
+                if (bmp.height <= 0) altoCaja * (16f / 9f)
+                else altoCaja * (1920f / 1080f) * (bmp.width.toFloat() / bmp.height.toFloat())
+            }
+            val anchoTotal = anchos.sum() + entre * (dibujos.size - 1)
             val caja = rectJugadorTcg(izquierda)
-            val anchoTotal = anchoIcono * dibujos.size + entre * (dibujos.size - 1)
             var x = caja.centerX() - anchoTotal / 2f
             val items = ArrayList<ImageItem>()
-            dibujos.forEach { bmp ->
+            dibujos.forEachIndexed { i, bmp ->
+                val ancho = anchos[i]
                 val item = ImageItem(escena.nextId(), bmp, "Mazo " + jugador.nombre, null)
-                item.rect.set(x, centroY - altoCaja / 2f, x + anchoIcono, centroY + altoCaja / 2f)
+                item.rect.set(x, centroY - altoCaja / 2f, x + ancho, centroY + altoCaja / 2f)
                 // Con las esquinas apenas redondeadas, como las tarjetas del juego.
                 item.radiusDp = 6f
                 escena.agregar(item)
                 items.add(item)
-                x += anchoIcono + entre
+                x += ancho + entre
             }
             if (jugador === estadoTcg.uno) iconosMazoUno = items else iconosMazoDos = items
         }
@@ -8060,7 +8068,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun anchoJugadorTcg(): Float = if (tcgEnVertical()) {
         // Lienzo 9:16: dos ventanas **3:4** arriba (no 9:16: Jorge las quiere recortadas un poco
         // arriba y abajo, más bajas que en el formato horizontal, pero sin llegar a cuadradas).
-        0.3733f
+        0.44f
     } else {
         0.60f * (9f / 16f) * (9f / 16f)
     }
@@ -8078,19 +8086,21 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * | de       | a        | qué                                             |
      * |----------|----------|-------------------------------------------------|
      * | 0.000    | 0.035    | **margen de seguridad de arriba**               |
-     * | 0.035    | 0.315    | las dos cámaras de jugador (3:4)                |
-     * | 0.315    | 0.395    | **banda de los iconos del mazo** (encima de los dos marcos) |
+     * | 0.035    | 0.365    | las dos cámaras de jugador (3:4, lo más grandes posible) |
      * | 0.395    | 0.712    | **la mesa, al centro** (la zona más descubierta)|
      * | 0.745    | 0.868    | el banner del torneo, abajo                     |
      * | 0.868    | 1.000    | **margen de seguridad de abajo** (descripción)  |
+     *
+     * Los iconos del mazo se montan sobre la unión de las cámaras con la mesa (ver
+     * [dibujarIconosMazoVertical]).
      */
     private fun rectJugadorTcg(izquierda: Boolean): RectF {
         val ancho = anchoJugadorTcg()
         return if (tcgEnVertical()) {
             val alto = altoJugadorTcg()
             val y0 = 0.035f
-            // Las dos cámaras van juntas al centro del ancho, con un aire entre ellas.
-            val hueco = 0.06f
+            // Las dos cámaras van juntas al centro del ancho, con un aire chico entre ellas.
+            val hueco = 0.04f
             val x0 = 0.5f - hueco / 2f - ancho
             if (izquierda) {
                 RectF(x0, y0, x0 + ancho, y0 + alto)
