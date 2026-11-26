@@ -5,6 +5,7 @@ import android.net.Uri
 import com.jfrmedia.switcher.core.util.L
 import net.openid.appauth.AuthState
 import net.openid.appauth.AuthorizationRequest
+import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
 import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.ResponseTypeValues
@@ -73,15 +74,83 @@ object YouTubeLive {
         .setAdditionalParameters(mapOf("access_type" to "offline"))
         .build()
 
+    /**
+     * Estado guardado de YouTube.
+     *
+     * **Ojo con AppAuth 0.11.1:** `AuthState.jsonSerialize()` **no guarda** la configuración del
+     * servicio OAuth, así que al cerrar y volver a abrir la app el estado restaurado queda sin
+     * `authorizationServiceConfiguration` y cualquier `performActionWithFreshTokens` lanza
+     * `IllegalStateException: No authorization configuration available for refresh request`
+     * (la app se cerraba al tocar «Conectar» teniendo YouTube conectado; Jorge, 26/11/2026).
+     *
+     * Aquí se le vuelve a poner la configuración de Google antes de usar el estado, y además se
+     * escribe en el JSON al guardar, para que quede también en la tablet.
+     */
     fun estado(contexto: Context): AuthState? = runCatching {
         val texto = contexto.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(CLAVE_ESTADO, null) ?: return null
-        AuthState.jsonDeserialize(texto)
+        val json = JSONObject(texto)
+        if (!json.has("config")) json.put("config", configuracion().toJson())
+        val valor = AuthState.jsonDeserialize(json)
+        L.i(
+            "yt", "estado restaurado · claves=${json.keys().asSequence().toList()} · " +
+                "respuesta=${valor.lastAuthorizationResponse != null} · " +
+                "refresh=${valor.refreshToken != null} · autorizado=${valor.isAuthorized}"
+        )
+        repararConfiguracion(valor)
+        repararRespuesta(valor)
+        valor
     }.getOrNull()
 
+    /**
+     * Le devuelve la configuración de Google a un estado restaurado.
+     *
+     * `AuthState.jsonDeserialize` no la trae (la librería solo la tiene cuando el estado se creó en
+     * esta sesión, al volver del login), y sin ella la renovación del token lanza
+     * `IllegalStateException`. El campo `mConfig` es privado y no tiene setter público, así que se
+     * pone por reflexión: es la única forma de reutilizar una sesión ya guardada sin obligar a Jorge
+     * a volver a entrar con Google cada vez que abre la app (26/11/2026).
+     */
+    private fun repararConfiguracion(valor: AuthState) {
+        if (valor.authorizationServiceConfiguration != null) return
+        runCatching {
+            val campo = AuthState::class.java.getDeclaredField("mConfig")
+            campo.isAccessible = true
+            campo.set(valor, configuracion())
+        }.onFailure { L.w("yt", "no se pudo restaurar la configuración: ${it.message}") }
+    }
+
+    /**
+     * Le devuelve la **respuesta de autorización** a un estado restaurado.
+     *
+     * `createTokenRefreshRequest()` no usa `mConfig`: saca la configuración y el cliente de
+     * `mLastAuthorizationResponse.request` y, si esa respuesta no está, lanza
+     * `IllegalStateException: No authorization configuration available for refresh request` (es lo
+     * que cerraba la app al tocar «Conectar» con YouTube conectado; Jorge, 26/11/2026).
+     *
+     * El estado guardado en la tablet no la tenía. Se le fabrica una con **la misma petición**
+     * (configuración de Google + el mismo cliente y permiso): el código de autorización ya no hace
+     * falta, porque lo que se usa para renovar es el refresh token, que sí está guardado.
+     */
+    private fun repararRespuesta(valor: AuthState) {
+        if (valor.lastAuthorizationResponse != null) return
+        runCatching {
+            val respuesta = AuthorizationResponse.Builder(peticion())
+                .setAuthorizationCode("restaurado")
+                .setState("restaurado")
+                .build()
+            val campo = AuthState::class.java.getDeclaredField("mLastAuthorizationResponse")
+            campo.isAccessible = true
+            campo.set(valor, respuesta)
+            L.i("yt", "respuesta de autorización restaurada (el estado guardado no la tenía)")
+        }.onFailure { L.w("yt", "no se pudo restaurar la respuesta: ${it.message}") }
+    }
+
     fun guardar(contexto: Context, valor: AuthState) {
+        val json = valor.jsonSerialize()
+        if (!json.has("config")) json.put("config", configuracion().toJson())
         contexto.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(CLAVE_ESTADO, valor.jsonSerializeString())
+            .putString(CLAVE_ESTADO, json.toString())
             .apply()
     }
 
@@ -153,13 +222,23 @@ object YouTubeLive {
             return
         }
         val servicio = servicio(contexto)
-        valor.performActionWithFreshTokens(servicio) { token, _, excepcion ->
-            if (token.isNullOrBlank() || excepcion != null) {
-                alError("Google no entregó permiso: ${excepcion?.message ?: "sin token"}")
-            } else {
-                guardar(contexto, valor)
-                alListo(token)
+        // Nunca se deja escapar una excepción de la librería hacia la interfaz: si la sesión guardada
+        // quedó inservible, se avisa y se sigue (antes la app se cerraba; Jorge, 26/11/2026).
+        runCatching {
+            valor.performActionWithFreshTokens(servicio) { token, _, excepcion ->
+                if (token.isNullOrBlank() || excepcion != null) {
+                    alError("Google no entregó permiso: ${excepcion?.message ?: "sin token"}")
+                } else {
+                    guardar(contexto, valor)
+                    alListo(token)
+                }
             }
+        }.onFailure { t ->
+            L.w("yt", "no se pudo renovar el token: ${t.javaClass.simpleName} ${t.message}")
+            alError(
+                "La sesión de YouTube caducó: toca «Desconectar YouTube» y vuelve a entrar con la " +
+                    "cuenta del canal"
+            )
         }
     }
 

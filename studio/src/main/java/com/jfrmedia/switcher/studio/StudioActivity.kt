@@ -375,7 +375,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 runOnUiThread { toast("Google: $detalle") }
                 return@performTokenRequest
             }
-            val estado = net.openid.appauth.AuthState()
+            // El estado se arma **desde la respuesta de autorización** (no vacío): de ella saca
+            // AppAuth la configuración y la petición para poder renovar el token más adelante.
+            // Con `AuthState()` vacío la sesión se guardaba incompleta y, al volver a abrir la app,
+            // la renovación lanzaba `IllegalStateException` y la app se cerraba al tocar «Conectar»
+            // (Jorge, 26/11/2026).
+            val estado = net.openid.appauth.AuthState(respuesta, null)
             estado.update(tokens as net.openid.appauth.TokenResponse, null)
             com.jfrmedia.switcher.studio.stream.YouTubeLive.guardar(this, estado)
             com.jfrmedia.switcher.core.util.L.i("yt", "cuenta conectada")
