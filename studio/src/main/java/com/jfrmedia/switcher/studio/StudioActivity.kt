@@ -7853,8 +7853,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
 
     /**
-     * Coloca el banner del modo: **arriba** con la vista de mesa, **abajo** cuando hay un jugador a
-     * pantalla completa y oculto con el ambiente. Siempre queda encima de las cámaras.
+     * Coloca el banner del modo.
+     *
+     * - **16:9**: arriba con la vista de mesa, abajo cuando hay un jugador a pantalla completa y
+     *   oculto con el ambiente.
+     * - **9:16**: siempre **abajo** (con la mesa y con un jugador al aire), porque arriba y en el
+     *   centro manda la imagen y el pie es lo que queda libre de textos en TikTok/Reels/Shorts.
+     *
+     * Siempre queda encima de las cámaras.
      */
     private fun acomodarBannerTcg() {
         val escena = b.canvas.scene
@@ -7862,10 +7868,17 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val alto = altoTiraTcg()
         val x1 = (1f - anchoBannerTcg()) / 2f
         val x2 = x1 + anchoBannerTcg()
-        // En 9:16 el banner va pegado al borde de arriba (es la franja del torneo, como en un stream
-        // vertical) y en 16:9 lleva el 2 % de aire de siempre.
-        val margenY = if (tcgEnVertical()) 0.012f else 0.02f
+        // En 9:16 el banner se apoya sobre el margen de seguridad de abajo (0.868 del lienzo).
+        val yFin = if (tcgEnVertical()) 0.868f else 0.98f
+        val margenY = 0.02f
         when {
+            tcgEnVertical() -> {
+                // Vertical: el banner va abajo tanto con la mesa como con un jugador a pantalla completa.
+                val conJugador = vistaTcg == 0 || vistaTcg == 1
+                banner.visible = vistaTcg == VISTA_MESA || conJugador
+                if (banner.visible) banner.rect.set(x1, yFin - alto, x2, yFin)
+            }
+
             vistaTcg == VISTA_MESA -> {
                 banner.visible = true
                 banner.rect.set(x1, margenY, x2, margenY + alto)
@@ -7873,7 +7886,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
             vistaTcg == 0 || vistaTcg == 1 -> {
                 banner.visible = true
-                banner.rect.set(x1, 0.98f - alto, x2, 0.98f)
+                banner.rect.set(x1, yFin - alto, x2, yFin)
             }
 
             else -> banner.visible = false
@@ -7914,6 +7927,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             runCatching { b.canvas.requestRender() }
             return
         }
+        // En 9:16 no se dibujan los iconos grandes del mazo: el banner de abajo ya los lleva, y así
+        // la ventana del jugador queda limpia para la cara (Jorge, 26/11/2026).
+        if (tcgEnVertical()) {
+            runCatching { b.canvas.requestRender() }
+            return
+        }
         val anchoCam = anchoJugadorTcg()
         val entre = anchoCam * 0.05f
         listOf(estadoTcg.uno to true, estadoTcg.dos to false).forEach { par ->
@@ -7924,53 +7943,31 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             if (dibujos.isEmpty()) return@forEach
             // Los iconos del mazo van **arriba del chip de Energy**, del mismo tamaño siempre (uno o
             // dos, no se achican), centrados sobre la pila de chips (Jorge, 24/11/2026).
-            val anchoIcono = anchoCam * if (tcgEnVertical()) 0.24f else 0.33f
-            val altoIcono = if (tcgEnVertical()) {
-                // Lienzo 9:16: el icono es vertical (9:16), así que en fracciones mide igual de ancho
-                // que de alto.
-                anchoIcono
-            } else {
-                anchoIcono * (16f / 9f)
-            }
+            val anchoIcono = anchoCam * 0.33f
+            val altoIcono = anchoIcono * (16f / 9f)
             val altoPila = 3f * altoChipTcg() + 2f * (altoChipTcg() * 0.24f)
             val items = ArrayList<ImageItem>()
             val anchoTotal = anchoIcono * dibujos.size + entre * (dibujos.size - 1)
-            if (tcgEnVertical()) {
-                // En vertical la pila de chips va DENTRO de la ventana del jugador, así que los iconos
-                // se centran en esa ventana y quedan justo encima de los chips.
-                val caja = rectJugadorTcg(derecha)
-                val centrado = if (derecha) caja.left + (caja.width() - anchoTotal) / 2f
-                    else caja.right - (caja.width() - anchoTotal) / 2f - anchoTotal
-                val abajo = caja.bottom - 0.012f - altoPila - altoChipTcg() * 0.10f
-                dibujos.forEachIndexed { i, bmp ->
-                    val item = ImageItem(escena.nextId(), bmp, "Mazo " + jugador.nombre, null)
-                    val x = centrado + i * (anchoIcono + entre)
-                    item.rect.set(x, abajo - altoIcono, x + anchoIcono, abajo)
-                    escena.agregar(item)
-                    items.add(item)
-                }
+            val techoPila = 0.975f - altoPila                 // justo encima del chip Energy
+            val abajo = techoPila - altoChipTcg() * 0.10f
+            val arriba = abajo - altoIcono
+            // Centro de la pila de chips (que va asomada hacia afuera de la columna).
+            val centroChips = if (derecha) anchoChipTcg() / 2f - sangradoChipTcg()
+                else 1f - anchoChipTcg() / 2f + sangradoChipTcg()
+            var x = centroChips - anchoTotal / 2f
+            // Que no se salgan de la columna (con dos iconos, centrados sobre los chips se salían y
+            // el borde del monitor los recortaba).
+            x = if (derecha) {
+                x.coerceIn(0.004f, anchoCam - 0.004f - anchoTotal)
             } else {
-                val techoPila = 0.975f - altoPila                 // justo encima del chip Energy
-                val abajo = techoPila - altoChipTcg() * 0.10f
-                val arriba = abajo - altoIcono
-                // Centro de la pila de chips (que va asomada hacia afuera de la columna).
-                val centroChips = if (derecha) anchoChipTcg() / 2f - sangradoChipTcg()
-                    else 1f - anchoChipTcg() / 2f + sangradoChipTcg()
-                var x = centroChips - anchoTotal / 2f
-                // Que no se salgan de la columna (con dos iconos, centrados sobre los chips se salían y
-                // el borde del monitor los recortaba).
-                x = if (derecha) {
-                    x.coerceIn(0.004f, anchoCam - 0.004f - anchoTotal)
-                } else {
-                    x.coerceIn(1f - anchoCam + 0.004f, 1f - 0.004f - anchoTotal)
-                }
-                dibujos.forEach { bmp ->
-                    val item = ImageItem(escena.nextId(), bmp, "Mazo " + jugador.nombre, null)
-                    item.rect.set(x, arriba, x + anchoIcono, abajo)
-                    escena.agregar(item)
-                    items.add(item)
-                    x += anchoIcono + entre
-                }
+                x.coerceIn(1f - anchoCam + 0.004f, 1f - 0.004f - anchoTotal)
+            }
+            dibujos.forEach { bmp ->
+                val item = ImageItem(escena.nextId(), bmp, "Mazo " + jugador.nombre, null)
+                item.rect.set(x, arriba, x + anchoIcono, abajo)
+                escena.agregar(item)
+                items.add(item)
+                x += anchoIcono + entre
             }
             if (jugador === estadoTcg.uno) iconosMazoUno = items else iconosMazoDos = items
         }
@@ -7989,27 +7986,43 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * (se recorta más), nunca deforma (Jorge, 23/11/2026).
      */
     private fun anchoJugadorTcg(): Float = if (tcgEnVertical()) {
-        // Lienzo 9:16: dos ventanas verticales abajo, una por jugador. En un lienzo de pie una caja
-        // 9:16 tiene el **mismo ancho y alto en fracciones** (1080×1920 ⇒ 0,46 de ancho = 0,46 de alto).
-        0.46f
+        // Lienzo 9:16: dos ventanas **3:4** arriba (no 9:16: Jorge las quiere recortadas un poco
+        // arriba y abajo, más bajas que en el formato horizontal, pero sin llegar a cuadradas).
+        0.40f
     } else {
         0.60f * (9f / 16f) * (9f / 16f)
     }
 
     /**
-     * Rectángulo de la cámara de un jugador en la vista de mesa.
+     * Alto (fracción del lienzo) de la ventana del jugador en 9:16: **3:4**.
+     * En el lienzo vertical de 1080×1920 una ventana de 0.40 de ancho con forma 3:4 mide 0.30 de alto.
+     */
+    private fun altoJugadorTcg(): Float = anchoJugadorTcg() * 1080f * (4f / 3f) / 1920f
+
+    /**
+     * Reparto vertical del lienzo 9:16 (fracciones de alto), pensado para que **ningún elemento
+     * importante quede debajo del texto que ponen TikTok, Reels y Shorts** (Jorge, 26/11/2026):
      *
-     * - **16:9**: la columna entera de arriba a abajo, a los lados del monitor.
-     * - **9:16**: una ventana 9:16 al pie, una a cada lado, debajo de la mesa.
+     * | de       | a        | qué                                             |
+     * |----------|----------|-------------------------------------------------|
+     * | 0.000    | 0.045    | **margen de seguridad de arriba**               |
+     * | 0.045    | 0.345    | las dos cámaras de jugador (3:4)                |
+     * | 0.370    | 0.687    | **la mesa, al centro** (la zona más descubierta)|
+     * | 0.740    | 0.863    | el banner del torneo, abajo                     |
+     * | 0.863    | 1.000    | **margen de seguridad de abajo** (descripción)  |
      */
     private fun rectJugadorTcg(izquierda: Boolean): RectF {
         val ancho = anchoJugadorTcg()
         return if (tcgEnVertical()) {
-            val y0 = 0.50f
+            val alto = altoJugadorTcg()
+            val y0 = 0.045f
+            // Las dos cámaras van juntas al centro del ancho, con un aire entre ellas.
+            val hueco = 0.08f
+            val x0 = 0.5f - hueco / 2f - ancho
             if (izquierda) {
-                RectF(0.012f, y0, 0.012f + ancho, y0 + ancho)
+                RectF(x0, y0, x0 + ancho, y0 + alto)
             } else {
-                RectF(0.988f - ancho, y0, 0.988f, y0 + ancho)
+                RectF(0.5f + hueco / 2f, y0, 0.5f + hueco / 2f + ancho, y0 + alto)
             }
         } else {
             if (izquierda) RectF(0f, 0f, ancho, 1f) else RectF(1f - ancho, 0f, 1f, 1f)
@@ -8029,20 +8042,19 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * alto se calcula para que el **área de adentro del marco quede 16:9 exacta**: así un celular que
      * manda 16:9 llena el recuadro completo sin recortar y sin franjas (Jorge, 23/11/2026).
      *
-     * En **9:16** la mesa va a **todo lo ancho**, justo debajo del banner, y los dos jugadores debajo
-     * de ella (así el área de juego se ve grande en el celular, que es donde se mira el vertical).
+     * En **9:16** la mesa va **a todo lo ancho y al centro del lienzo**: es la zona que las
+     * plataformas dejan libre (el texto de la descripción va abajo), con un margen de seguridad
+     * arriba y abajo (Jorge, 26/11/2026).
      */
     private fun rectMesaTcg(): RectF {
         val g = grosorMarcoMesaPx()
         if (tcgEnVertical()) {
             val aire = 0.014f
-            val altoBanner = 0.014f + altoTiraTcg()
-            val disponible = 0.985f - altoBanner
             // Lienzo de referencia 9:16 (1080x1920).
             val anchoPx = (1f - 2f * aire) * 1080f
             val altoPx = ((anchoPx - 2f * g) * 9f / 16f) + 2f * g
-            val alto = (altoPx / 1920f).coerceAtMost(disponible)
-            val y0 = altoBanner + 0.006f
+            val alto = altoPx / 1920f
+            val y0 = 0.370f
             return RectF(aire, y0, 1f - aire, y0 + alto)
         }
         val aire = 0.008f

@@ -366,14 +366,20 @@ class PanelTcg(
         fila.removeAllViews()
         fila.orientation = LinearLayout.VERTICAL
         fila.background = caja(contexto, 0xFF1A1C22.toInt(), if (enTurno) 0xFFFF6B35.toInt() else 0xFF2C303A.toInt(), 12f)
-        fila.setPadding(dp(contexto, 12f), dp(contexto, 8f), dp(contexto, 12f), dp(contexto, 10f))
+        // En 9:16 (columna) la tarjeta va más apretada en vertical: así el monitor de programa gana
+        // alto para el formato vertical (Jorge, 26/11/2026).
+        if (enColumna) {
+            fila.setPadding(dp(contexto, 10f), dp(contexto, 5f), dp(contexto, 10f), dp(contexto, 6f))
+        } else {
+            fila.setPadding(dp(contexto, 12f), dp(contexto, 8f), dp(contexto, 12f), dp(contexto, 10f))
+        }
 
         // Nombre + récord del evento
         val cabecera = LinearLayout(contexto).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         cabecera.addView(
             TextView(contexto).apply {
                 text = (if (enTurno) "▶ " else "") + jugador.nombre
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, if (enColumna) 14f else 15f)
                 setTextColor(0xFFECEEF2.toInt())
                 typeface = Typeface.DEFAULT_BOLD
                 setPadding(0, 0, dp(contexto, 10f), 0)
@@ -427,7 +433,7 @@ class PanelTcg(
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(contexto, 5f) }
+            ).apply { topMargin = dp(contexto, if (enColumna) 3f else 5f) }
         )
 
         // Pasar turno y «Ganó» **dentro de la tarjeta del jugador**, arriba de las pokebolas
@@ -435,7 +441,7 @@ class PanelTcg(
         // comentarios).
         val acciones = LinearLayout(contexto).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(contexto, 6f), 0, 0)
+            setPadding(0, dp(contexto, if (enColumna) 3f else 6f), 0, 0)
         }
         acciones.addView(
             boton(contexto, "Pasar turno", 0xFF23262E.toInt(), 0xFFECEEF2.toInt(), 11f) {
@@ -457,7 +463,7 @@ class PanelTcg(
         val premios = LinearLayout(contexto).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(contexto, 6f), 0, 0)
+            setPadding(0, dp(contexto, if (enColumna) 3f else 6f), 0, 0)
         }
         premios.addView(etiqueta(contexto, "Pokémon", 0xFF9AA0AA.toInt()))
         // `debilitados` cuenta las pokebolas ya gastadas, así que quitar una bola con el «−» suma
@@ -465,13 +471,14 @@ class PanelTcg(
         premios.addView(boton(contexto, "−", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) {
             escucha.onCambiarDebilitados(lado, +1)
         })
+        val altoBolas = if (enColumna) 24f else 30f
         premios.addView(
             // Pokebolas dibujadas (iconos), no círculos de texto.
             android.widget.ImageView(contexto).apply {
-                setImageBitmap(Banners.dibujarPokebolas(jugador.debilitados, 420, dp(contexto, 30f)))
+                setImageBitmap(Banners.dibujarPokebolas(jugador.debilitados, 420, dp(contexto, altoBolas)))
                 scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             },
-            LinearLayout.LayoutParams(0, dp(contexto, 30f), 1f)
+            LinearLayout.LayoutParams(0, dp(contexto, altoBolas), 1f)
         )
         premios.addView(boton(contexto, "+", 0xFF23262E.toInt(), 0xFFECEEF2.toInt()) {
             // Poner una pokebola de vuelta (un Pokémon menos debilitado).
@@ -483,7 +490,7 @@ class PanelTcg(
         val fichas = LinearLayout(contexto).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(contexto, 6f), 0, 0)
+            setPadding(0, dp(contexto, if (enColumna) 3f else 6f), 0, 0)
         }
         fichas.addView(etiqueta(contexto, "Mesa", 0xFF9AA0AA.toInt()))
         val nombres = arrayOf("Energy", "Supporter", "Retreat")
