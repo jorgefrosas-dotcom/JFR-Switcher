@@ -43,7 +43,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:buttonTint="@color/accent"
-                android:text="Modo Pokémon TCG — 4 cámaras, solo 16:9 horizontal"
+                android:text="Modo Pokémon TCG — 4 cámaras, 16:9 o 9:16 vertical"
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
         </RadioGroup>
@@ -53,7 +53,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="En Pokémon TCG se ocultan plantillas, transiciones y los ajustes de imagen, y el banner del torneo se graba dentro del video."
+            android:text="En Pokémon TCG se ocultan plantillas, transiciones y los ajustes de imagen, y el banner del torneo se graba dentro del video. El chip 9:16 / 16:9 cambia el formato del modo: 9:16 vertical sirve para TikTok y también para YouTube y Facebook verticales."
             android:textColor="@color/text_dim" />
 
         <TextView

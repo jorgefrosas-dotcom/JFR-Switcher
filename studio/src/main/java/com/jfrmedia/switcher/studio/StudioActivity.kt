@@ -145,8 +145,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** false = plantilla horizontal (16:9), true = vertical (9:16). */
     private var vertical = false
 
-    /** true = Modo Pokémon TCG: 16:9 fijo, sin rotación y con el banner del torneo en el video. */
+    /** true = Modo Pokémon TCG: sin plantillas ni ajustes de imagen, con el banner del torneo en el video. */
     private var modoTcg = false
+
+    /**
+     * Formato del Modo Pokémon: `false` = 16:9 horizontal (YouTube/Facebook de siempre),
+     * `true` = **9:16 vertical** (TikTok y también válido para YouTube y Facebook verticales).
+     *
+     * Es una bandera propia, como `studioVertical`, para no mezclarla con [vertical] (el formato de
+     * los modos de siempre): así el modo Pokémon puede estar en vertical sin despertar los acomodos
+     * del celular y del Modo Studio (Jorge, 26/11/2026).
+     */
+    private var tcgVertical = false
     private var estadoTcg = EstadoTcg()
     private var aplicandoRectTcg = false
     private var bannerTcg: CanvasItem? = null
@@ -199,7 +209,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * Así la grabación, la transmisión y las tarjetas salen en el mismo formato que los monitores.
      */
     private val lienzoVertical: Boolean
-        get() = if (modoStudio) studioVertical else vertical
+        get() = when {
+            modoTcg -> tcgVertical
+            modoStudio -> studioVertical
+            else -> vertical
+        }
+
+    /** El Modo Pokémon está en el formato vertical 9:16 (el que va a TikTok). */
+    private fun tcgEnVertical(): Boolean = modoTcg && tcgVertical
 
     /**
      * Forma de las tarjetas de fuente (cámaras, overlays y medios).
@@ -685,7 +702,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // al ponerla en vertical entra el Modo Studio.
         if (esPantallaCelular()) {
             requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
-        } else if (!getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_MODO_TCG, false)) {
+        } else if (getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_MODO_TCG, false)) {
+            // Modo Pokémon: la pantalla va en el formato elegido (9:16 vertical para TikTok o 16:9).
+            requestedOrientation = if (
+                getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_TCG_VERTICAL, false)
+            ) {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+        } else {
             // La tablet tiene que poder girar para entrar al Modo Studio. Se fija AQUÍ porque el
             // Modo Pokémon deja la pantalla trabada en horizontal y ese bloqueo se guarda en la
             // pantalla: al volver a Modo Studio no se soltaba solo (Jorge, 21/11/2026).
@@ -702,10 +728,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         vigilarScrollFuentes()
 
         vertical = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_VERTICAL, false)
-        // Modo Pokémon TCG: en este modo el lienzo es siempre 16:9.
+        // Modo Pokémon TCG: el formato del modo es propio (`tcgVertical`), no el de los modos de siempre.
         modoTcg = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_MODO_TCG, false)
         if (modoTcg) {
             vertical = false
+            tcgVertical = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(CLAVE_TCG_VERTICAL, false)
             estadoTcg = leerEstadoTcg()
             b.canvas.scene.maxCams = 4
         }
@@ -4733,13 +4760,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val ancho = if (anchoGrabando > 0) anchoGrabando else recAncho
         val alto = if (altoGrabando > 0) altoGrabando else recAlto
         b.txtCanvasInfo.text = when {
+            modoTcg -> "${if (tcgVertical) "9:16" else "16:9"} · $ancho×$alto"
             modoStudio -> "${if (studioVertical) "9:16" else "16:9"} · $ancho×$alto"
             vertical -> "$ancho×$alto"
             else -> "16:9 · $ancho×$alto"
         }
         b.btnOrientacion.text = if (lienzoVertical) "9:16" else "16:9"
         // La cabecera del visor se acorta en vertical (el medidor la reescribe cada 2 s).
-        if (vertical || modoStudio) b.txtEtiquetaPrograma.text = "PROGRAMA"
+        if (vertical || modoStudio || modoTcg) b.txtEtiquetaPrograma.text = "PROGRAMA"
     }
 
     private fun cambiarOrientacion(nuevoVertical: Boolean) {
@@ -4760,6 +4788,37 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             refreshOverlayTiles()
             refreshMediaTiles()
             toast(if (studioVertical) "Modo Studio · 9:16" else "Modo Studio · 16:9")
+            return
+        }
+        // Modo Pokémon: el mismo interruptor, pero cambia el formato del modo y su composición
+        // (banner, mesa, jugadores y cronómetro se reacomodan solos). Jorge, 26/11/2026.
+        if (modoTcg) {
+            if (sesionEnCurso()) {
+                toast("Formato bloqueado mientras grabas o transmites")
+                return
+            }
+            if (tcgVertical == nuevoVertical) return
+            tcgVertical = nuevoVertical
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(CLAVE_TCG_VERTICAL, tcgVertical).apply()
+            // La pantalla gira con el formato: en vertical la tablet se pone de pie para que el
+            // monitor 9:16 llene el alto en vez de quedar chico dentro de un marco apaisado.
+            requestedOrientation = if (tcgVertical) {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+            L.i("tcg", "formato del modo: ${if (tcgVertical) "9:16 vertical" else "16:9 horizontal"}")
+            aplicarModoTcg()
+            actualizarInfoLienzo()
+            actualizarCandadoOrientacion()
+            toast(
+                if (tcgVertical) {
+                    "Modo Pokémon · 9:16 vertical (TikTok, YouTube y Facebook vertical)"
+                } else {
+                    "Modo Pokémon · 16:9 horizontal"
+                }
+            )
             return
         }
         if (vertical == nuevoVertical) return
@@ -4796,10 +4855,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /** Refleja en la UI el candado de orientación (chip). */
     private fun actualizarCandadoOrientacion() {
         val bloqueado = sesionEnCurso()
+        val dePie = lienzoVertical
         b.btnOrientacion.alpha = if (bloqueado) 0.4f else 1f
         b.btnOrientacion.text = when {
-            bloqueado -> (if (vertical) "🔒 9:16" else "🔒 16:9")
-            vertical -> "9:16"
+            bloqueado -> (if (dePie) "🔒 9:16" else "🔒 16:9")
+            dePie -> "9:16"
             else -> "16:9"
         }
     }
@@ -7771,19 +7831,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     /**
-     * Ancho del banner del modo (fracción del lienzo): **58.75 %**, centrado arriba.
+     * Ancho del banner del modo (fracción del lienzo): **58.75 %** centrado en 16:9 y **97 %** en
+     * 9:16.
      *
-     * Con la vista de mesa nueva las columnas de los jugadores se llevan ~19 % a cada lado, así que
-     * el hueco del centro es ~62 %: el banner entra con un 1.6 % de aire por lado. Si se ensancharan
-     * las columnas, el banner es lo primero que deja de caber (Jorge, 23/11/2026).
+     * En 16:9 las columnas de los jugadores se llevan ~19 % a cada lado, así que el hueco del centro
+     * es ~62 %: el banner entra con un 1.6 % de aire por lado. En 9:16 no hay columnas laterales (los
+     * jugadores van al pie) y el banner ocupa todo el ancho, como el rótulo de un stream vertical.
      */
-    private fun anchoBannerTcg(): Float = 0.5875f
+    private fun anchoBannerTcg(): Float = if (tcgEnVertical()) 0.972f else 0.5875f
 
     /**
-     * Alto de la franja del banner: se dibuja a 1600×360, así que su alto sale de su ancho
-     * (≈23.5 % del lienzo).
+     * Alto de la franja del banner: se dibuja a 1600×360, así que su alto sale de su ancho en
+     * píxeles del lienzo (≈23.5 % del lienzo en 16:9, ≈12 % en 9:16).
      */
-    private fun altoTiraTcg(): Float = anchoBannerTcg() * (16f / 9f) / (1600f / 360f)
+    private fun altoTiraTcg(): Float = if (tcgEnVertical()) {
+        // Lienzo 9:16: 1080 de ancho por 1920 de alto.
+        anchoBannerTcg() * 1080f * (360f / 1600f) / 1920f
+    } else {
+        anchoBannerTcg() * (16f / 9f) / (1600f / 360f)
+    }
 
 
     /**
@@ -7796,10 +7862,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val alto = altoTiraTcg()
         val x1 = (1f - anchoBannerTcg()) / 2f
         val x2 = x1 + anchoBannerTcg()
+        // En 9:16 el banner va pegado al borde de arriba (es la franja del torneo, como en un stream
+        // vertical) y en 16:9 lleva el 2 % de aire de siempre.
+        val margenY = if (tcgEnVertical()) 0.012f else 0.02f
         when {
             vistaTcg == VISTA_MESA -> {
                 banner.visible = true
-                banner.rect.set(x1, 0.02f, x2, 0.02f + alto)
+                banner.rect.set(x1, margenY, x2, margenY + alto)
             }
 
             vistaTcg == 0 || vistaTcg == 1 -> {
@@ -7855,31 +7924,53 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             if (dibujos.isEmpty()) return@forEach
             // Los iconos del mazo van **arriba del chip de Energy**, del mismo tamaño siempre (uno o
             // dos, no se achican), centrados sobre la pila de chips (Jorge, 24/11/2026).
-            val anchoIcono = anchoCam * 0.33f
-            val altoIcono = anchoIcono * (16f / 9f)
-            val altoPila = 3f * altoChipTcg() + 2f * (altoChipTcg() * 0.24f)
-            val techoPila = 0.975f - altoPila                 // justo encima del chip Energy
-            val abajo = techoPila - altoChipTcg() * 0.10f
-            val arriba = abajo - altoIcono
-            val anchoTotal = anchoIcono * dibujos.size + entre * (dibujos.size - 1)
-            // Centro de la pila de chips (que va asomada hacia afuera de la columna).
-            val centroChips = if (derecha) anchoChipTcg() / 2f - sangradoChipTcg()
-                else 1f - anchoChipTcg() / 2f + sangradoChipTcg()
-            var x = centroChips - anchoTotal / 2f
-            // Que no se salgan de la columna (con dos iconos, centrados sobre los chips se salían y
-            // el borde del monitor los recortaba).
-            x = if (derecha) {
-                x.coerceIn(0.004f, anchoCam - 0.004f - anchoTotal)
+            val anchoIcono = anchoCam * if (tcgEnVertical()) 0.24f else 0.33f
+            val altoIcono = if (tcgEnVertical()) {
+                // Lienzo 9:16: el icono es vertical (9:16), así que en fracciones mide igual de ancho
+                // que de alto.
+                anchoIcono
             } else {
-                x.coerceIn(1f - anchoCam + 0.004f, 1f - 0.004f - anchoTotal)
+                anchoIcono * (16f / 9f)
             }
+            val altoPila = 3f * altoChipTcg() + 2f * (altoChipTcg() * 0.24f)
             val items = ArrayList<ImageItem>()
-            dibujos.forEach { bmp ->
-                val item = ImageItem(escena.nextId(), bmp, "Mazo " + jugador.nombre, null)
-                item.rect.set(x, arriba, x + anchoIcono, abajo)
-                escena.agregar(item)
-                items.add(item)
-                x += anchoIcono + entre
+            val anchoTotal = anchoIcono * dibujos.size + entre * (dibujos.size - 1)
+            if (tcgEnVertical()) {
+                // En vertical la pila de chips va DENTRO de la ventana del jugador, así que los iconos
+                // se centran en esa ventana y quedan justo encima de los chips.
+                val caja = rectJugadorTcg(derecha)
+                val centrado = if (derecha) caja.left + (caja.width() - anchoTotal) / 2f
+                    else caja.right - (caja.width() - anchoTotal) / 2f - anchoTotal
+                val abajo = caja.bottom - 0.012f - altoPila - altoChipTcg() * 0.10f
+                dibujos.forEachIndexed { i, bmp ->
+                    val item = ImageItem(escena.nextId(), bmp, "Mazo " + jugador.nombre, null)
+                    val x = centrado + i * (anchoIcono + entre)
+                    item.rect.set(x, abajo - altoIcono, x + anchoIcono, abajo)
+                    escena.agregar(item)
+                    items.add(item)
+                }
+            } else {
+                val techoPila = 0.975f - altoPila                 // justo encima del chip Energy
+                val abajo = techoPila - altoChipTcg() * 0.10f
+                val arriba = abajo - altoIcono
+                // Centro de la pila de chips (que va asomada hacia afuera de la columna).
+                val centroChips = if (derecha) anchoChipTcg() / 2f - sangradoChipTcg()
+                    else 1f - anchoChipTcg() / 2f + sangradoChipTcg()
+                var x = centroChips - anchoTotal / 2f
+                // Que no se salgan de la columna (con dos iconos, centrados sobre los chips se salían y
+                // el borde del monitor los recortaba).
+                x = if (derecha) {
+                    x.coerceIn(0.004f, anchoCam - 0.004f - anchoTotal)
+                } else {
+                    x.coerceIn(1f - anchoCam + 0.004f, 1f - 0.004f - anchoTotal)
+                }
+                dibujos.forEach { bmp ->
+                    val item = ImageItem(escena.nextId(), bmp, "Mazo " + jugador.nombre, null)
+                    item.rect.set(x, arriba, x + anchoIcono, abajo)
+                    escena.agregar(item)
+                    items.add(item)
+                    x += anchoIcono + entre
+                }
             }
             if (jugador === estadoTcg.uno) iconosMazoUno = items else iconosMazoDos = items
         }
@@ -7897,7 +7988,33 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * Si el celular mandara el cuadro horizontal, el mismo recuadro mostraría menos ancho del central
      * (se recorta más), nunca deforma (Jorge, 23/11/2026).
      */
-    private fun anchoJugadorTcg(): Float = 0.60f * (9f / 16f) * (9f / 16f)
+    private fun anchoJugadorTcg(): Float = if (tcgEnVertical()) {
+        // Lienzo 9:16: dos ventanas verticales abajo, una por jugador. En un lienzo de pie una caja
+        // 9:16 tiene el **mismo ancho y alto en fracciones** (1080×1920 ⇒ 0,46 de ancho = 0,46 de alto).
+        0.46f
+    } else {
+        0.60f * (9f / 16f) * (9f / 16f)
+    }
+
+    /**
+     * Rectángulo de la cámara de un jugador en la vista de mesa.
+     *
+     * - **16:9**: la columna entera de arriba a abajo, a los lados del monitor.
+     * - **9:16**: una ventana 9:16 al pie, una a cada lado, debajo de la mesa.
+     */
+    private fun rectJugadorTcg(izquierda: Boolean): RectF {
+        val ancho = anchoJugadorTcg()
+        return if (tcgEnVertical()) {
+            val y0 = 0.50f
+            if (izquierda) {
+                RectF(0.012f, y0, 0.012f + ancho, y0 + ancho)
+            } else {
+                RectF(0.988f - ancho, y0, 0.988f, y0 + ancho)
+            }
+        } else {
+            if (izquierda) RectF(0f, 0f, ancho, 1f) else RectF(1f - ancho, 0f, 1f, 1f)
+        }
+    }
 
     /** La mesa ocupa lo que queda entre las dos columnas: 16:9 en un lienzo 16:9 ⇒ alto = ancho. */
 
@@ -7911,13 +8028,27 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * Lleva un **aire a los lados** para que el marco de la mesa no se pegue al de los jugadores, y el
      * alto se calcula para que el **área de adentro del marco quede 16:9 exacta**: así un celular que
      * manda 16:9 llena el recuadro completo sin recortar y sin franjas (Jorge, 23/11/2026).
+     *
+     * En **9:16** la mesa va a **todo lo ancho**, justo debajo del banner, y los dos jugadores debajo
+     * de ella (así el área de juego se ve grande en el celular, que es donde se mira el vertical).
      */
     private fun rectMesaTcg(): RectF {
+        val g = grosorMarcoMesaPx()
+        if (tcgEnVertical()) {
+            val aire = 0.014f
+            val altoBanner = 0.014f + altoTiraTcg()
+            val disponible = 0.985f - altoBanner
+            // Lienzo de referencia 9:16 (1080x1920).
+            val anchoPx = (1f - 2f * aire) * 1080f
+            val altoPx = ((anchoPx - 2f * g) * 9f / 16f) + 2f * g
+            val alto = (altoPx / 1920f).coerceAtMost(disponible)
+            val y0 = altoBanner + 0.006f
+            return RectF(aire, y0, 1f - aire, y0 + alto)
+        }
         val aire = 0.008f
         val ancho = anchoJugadorTcg() + aire
         val altoBanner = 0.02f + altoTiraTcg()
         val disponible = 0.98f - altoBanner
-        val g = grosorMarcoMesaPx()
         // Lienzo de referencia 16:9 (1920x1080): así el marco se descuenta en píxeles reales.
         val anchoPx = (1f - 2f * ancho) * 1920f
         val altoPx = ((anchoPx - 2f * g) * 9f / 16f) + 2f * g
@@ -8019,8 +8150,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         val previo = cronoItem
         val imagen = com.jfrmedia.switcher.studio.tcg.Banners
             .dibujarCronometro(texto, estadoTcg.paleta)
-        val ancho = 0.30f
-        val alto = ancho * 120f / 520f
+        val ancho = anchoCronometroTcg()
+        val alto = altoCronometroTcg()
         val ref = previo?.let { RectF(it.rect) }
             ?: RectF(0.5f - ancho / 2f, 0.9f, 0.5f + ancho / 2f, 0.9f + alto)
         previo?.let { runCatching { b.canvas.scene.remove(it) } }
@@ -8032,6 +8163,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         acomodarCronometroTcg()
     }
 
+    /** Ancho del chip del cronómetro: algo más ancho en 9:16, que el lienzo es de pie. */
+    private fun anchoCronometroTcg(): Float = if (tcgEnVertical()) 0.42f else 0.30f
+
+    /** Alto del chip del cronómetro (su dibujo es 520:120), pasado a fracción del alto del lienzo. */
+    private fun altoCronometroTcg(): Float = if (tcgEnVertical()) {
+        anchoCronometroTcg() * 1080f * (120f / 520f) / 1920f
+    } else {
+        anchoCronometroTcg() * 120f / 520f
+    }
+
     /** Lo deja centrado **debajo del área de mesa**, dentro del lienzo. */
     private fun acomodarCronometroTcg() {
         val item = cronoItem ?: return
@@ -8041,8 +8182,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             return
         }
         val mesa = rectMesaTcg()
-        val ancho = 0.30f
-        val alto = ancho * 120f / 520f
+        val ancho = anchoCronometroTcg()
+        val alto = altoCronometroTcg()
         val margen = 0.012f
         // Se permite encimarse a la mesa: queda montado sobre su borde inferior.
         var y0 = mesa.bottom - alto * 0.45f
@@ -8070,15 +8211,14 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * para que no se separen las dos versiones.
      */
     private fun colocarCamarasTcg(escena: Scene) {
-        val ancho = anchoJugadorTcg()
         escena.camAt(0)?.let { cam ->
-            cam.rect.set(0f, 0f, ancho, 1f)
+            cam.rect.set(rectJugadorTcg(izquierda = true))
             cam.radiusDp = radioCamaraTcg()
             cam.marcoGrosor = 5f
             cam.encajar = false
         }
         escena.camAt(1)?.let { cam ->
-            cam.rect.set(1f - ancho, 0f, 1f, 1f)
+            cam.rect.set(rectJugadorTcg(izquierda = false))
             cam.radiusDp = radioCamaraTcg()
             cam.marcoGrosor = 5f
             cam.encajar = false
@@ -8144,6 +8284,63 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         } finally {
             aplicandoRectTcg = false
         }
+    }
+
+    /**
+     * Tira informativa que baja de la barra superior en el Modo Pokémon **vertical**.
+     * `null` = todo está en la barra de siempre.
+     */
+    private var filaInfoTcg: LinearLayout? = null
+
+    /**
+     * En el Modo Pokémon **9:16** la pantalla es angosta (≈686 dp en la tablet de pie) y la barra de
+     * arriba no cabe en una fila: el medidor de audio, el punto de directo, «sin grabación» y el
+     * cronómetro bajan a una tira delgada justo debajo, y los botones se quedan arriba completos
+     * (Jorge, 26/11/2026: no se pierde nada, solo se reparte en dos filas).
+     *
+     * En 16:9 se devuelven a la barra tal como estaban.
+     */
+    private fun acomodarBarraTcg() {
+        val barra = b.imgLogo.parent as? LinearLayout ?: return
+        if (!tcgVertical) {
+            val fila = filaInfoTcg ?: return
+            var destino = barra.indexOfChild(b.btnRecord).let { if (it < 0) barra.childCount else it }
+            listOf(b.audioMeter, b.separadorBarra, b.liveDot, b.txtLive, b.txtTimer).forEach { v ->
+                (v.parent as? ViewGroup)?.removeView(v)
+                barra.addView(v, destino)
+                destino++
+            }
+            b.contenido.removeView(fila)
+            filaInfoTcg = null
+            return
+        }
+        if (filaInfoTcg != null) return
+        val fila = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(16.dp, 0, 16.dp, 2.dp)
+        }
+        listOf(b.audioMeter, b.separadorBarra, b.liveDot, b.txtLive, b.txtTimer).forEach { v ->
+            (v.parent as? ViewGroup)?.removeView(v)
+            fila.addView(v, v.layoutParams)
+            // El medidor se queda a la izquierda y el resto se va a la derecha.
+            if (v === b.audioMeter) {
+                fila.addView(
+                    Space(this),
+                    LinearLayout.LayoutParams(0, 1, 1f)
+                )
+            }
+        }
+        filaInfoTcg = fila
+        // Justo debajo de la barra: [0] barra, [1] esta tira, [2] cuerpo.
+        b.contenido.addView(
+            fila,
+            1,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                24.dp
+            )
+        )
     }
 
     private fun toast(msg: String) {
@@ -8953,10 +9150,22 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     // ------------------------------------------------ chips de la mesa (dentro de la cámara)
 
     /** Ancho de un chip: la mayor parte del ancho de la columna del jugador. */
-    private fun anchoChipTcg(): Float = anchoJugadorTcg() * 0.74f
+    private fun anchoChipTcg(): Float = if (tcgEnVertical()) {
+        // En 9:16 la ventana del jugador es ancha: el chip va dentro de ella, no asomando fuera.
+        anchoJugadorTcg() * 0.46f
+    } else {
+        anchoJugadorTcg() * 0.74f
+    }
 
-    /** Alto del chip (pastilla): el ancho en píxeles dividido entre 3.6, pasado a fracción. */
-    private fun altoChipTcg(): Float = anchoChipTcg() * (16f / 9f) / 3.6f
+    /**
+     * Alto del chip (pastilla): el ancho en píxeles dividido entre 3.6, pasado a fracción del **alto**
+     * del lienzo. La cuenta cambia con el formato porque el lienzo vertical tiene otra proporción.
+     */
+    private fun altoChipTcg(): Float = if (tcgEnVertical()) {
+        anchoChipTcg() * 1080f / (520f / 120f) / 1920f * 1.2f
+    } else {
+        anchoChipTcg() * (16f / 9f) / 3.6f
+    }
 
     /** Cuánto se mete hacia afuera del monitor: el chip queda **asomando** en la orilla. */
     private fun sangradoChipTcg(): Float = anchoChipTcg() * 0.12f
@@ -8980,13 +9189,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             val ancho = anchoChipTcg()
             val alto = altoChipTcg()
             val hueco = alto * 0.24f
-            val abajo = 0.975f
             val nombres = listOf("ENERGY", "SUPPORTER", "RETREAT")
             val colores = listOf(0xFF58C88C.toInt(), 0xFF7A98F4.toInt(), 0xFFF2AC52.toInt())
             listOf(estadoTcg.uno to true, estadoTcg.dos to false).forEach { par ->
                 val jugador = par.first
                 val izquierda = par.second
                 val items = ArrayList<ImageItem>(3)
+                // En 9:16 la pila va DENTRO de la ventana del jugador, pegada al pie; en 16:9 cuelga
+                // del borde del lienzo, asomando por la orilla de la columna.
+                val caja = if (tcgEnVertical()) rectJugadorTcg(izquierda) else null
+                val abajo = if (caja != null) caja.bottom - 0.012f else 0.975f
                 for (i in 0 until 3) {
                     val usado = !jugador.chips[i]
                     val bmp = Banners.dibujarChip(nombres[i], colores[i], activo = !usado)
@@ -8994,13 +9206,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     // Energy arriba, Supporter en medio y Retreat hasta abajo.
                     val y2 = abajo - (2 - i) * (alto + hueco)
                     val y1 = y2 - alto
-                    val fuera = sangradoChipTcg() + if (usado) corridoChipUsadoTcg() else 0f
-                    val destino = if (izquierda) {
-                        val x1 = -fuera
+                    val destino = if (caja != null) {
+                        // Dentro de la ventana del jugador: alineado a la orilla de afuera.
+                        val x1 = if (izquierda) caja.left + 0.012f
+                            else caja.right - 0.012f - ancho
                         RectF(x1, y1, x1 + ancho, y2)
                     } else {
-                        val x2 = 1f + fuera
-                        RectF(x2 - ancho, y1, x2, y2)
+                        val fuera = sangradoChipTcg() + if (usado) corridoChipUsadoTcg() else 0f
+                        if (izquierda) {
+                            val x1 = -fuera
+                            RectF(x1, y1, x1 + ancho, y2)
+                        } else {
+                            val x2 = 1f + fuera
+                            RectF(x2 - ancho, y1, x2, y2)
+                        }
                     }
                     val clave = (if (izquierda) "u" else "d") + i
                     val previa = posChipPrevia[clave]
@@ -9805,10 +10024,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 // El ▶ del panel alterna; el ⟲ reinicia a 00:00 y deja el cronómetro parado.
                 if (arrancar) alternarCronometroTcg() else reiniciarCronometroTcg()
             }
-        }, { mazoId -> com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, mazoId) })
+        }, { mazoId -> com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, mazoId) },
+            enColumna = tcgVertical
+        )
         panel.refrescar(estadoTcg)
         panelTcg = panel
+        // Las dos tarjetas de jugador van debajo del monitor en los dos formatos.
         b.slotControles.addView(panel.vista, 0)
+        if (tcgVertical) {
+            // En 9:16 la columna de comentarios no cabe al lado del monitor (el alto es de oro):
+            // baja al pie de la columna de cámaras, que es la que tiene espacio libre.
+            b.panelFuentes.addView(
+                panel.vistaHerramientas,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    0,
+                    0.72f
+                ).apply { topMargin = 6.dp }
+            )
+        }
         // Espectadores y comentarios del stream en el panel de la derecha.
         iniciarConsultasFacebook()
     }
@@ -10242,12 +10476,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             .show()
     }
 
-    /** Aplica el modo al arrancar: 16:9 fijo, sin rotación y sin las herramientas que no van. */
+    /**
+     * Aplica el modo al arrancar y cada vez que cambia el formato: sin plantillas, sin rotación
+     * libre y sin las herramientas que no van.
+     *
+     * En **16:9** el monitor va a la izquierda con la columna de comentarios a su derecha y las dos
+     * tarjetas de jugador debajo. En **9:16** (vertical, para TikTok) la pantalla se pone de pie: la
+     * columna de cámaras y comentarios queda a la izquierda, el monitor 9:16 al centro-derecha y las
+     * dos tarjetas de jugador **una debajo de otra** al pie, para que quepan completas.
+     */
     private fun aplicarModoTcg() {
-        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        requestedOrientation = if (tcgVertical) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
         b.btnPlantillas.visibility = View.GONE
         b.btnTransiciones.visibility = View.GONE
-        b.btnOrientacion.visibility = View.GONE
+        // El chip 9:16 / 16:9 **sí** se queda en este modo: es el interruptor del formato.
+        b.btnOrientacion.visibility = View.VISIBLE
         b.btnPhoto.visibility = View.GONE
         b.scrollControles.visibility = View.GONE
         // Fuera overlays y medios: en este modo solo van las 4 cámaras.
@@ -10256,9 +10503,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         etiquetaMedios?.visibility = View.GONE
         if (::mediosContainer.isInitialized) mediosContainer.visibility = View.GONE
         if (::bibliotecaContainer.isInitialized) bibliotecaContainer.visibility = View.GONE
-        // Columna de cámaras angosta y monitor grande, como el diseño.
-        (b.panelFuentes.layoutParams as? LinearLayout.LayoutParams)?.let { it.weight = 0.195f }
-        (b.panelPrograma.layoutParams as? LinearLayout.LayoutParams)?.let { it.weight = 0.81f }
+        // Columna de cámaras y monitor: reparto según el formato.
+        val pesoFuentes = if (tcgVertical) 0.30f else 0.195f
+        val pesoPrograma = if (tcgVertical) 0.70f else 0.81f
+        b.panelFuentes.layoutParams = LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.MATCH_PARENT, pesoFuentes
+        )
+        b.panelPrograma.layoutParams = LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.MATCH_PARENT, pesoPrograma
+        )
+        b.contenido.setPadding(0, 0, 0, 0)
         b.llGrid.requestLayout()
         b.cuerpo.requestLayout()
         b.cajaVideo.visibility = View.GONE
@@ -10267,6 +10521,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             (z.parent as? ViewGroup)?.removeView(z)
             z.visibility = View.GONE
         }
+        // La escena sigue el formato del modo: el mismo dibujo (banner, mesa, jugadores) se reacomoda.
+        val aspecto = if (tcgVertical) 9f / 16f else 16f / 9f
+        b.canvas.scene.aspect = aspecto
+        b.canvasHost.aspect = aspecto
+        hub.vertical = lienzoVertical
+        // En vertical la barra de arriba se reparte en dos filas (si no, el botón de grabar se sale).
+        acomodarBarraTcg()
         dibujarBannerTcg()
         montarPanelTcg()
         // Lista de los mazos más usados del formato: se refresca al entrar al modo, una vez al día.
@@ -10310,6 +10571,18 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         if (!modoTcg) return
         val verticalAhora =
             resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        // El monitor se arma según el formato del modo. Al cambiar de formato la pantalla tiene que
+        // girar: se le da un momento (medir a media rotación daba monitores chicos). Si el equipo **no
+        // gira** —Android 16 ignora la orientación pedida en pantallas grandes— se arma igual con lo
+        // que hay, para que el formato elegido se vea de todos modos.
+        if (verticalAhora != tcgVertical && intento < 6) {
+            b.cuerpo.postDelayed({ runCatching { acomodarMonitorTcg(intento + 1) } }, 250)
+            return
+        }
+        if (tcgVertical) {
+            acomodarMonitorTcgVertical(intento)
+            return
+        }
         val anchoTotal = b.panelPrograma.width - 8.dp
         val altoTotal = b.panelPrograma.height - b.cabeceraPrograma.height -
             b.slotControles.height - 8.dp
@@ -10321,7 +10594,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             anchoC = altoC * 16 / 9
         }
         L.i("tcg", "monitor ancho=$anchoC alto=$altoC (total $anchoTotal x $altoTotal) intento=$intento")
-        if (verticalAhora || anchoC <= 320 || altoC <= 220) {
+        if (anchoC <= 320 || altoC <= 220) {
             if (intento < 16) {
                 b.cuerpo.postDelayed({ runCatching { acomodarMonitorTcg(intento + 1) } }, 250)
             }
@@ -10349,6 +10622,61 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             fila.addView(p.vistaHerramientas, LinearLayout.LayoutParams(anchoHerramientas, altoC))
         }
         padre.addView(
+            fila,
+            indice.coerceAtLeast(0),
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+    }
+
+    /**
+     * Monitor del modo en **9:16**: centrado, del alto que sobra después de la cabecera y de las dos
+     * tarjetas de jugador (que van una debajo de otra al pie). La columna de comentarios no va aquí:
+     * en vertical vive al pie de la columna de cámaras, para que el monitor tenga todo el alto.
+     */
+    private fun acomodarMonitorTcgVertical(intento: Int) {
+        val panel = b.panelPrograma
+        val anchoTotal = panel.width - panel.paddingStart - panel.paddingEnd
+        val cabecera = if (b.cabeceraPrograma.visibility == View.VISIBLE) b.cabeceraPrograma.height else 0
+        val altoTotal = panel.height - panel.paddingTop - panel.paddingBottom -
+            cabecera - b.slotControles.height - 6.dp
+        var altoC = altoTotal
+        var anchoC = (altoC * 9f / 16f).toInt()
+        if (anchoC > anchoTotal) {
+            anchoC = anchoTotal
+            altoC = (anchoC * 16f / 9f).toInt()
+        }
+        L.i("tcg", "monitor 9:16 ancho=$anchoC alto=$altoC (panel $anchoTotal x $altoTotal) intento=$intento")
+        if (anchoC <= 120 || altoC <= 200) {
+            if (intento < 16) {
+                b.cuerpo.postDelayed({ runCatching { acomodarMonitorTcg(intento + 1) } }, 250)
+            }
+            return
+        }
+        // Desarmar la fila anterior, si la hay (al girar o al pasar de un formato al otro).
+        var indice = -1
+        val contenedorActual = b.canvasHost.parent
+        if (contenedorActual is LinearLayout && contenedorActual !== panel) {
+            indice = panel.indexOfChild(contenedorActual)
+            panelTcg?.let { p ->
+                if (p.vistaHerramientas.parent === contenedorActual) {
+                    contenedorActual.removeView(p.vistaHerramientas)
+                }
+            }
+            contenedorActual.removeView(b.canvasHost)
+            panel.removeView(contenedorActual)
+        }
+        if (indice < 0) indice = panel.indexOfChild(b.canvasHost)
+        if (b.canvasHost.parent === panel) panel.removeView(b.canvasHost)
+        val fila = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        fila.addView(b.canvasHost, LinearLayout.LayoutParams(anchoC, altoC))
+        b.canvasHost.aspect = 9f / 16f
+        panel.addView(
             fila,
             indice.coerceAtLeast(0),
             LinearLayout.LayoutParams(
@@ -10750,6 +11078,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         private const val CLAVE_TRANSICION = "transicion"
         private const val CLAVE_TRANSICION_MS = "transicion_ms"
         private const val CLAVE_MODO_TCG = "modo_tcg"
+
+        /** Formato del Modo Pokémon: false = 16:9, true = 9:16 vertical (TikTok). */
+        private const val CLAVE_TCG_VERTICAL = "tcg_vertical"
         private const val CLAVE_TCG_ESTADO = "tcg_estado"
 
         /** Valor de [vistaTcg] para la composición de mesa (mesa + PiPs de jugadores + banner). */

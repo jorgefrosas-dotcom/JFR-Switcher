@@ -26,12 +26,17 @@ data class ComentarioPanel(val origen: String, val autor: String, val texto: Str
  * Cada tarjeta lleva el nombre, el récord del evento, **el mazo que está jugando**, las 6 pokebolas
  * con −/+ y los chips de la mesa. El centro lleva de quién es el turno, el botón de pasar turno, el
  * resultado por nombre y las herramientas de la partida.
+ *
+ * En el formato **9:16** ([enColumna] = true) las dos tarjetas se apilan una debajo de otra: así
+ * ocupan todo el ancho de la pantalla de pie y se leen completas (Jorge, 26/11/2026).
  */
 class PanelTcg(
     contexto: Context,
     private val escucha: Escucha,
     /** Devuelve los iconos ya bajados de un mazo (por id); vacío si no hay. */
     private val iconos: (String) -> List<Bitmap> = { emptyList() },
+    /** true = las dos tarjetas van en columna, una debajo de otra (Modo Pokémon en 9:16). */
+    private val enColumna: Boolean = false,
 ) {
 
     interface Escucha {
@@ -64,7 +69,7 @@ class PanelTcg(
 
     init {
         val fila = LinearLayout(contexto).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (enColumna) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             gravity = Gravity.TOP
             setPadding(0, dp(contexto, 6f), 0, 0)
         }
@@ -73,14 +78,32 @@ class PanelTcg(
         tarjetaDos = LinearLayout(contexto)
 
         // La fila se queda solo con los dos cuadros: el centro pasa a ser la columna de al lado.
-        fila.addView(
-            tarjetaUno,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { rightMargin = dp(contexto, 8f) }
-        )
-        fila.addView(
-            tarjetaDos,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
-        )
+        // En vertical (9:16) cada tarjeta ocupa todo el ancho y la segunda va debajo.
+        if (enColumna) {
+            fila.addView(
+                tarjetaUno,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = dp(contexto, 6f) }
+            )
+            fila.addView(
+                tarjetaDos,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+        } else {
+            fila.addView(
+                tarjetaUno,
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { rightMargin = dp(contexto, 8f) }
+            )
+            fila.addView(
+                tarjetaDos,
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            )
+        }
         vista = fila
 
         centro.orientation = LinearLayout.VERTICAL
