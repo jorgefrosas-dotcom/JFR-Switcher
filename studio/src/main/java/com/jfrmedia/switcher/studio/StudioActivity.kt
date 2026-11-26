@@ -3482,6 +3482,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     "Banner" to { cambiarPaletaTcg() },
                     "＋ Cámara" to { showPairing() },
                 ),
+                listOf(
+                    "⛶ Solo el programa" to { alternarPantallaCompletaTcg() },
+                ),
             )
             acciones.forEach { par ->
                 val filaBotones = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -8560,8 +8563,104 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         )
     }
 
-    private fun toast(msg: String) {
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    // ---------------------------------------------- Modo «solo el programa» (pantalla completa)
+
+    /** true = la app muestra **solo el programa**, sin paneles: es lo que se comparte al espejar. */
+    private var soloProgramaTcg = false
+
+    /** Chip flotante para salir del modo «solo el programa». */
+    private var chipSalirPrograma: android.widget.TextView? = null
+
+    /**
+     * Entra o sale del modo **«solo el programa»**: oculta la barra, las cámaras, los botones y las
+     * tarjetas, deja el monitor 9:16 con todo el alto y esconde las barras del sistema.
+     *
+     * Existe para **compartir la pantalla** con TikTok LIVE Studio («Cast (Android)»), que transmite
+     * *toda* la pantalla del equipo: así los espectadores ven solo la composición del programa y no
+     * el panel de control (Jorge, 26/11/2026). También sirve como monitor limpio para grabar.
+     */
+    private fun alternarPantallaCompletaTcg() {
+        if (!modoTcg) {
+            toast("El modo «solo el programa» es del Modo Pokémon")
+            return
+        }
+        soloProgramaTcg = !soloProgramaTcg
+        aplicarPantallaCompletaTcg()
+    }
+
+    private fun aplicarPantallaCompletaTcg() {
+        if (!modoTcg) return
+        val solo = soloProgramaTcg
+        b.barraSuperior.visibility = if (solo) View.GONE else View.VISIBLE
+        filaInfoTcg?.visibility = if (solo) View.GONE else View.VISIBLE
+        b.panelFuentes.visibility = if (solo) View.GONE else View.VISIBLE
+        b.slotControles.visibility = if (solo) View.GONE else View.VISIBLE
+        // La cabecera «PROGRAMA» no hace falta cuando el monitor ocupa todo.
+        b.cabeceraPrograma.visibility = if (solo) View.GONE else View.VISIBLE
+        // El programa se lleva todo el alto: el monitor se vuelve a medir con el espacio nuevo.
+        b.contenido.setPadding(0, 0, 0, 0)
+        if (solo) {
+            b.panelPrograma.setPadding(0, 0, 0, 0)
+        } else {
+            b.panelPrograma.setPadding(4.dp, 8.dp, 8.dp, 4.dp)
+        }
+        b.panelPrograma.layoutParams = LinearLayout.LayoutParams(
+            if (solo) ViewGroup.LayoutParams.MATCH_PARENT else (resources.displayMetrics.widthPixels * 0.62f).toInt(),
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        if (solo) {
+            b.panelFuentes.layoutParams = LinearLayout.LayoutParams(0, 1, 0f)
+        } else {
+            b.panelFuentes.layoutParams = LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f
+            )
+        }
+        // Barras del sistema fuera (si no, salen en la pantalla compartida).
+        runCatching {
+            val controlador = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+            if (solo) {
+                controlador.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                controlador.systemBarsBehavior =
+                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                controlador.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        // Chip para volver: sin él, en pantalla completa no habría cómo salir (el botón está oculto).
+        val chip = chipSalirPrograma ?: android.widget.TextView(this).apply {
+            text = "✕  Salir"
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+            setBackgroundResource(R.drawable.bg_pill)
+            setPadding(16.dp, 8.dp, 16.dp, 8.dp)
+            alpha = 0.75f
+            setOnClickListener {
+                soloProgramaTcg = false
+                aplicarPantallaCompletaTcg()
+            }
+            val marco = b.root as ViewGroup
+            marco.addView(
+                this,
+                android.widget.FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP or Gravity.END
+                ).apply { setMargins(0, 12.dp, 12.dp, 0) }
+            )
+            chipSalirPrograma = this
+        }
+        chip.visibility = if (solo) View.VISIBLE else View.GONE
+        // El monitor se vuelve a medir. Se repite un momento después en los dos sentidos: al entrar,
+        // porque el alto cambia cuando el sistema esconde las barras; al salir, porque las tarjetas
+        // de jugador recién vuelven a medirse (una vista recién mostrada todavía mide 0).
+        b.cuerpo.post { runCatching { acomodarMonitorTcg() } }
+        b.cuerpo.postDelayed({
+            if (solo == soloProgramaTcg) runCatching { acomodarMonitorTcg(1) }
+        }, 400)
+        L.i("tcg", if (solo) "solo el programa (pantalla completa)" else "vuelve el panel completo")
+    }
+
+    private fun toast(msg: String) {        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
 
     // ------------------------------------------------------------------ MODO STUDIO
@@ -11039,15 +11138,31 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // de jugador se estiraban de más y los demás cuadros quedaban apretados.
         val anchoPanel = panel.width - panel.paddingStart - panel.paddingEnd
         val cabecera = if (b.cabeceraPrograma.visibility == View.VISIBLE) b.cabeceraPrograma.height else 0
+        // Las tarjetas se miden por lo que **necesitan**, no por el alto que les tocó: si se usa el
+        // actual, el monitor y las tarjetas se pelean el alto y la segunda tarjeta queda cortada
+        // (pasó al volver de «solo el programa»; Jorge, 26/11/2026).
+        val tarjetas = if (b.slotControles.visibility == View.VISIBLE) {
+            runCatching {
+                b.slotControles.measure(
+                    View.MeasureSpec.makeMeasureSpec(anchoPanel, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                )
+                b.slotControles.measuredHeight
+            }.getOrDefault(b.slotControles.height)
+        } else {
+            0
+        }
         val altoTotal = panel.height - panel.paddingTop - panel.paddingBottom -
-            cabecera - b.slotControles.height - 6.dp
+            cabecera - tarjetas - 6.dp
         var altoC = altoTotal
         var anchoC = (altoC * 9f / 16f).toInt()
         if (anchoC > anchoPanel) {
             anchoC = anchoPanel
             altoC = (anchoC * 16f / 9f).toInt()
         }
-        L.i("tcg", "monitor 9:16 ancho=$anchoC alto=$altoC (panel $anchoPanel x $altoTotal) intento=$intento")
+        L.i("tcg", "monitor 9:16 ancho=$anchoC alto=$altoC (panel $anchoPanel x $altoTotal) intento=$intento" +
+            " · soloPrograma=$soloProgramaTcg contenido=${b.contenido.height} cuerpo=${b.cuerpo.height}" +
+            " panel=${panel.height} cabecera=$cabecera tarjetas=${b.slotControles.height}")
         if (anchoC <= 120 || altoC <= 200) {
             if (intento < 16) {
                 b.cuerpo.postDelayed({ runCatching { acomodarMonitorTcg(intento + 1) } }, 250)
@@ -11055,8 +11170,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             return
         }
         // El panel del programa se queda con lo justo del monitor; el resto es para las fuentes.
+        // En «solo el programa» NO se encoge: el monitor va centrado en toda la pantalla.
         val anchoJusto = anchoC + panel.paddingStart + panel.paddingEnd
-        if (kotlin.math.abs(panel.width - anchoJusto) > 8.dp) {
+        if (!soloProgramaTcg && kotlin.math.abs(panel.width - anchoJusto) > 8.dp) {
             b.panelFuentes.layoutParams = LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.MATCH_PARENT, 1f
             )
