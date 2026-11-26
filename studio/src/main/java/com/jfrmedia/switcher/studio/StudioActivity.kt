@@ -167,6 +167,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private val posChipPrevia = HashMap<String, RectF>()
     private var panelTcg: PanelTcg? = null
 
+    /**
+     * Bloque **fijo** con los botones de la partida (Evento, Partida nueva, Empate, Reiniciar,
+     * Banner, ＋ Cámara) cuando el modo está en 9:16: ahí las cámaras son más grandes y, dentro del
+     * deslizable, los botones quedaban fuera de la vista (Jorge, 26/11/2026).
+     */
+    private var contenedorAccionesTcg: LinearLayout? = null
+
     /** true = grabar en 1080p/1080x1920, false = 720p/720x1280. */
     private var grabarAlta = false
     private var recAudio = true
@@ -511,17 +518,25 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             actualizarEstadoEquipo()
             // Los dos van en la misma escala: 100 % = todos los núcleos a tope. Si la tablet no deja
             // leer /proc/stat, el TAB se omite en vez de dejar un «—» que no dice nada.
-            val detalle = if (cpuTablet >= 0) {
-                String.format(
+            val detalle = when {
+                // Modo Pokémon en 9:16: la columna del programa se ajusta al ancho del monitor, así que
+                // la cabecera es angosta. Se abrevia la subida («0Mbps») y el detalle se muestra en la
+                // tira de arriba, que tiene espacio de sobra.
+                modoTcg && tcgVertical -> String.format(
+                    Locale.US, "CPU %d%% · RAM %d%% · %.0fMbps · %s",
+                    cpu, ramPct, mbps, tempTexto
+                )
+                cpuTablet >= 0 -> String.format(
                     Locale.US, "CPU %d%% · TAB %d%% · RAM %d%% · %.1f Mbps · %s",
                     cpu, cpuTablet, ramPct, mbps, tempTexto
                 )
-            } else {
-                String.format(
+                else -> String.format(
                     Locale.US, "CPU %d%% · RAM %d%% · %.1f Mbps · %s",
                     cpu, ramPct, mbps, tempTexto
                 )
             }
+            // En 9:16 el detalle vive en la tira de arriba (la cabecera del monitor es angosta).
+            txtSistemaTcg?.text = detalle
             b.txtEtiquetaPrograma.text = if (cabeceraEstrecha()) {
                 // Cabecera estrecha (9:16): solo el nombre del visor (la resolución va al otro
                 // extremo) para que quepa en una línea.
@@ -559,7 +574,13 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      * (`vertical`): el chip cambia uno y el otro se queda como estaba, así que al pasar a 16:9 dentro
      * del Modo Studio la info del sistema seguía oculta (visto el 15/11 en la tablet).
      */
-    private fun cabeceraEstrecha(): Boolean = if (modoStudio) studioVertical else vertical
+    private fun cabeceraEstrecha(): Boolean = when {
+        modoStudio -> studioVertical
+        // En el Modo Pokémon vertical la cabecera se ajusta al ancho del monitor (angosto): solo cabe
+        // «PROGRAMA», y el CPU/RAM/temperatura bajan a la tira de arriba.
+        modoTcg -> tcgVertical
+        else -> vertical
+    }
 
     /**
      * Uso de CPU de **toda la tablet** (todos los procesos) en la misma escala que la app:
@@ -1116,9 +1137,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     /**
      * Marco naranja en las tarjetas de las fuentes que están **al aire** (en programa).
      * En Modo Studio manda la escena del monitor de programa, no la del preview.
+     *
+     * En el Modo Pokémon no se marca: ahí las tres cámaras de la composición están siempre en
+     * programa, así que el marco no distingue nada y ensuciaba las tarjetas (Jorge, 26/11/2026).
      */
     private fun marcarFuentesEnPrograma() {
         runCatching {
+            if (modoTcg) {
+                tiles.forEach { it.marcarEnPrograma(false) }
+                return@runCatching
+            }
             val alAire = escenaAlAire().cams().filter { it.visible }.map { it.slot }.toSet()
             tiles.forEachIndexed { slot, tile -> tile.marcarEnPrograma(slot in alAire) }
         }
@@ -3452,7 +3480,11 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             )
             acciones.forEach { par ->
                 val filaBotones = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                grid.addView(
+                // En 9:16 los botones van en un bloque **fijo** debajo de la parrilla (no dentro del
+                // deslizable): con las cámaras más grandes quedaban fuera de la vista y había que
+                // bajar para encontrarlos (Jorge, 26/11/2026).
+                val destino = contenedorAccionesTcg ?: grid
+                destino.addView(
                     filaBotones,
                     LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -7927,9 +7959,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             runCatching { b.canvas.requestRender() }
             return
         }
-        // En 9:16 no se dibujan los iconos grandes del mazo: el banner de abajo ya los lleva, y así
-        // la ventana del jugador queda limpia para la cara (Jorge, 26/11/2026).
+        // En 9:16 los iconos del mazo van en la **banda entre las cámaras y la mesa**, montados sobre
+        // los dos marcos (los tapan con su mitad de arriba y de abajo): así se ve qué juega cada
+        // quien sin taparle la cara a nadie (Jorge, 26/11/2026).
         if (tcgEnVertical()) {
+            dibujarIconosMazoVertical(escena)
+            L.i("mazos", "iconos en la banda: uno=${iconosMazoUno.size} dos=${iconosMazoDos.size}")
             runCatching { b.canvas.requestRender() }
             return
         }
@@ -7976,6 +8011,43 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     /**
+     * Iconos del mazo en el formato **9:16**: van en la banda que queda **debajo de las cámaras y
+     * arriba de la mesa**, centrados en la columna de cada jugador y montados sobre los dos marcos
+     * (mitad sobre el borde de abajo de la cámara, mitad sobre el borde de arriba de la mesa).
+     *
+     * El icono es 9:16 como el del formato horizontal, así que en un lienzo de pie mide lo mismo en
+     * fracción de ancho que de alto (1080×1920).
+     */
+    private fun dibujarIconosMazoVertical(escena: Scene) {
+        val altoCaja = 0.135f
+        val anchoIcono = altoCaja          // 9:16 dentro de un lienzo 9:16 ⇒ ancho = alto
+        val entre = 0.012f
+        // Centro vertical de la banda: es el borde de la cámara por arriba y el de la mesa por abajo.
+        val centroY = (0.315f + 0.395f) / 2f
+        listOf(estadoTcg.uno to true, estadoTcg.dos to false).forEach { par ->
+            val jugador = par.first
+            val izquierda = par.second
+            val dibujos = com.jfrmedia.switcher.studio.tcg.Mazos.iconos(this, jugador.mazoId)
+                .filter { !it.isRecycled }.take(2)
+            if (dibujos.isEmpty()) return@forEach
+            val caja = rectJugadorTcg(izquierda)
+            val anchoTotal = anchoIcono * dibujos.size + entre * (dibujos.size - 1)
+            var x = caja.centerX() - anchoTotal / 2f
+            val items = ArrayList<ImageItem>()
+            dibujos.forEach { bmp ->
+                val item = ImageItem(escena.nextId(), bmp, "Mazo " + jugador.nombre, null)
+                item.rect.set(x, centroY - altoCaja / 2f, x + anchoIcono, centroY + altoCaja / 2f)
+                // Con las esquinas apenas redondeadas, como las tarjetas del juego.
+                item.radiusDp = 6f
+                escena.agregar(item)
+                items.add(item)
+                x += anchoIcono + entre
+            }
+            if (jugador === estadoTcg.uno) iconosMazoUno = items else iconosMazoDos = items
+        }
+    }
+
+    /**
      * Ancho de la cámara de cada jugador en la vista de mesa: **la columna entera, de arriba a abajo
      * del monitor**, mostrando solo el **60 % central** del cuadro (se recorta 20 % de cada lado).
      *
@@ -7988,7 +8060,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     private fun anchoJugadorTcg(): Float = if (tcgEnVertical()) {
         // Lienzo 9:16: dos ventanas **3:4** arriba (no 9:16: Jorge las quiere recortadas un poco
         // arriba y abajo, más bajas que en el formato horizontal, pero sin llegar a cuadradas).
-        0.40f
+        0.3733f
     } else {
         0.60f * (9f / 16f) * (9f / 16f)
     }
@@ -8005,19 +8077,20 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      *
      * | de       | a        | qué                                             |
      * |----------|----------|-------------------------------------------------|
-     * | 0.000    | 0.045    | **margen de seguridad de arriba**               |
-     * | 0.045    | 0.345    | las dos cámaras de jugador (3:4)                |
-     * | 0.370    | 0.687    | **la mesa, al centro** (la zona más descubierta)|
-     * | 0.740    | 0.863    | el banner del torneo, abajo                     |
-     * | 0.863    | 1.000    | **margen de seguridad de abajo** (descripción)  |
+     * | 0.000    | 0.035    | **margen de seguridad de arriba**               |
+     * | 0.035    | 0.315    | las dos cámaras de jugador (3:4)                |
+     * | 0.315    | 0.395    | **banda de los iconos del mazo** (encima de los dos marcos) |
+     * | 0.395    | 0.712    | **la mesa, al centro** (la zona más descubierta)|
+     * | 0.745    | 0.868    | el banner del torneo, abajo                     |
+     * | 0.868    | 1.000    | **margen de seguridad de abajo** (descripción)  |
      */
     private fun rectJugadorTcg(izquierda: Boolean): RectF {
         val ancho = anchoJugadorTcg()
         return if (tcgEnVertical()) {
             val alto = altoJugadorTcg()
-            val y0 = 0.045f
+            val y0 = 0.035f
             // Las dos cámaras van juntas al centro del ancho, con un aire entre ellas.
-            val hueco = 0.08f
+            val hueco = 0.06f
             val x0 = 0.5f - hueco / 2f - ancho
             if (izquierda) {
                 RectF(x0, y0, x0 + ancho, y0 + alto)
@@ -8031,8 +8104,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** La mesa ocupa lo que queda entre las dos columnas: 16:9 en un lienzo 16:9 ⇒ alto = ancho. */
 
-    /** Grosor del marco de la mesa en px de la composición de 1080 (12 px de referencia). */
-    private fun grosorMarcoMesaPx(): Float = 12f * resources.displayMetrics.density
+    /**
+     * Grosor del marco de la mesa en px de la composición de 1080.
+     * Es el **mismo que el de las cámaras** (5 dp): antes iba a 12 y se comía varios píxeles del
+     * área de juego sin necesidad (Jorge, 26/11/2026).
+     */
+    private fun grosorMarcoMesaPx(): Float = 5f * resources.displayMetrics.density
 
     /**
      * Porción del lienzo donde va la mesa en la vista de mesa: centrada entre las dos columnas y
@@ -8054,7 +8131,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             val anchoPx = (1f - 2f * aire) * 1080f
             val altoPx = ((anchoPx - 2f * g) * 9f / 16f) + 2f * g
             val alto = altoPx / 1920f
-            val y0 = 0.370f
+            val y0 = 0.395f
             return RectF(aire, y0, 1f - aire, y0 + alto)
         }
         val aire = 0.008f
@@ -8238,9 +8315,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         escena.camAt(2)?.let { cam ->
             cam.rect.set(rectMesaTcg())
             cam.radiusDp = radioCamaraTcg()
-            // La mesa lleva el marco un poco más grueso (es el que tiene que verse de lejos) y NO se
-            // recorta: se encaja entera en el hueco entre las columnas y debajo del banner.
-            cam.marcoGrosor = 12f
+            // El mismo grosor que las cámaras de jugador: así el marco no se come el área de juego
+            // (Jorge, 26/11/2026).
+            cam.marcoGrosor = 5f
             cam.encajar = true
         }
     }
@@ -8304,6 +8381,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      */
     private var filaInfoTcg: LinearLayout? = null
 
+    /** CPU, RAM, subida y temperatura en la tira de arriba del Modo Pokémon vertical. */
+    private var txtSistemaTcg: android.widget.TextView? = null
+
     /**
      * En el Modo Pokémon **9:16** la pantalla es angosta (≈686 dp en la tablet de pie) y la barra de
      * arriba no cabe en una fila: el medidor de audio, el punto de directo, «sin grabación» y el
@@ -8324,6 +8404,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             }
             b.contenido.removeView(fila)
             filaInfoTcg = null
+            // El detalle del equipo vuelve a la cabecera del monitor (se va con la tira).
+            txtSistemaTcg = null
             return
         }
         if (filaInfoTcg != null) return
@@ -8335,8 +8417,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         listOf(b.audioMeter, b.separadorBarra, b.liveDot, b.txtLive, b.txtTimer).forEach { v ->
             (v.parent as? ViewGroup)?.removeView(v)
             fila.addView(v, v.layoutParams)
-            // El medidor se queda a la izquierda y el resto se va a la derecha.
+            // Detrás del medidor va el detalle del equipo (CPU, RAM, subida y temperatura), que en la
+            // cabecera del monitor ya no cabe; y el resto se va a la derecha.
             if (v === b.audioMeter) {
+                val sistema = android.widget.TextView(this).apply {
+                    textSize = 10f
+                    setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+                    setPadding(14.dp, 0, 0, 0)
+                    isSingleLine = true
+                }
+                txtSistemaTcg = sistema
+                fila.addView(
+                    sistema,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    ).apply { weight = 0f }
+                )
                 fila.addView(
                     Space(this),
                     LinearLayout.LayoutParams(0, 1, 1f)
@@ -9163,8 +9260,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
 
     /** Ancho de un chip: la mayor parte del ancho de la columna del jugador. */
     private fun anchoChipTcg(): Float = if (tcgEnVertical()) {
-        // En 9:16 la ventana del jugador es ancha: el chip va dentro de ella, no asomando fuera.
-        anchoJugadorTcg() * 0.46f
+        // En 9:16 el chip va DENTRO de la ventana del jugador (no asoma fuera) y deja libre la
+        // banda de abajo, donde van los iconos del mazo.
+        anchoJugadorTcg() * 0.36f
     } else {
         anchoJugadorTcg() * 0.74f
     }
@@ -9210,7 +9308,7 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 // En 9:16 la pila va DENTRO de la ventana del jugador, pegada al pie; en 16:9 cuelga
                 // del borde del lienzo, asomando por la orilla de la columna.
                 val caja = if (tcgEnVertical()) rectJugadorTcg(izquierda) else null
-                val abajo = if (caja != null) caja.bottom - 0.012f else 0.975f
+                val abajo = if (caja != null) caja.bottom - 0.028f else 0.975f
                 for (i in 0 until 3) {
                     val usado = !jugador.chips[i]
                     val bmp = Banners.dibujarChip(nombres[i], colores[i], activo = !usado)
@@ -9980,6 +10078,12 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             (viejo.vista.parent as? ViewGroup)?.removeView(viejo.vista)
             (viejo.vistaHerramientas.parent as? ViewGroup)?.removeView(viejo.vistaHerramientas)
         }
+        // El bloque fijo de acciones de la partida se rehace según el formato.
+        contenedorAccionesTcg?.let { caja ->
+            (caja.parent as? ViewGroup)?.removeView(caja)
+            caja.removeAllViews()
+        }
+        contenedorAccionesTcg = null
         val panel = PanelTcg(this, object : PanelTcg.Escucha {
             override fun onEditarNombre(lado: Int) = editarNombreTcg(lado)
 
@@ -10044,6 +10148,19 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // Las dos tarjetas de jugador van debajo del monitor en los dos formatos.
         b.slotControles.addView(panel.vista, 0)
         if (tcgVertical) {
+            // Bloque fijo con los botones de la partida, entre las cámaras y los comentarios.
+            val acciones = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, 6.dp, 0, 0)
+            }
+            contenedorAccionesTcg = acciones
+            b.panelFuentes.addView(
+                acciones,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
             // En 9:16 la columna de comentarios no cabe al lado del monitor (el alto es de oro):
             // baja al pie de la columna de cámaras, que es la que tiene espacio libre.
             b.panelFuentes.addView(
@@ -10051,9 +10168,16 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                 LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     0,
-                    0.72f
+                    0.62f
                 ).apply { topMargin = 6.dp }
             )
+            // La parrilla se rehace para que los botones caigan en el bloque fijo de arriba.
+            runCatching { buildSourcesGrid() }
+            ocultarSeccionesTcg()
+        } else {
+            // Al volver a 16:9 los botones regresan al deslizable de la parrilla.
+            runCatching { buildSourcesGrid() }
+            ocultarSeccionesTcg()
         }
         // Espectadores y comentarios del stream en el panel de la derecha.
         iniciarConsultasFacebook()
@@ -10510,20 +10634,26 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         b.btnPhoto.visibility = View.GONE
         b.scrollControles.visibility = View.GONE
         // Fuera overlays y medios: en este modo solo van las 4 cámaras.
-        etiquetaOverlays?.visibility = View.GONE
-        overlayContainer.visibility = View.GONE
-        etiquetaMedios?.visibility = View.GONE
-        if (::mediosContainer.isInitialized) mediosContainer.visibility = View.GONE
-        if (::bibliotecaContainer.isInitialized) bibliotecaContainer.visibility = View.GONE
+        ocultarSeccionesTcg()
         // Columna de cámaras y monitor: reparto según el formato.
-        val pesoFuentes = if (tcgVertical) 0.30f else 0.195f
-        val pesoPrograma = if (tcgVertical) 0.70f else 0.81f
-        b.panelFuentes.layoutParams = LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.MATCH_PARENT, pesoFuentes
-        )
-        b.panelPrograma.layoutParams = LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.MATCH_PARENT, pesoPrograma
-        )
+        if (tcgVertical) {
+            // En 9:16 el ancho del programa lo fija el monitor (acomodarMonitorTcgVertical lo mide y
+            // ajusta); aquí solo se deja un valor de arranque y las fuentes se llevan todo el resto.
+            b.panelFuentes.layoutParams = LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f
+            )
+            b.panelPrograma.layoutParams = LinearLayout.LayoutParams(
+                (resources.displayMetrics.widthPixels * 0.62f).toInt(),
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        } else {
+            b.panelFuentes.layoutParams = LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 0.195f
+            )
+            b.panelPrograma.layoutParams = LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 0.81f
+            )
+        }
         b.contenido.setPadding(0, 0, 0, 0)
         b.llGrid.requestLayout()
         b.cuerpo.requestLayout()
@@ -10563,6 +10693,21 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
                     hub.all().forEach { s -> s.videoTrack?.let { t -> runCatching { adjuntar(s.slot, t) } } }
                 }
             }, espera)
+        }
+    }
+
+    /**
+     * Esconde lo que el Modo Pokémon no usa: la sección de overlays y la de medios. Se llama al
+     * armar el modo y **después de rehacer la parrilla**, porque `buildSourcesGrid()` vuelve a crear
+     * esas secciones visibles (Jorge, 26/11/2026).
+     */
+    private fun ocultarSeccionesTcg() {
+        runCatching {
+            etiquetaOverlays?.visibility = View.GONE
+            if (::overlayContainer.isInitialized) overlayContainer.visibility = View.GONE
+            etiquetaMedios?.visibility = View.GONE
+            if (::mediosContainer.isInitialized) mediosContainer.visibility = View.GONE
+            if (::bibliotecaContainer.isInitialized) bibliotecaContainer.visibility = View.GONE
         }
     }
 
@@ -10650,20 +10795,38 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      */
     private fun acomodarMonitorTcgVertical(intento: Int) {
         val panel = b.panelPrograma
-        val anchoTotal = panel.width - panel.paddingStart - panel.paddingEnd
+        // La columna del programa se ajusta a lo que mide el monitor: **todo el ancho sobrante se va
+        // a la columna de cámaras, botones y comentarios** (Jorge, 26/11/2026). Si no, las tarjetas
+        // de jugador se estiraban de más y los demás cuadros quedaban apretados.
+        val anchoPanel = panel.width - panel.paddingStart - panel.paddingEnd
         val cabecera = if (b.cabeceraPrograma.visibility == View.VISIBLE) b.cabeceraPrograma.height else 0
         val altoTotal = panel.height - panel.paddingTop - panel.paddingBottom -
             cabecera - b.slotControles.height - 6.dp
         var altoC = altoTotal
         var anchoC = (altoC * 9f / 16f).toInt()
-        if (anchoC > anchoTotal) {
-            anchoC = anchoTotal
+        if (anchoC > anchoPanel) {
+            anchoC = anchoPanel
             altoC = (anchoC * 16f / 9f).toInt()
         }
-        L.i("tcg", "monitor 9:16 ancho=$anchoC alto=$altoC (panel $anchoTotal x $altoTotal) intento=$intento")
+        L.i("tcg", "monitor 9:16 ancho=$anchoC alto=$altoC (panel $anchoPanel x $altoTotal) intento=$intento")
         if (anchoC <= 120 || altoC <= 200) {
             if (intento < 16) {
                 b.cuerpo.postDelayed({ runCatching { acomodarMonitorTcg(intento + 1) } }, 250)
+            }
+            return
+        }
+        // El panel del programa se queda con lo justo del monitor; el resto es para las fuentes.
+        val anchoJusto = anchoC + panel.paddingStart + panel.paddingEnd
+        if (kotlin.math.abs(panel.width - anchoJusto) > 8.dp) {
+            b.panelFuentes.layoutParams = LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f
+            )
+            panel.layoutParams = LinearLayout.LayoutParams(
+                anchoJusto, ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            b.cuerpo.requestLayout()
+            if (intento < 16) {
+                b.cuerpo.postDelayed({ runCatching { acomodarMonitorTcg(intento + 1) } }, 200)
             }
             return
         }
@@ -10983,6 +11146,9 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
         // Cronómetro de la partida debajo de la mesa y batería dentro de cada cámara.
         // El cronómetro NO arranca solo: se dibuja con lo que lleve y lo controla Jorge desde el panel.
         dibujarCronometroTcg()
+        // Y se recoloca siempre: al cambiar de formato el texto no cambia (00:00), así que el
+        // redibujado se salta y el chip se quedaba en la posición del formato anterior (26/11/2026).
+        acomodarCronometroTcg()
         panelTcg?.cronometro(cronoTextoActual(), cronoAndando)
         // El reloj que hace correr el cronómetro y refresca la batería cada segundo.
         runCatching {
