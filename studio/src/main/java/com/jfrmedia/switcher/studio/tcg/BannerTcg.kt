@@ -3,8 +3,11 @@ package com.jfrmedia.switcher.studio.tcg
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.RadialGradient
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 
 /**
@@ -110,6 +113,100 @@ object Banners {
     )
 
     fun paleta(numero: Int): PaletaBanner = PALETAS[(numero - 1).coerceIn(0, PALETAS.lastIndex)]
+
+    // ------------------------------------------------------------------ fondo del modo
+
+    /** Mezcla dos colores: `f` = 0 deja [a] y `f` = 1 deja [b]. */
+    private fun mezclar(a: Int, b: Int, f: Float): Int {
+        val t = f.coerceIn(0f, 1f)
+        return Color.argb(
+            (Color.alpha(a) + (Color.alpha(b) - Color.alpha(a)) * t).toInt(),
+            (Color.red(a) + (Color.red(b) - Color.red(a)) * t).toInt(),
+            (Color.green(a) + (Color.green(b) - Color.green(a)) * t).toInt(),
+            (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t).toInt()
+        )
+    }
+
+    /**
+     * Fondo del Modo Pokémon: **degradado con manchas difusas del color del banner**.
+     *
+     * Se usa detrás de la composición para que el programa no sea un vacío negro. Todo sale de la
+     * paleta elegida, así que al cambiar el banner (botón «Banner» o Ajustes) el fondo se vuelve a
+     * pintar con los colores nuevos (Jorge, 26/11/2026).
+     *
+     * Las manchas son degradados radiales de varias paradas: como el borde se va a transparente,
+     * quedan con el borde difuso, sin necesidad de desenfoque real (que en Android no existe en
+     * Canvas) y sin coste por cuadro: es un mapa de bits fijo.
+     *
+     * @param numeroPaleta 1..5, el mismo número que usa [paleta].
+     */
+    fun fondoVivo(
+        numeroPaleta: Int,
+        ancho: Int = 540,
+        alto: Int = 960,
+    ): Bitmap {
+        val p = paleta(numeroPaleta)
+        // ¿El banner es claro? Entonces el fondo también tiene que serlo, o el texto del banner
+        // (oscuro en la paleta «Claro») quedaría ilegible contra un fondo negro.
+        val claro = (0.299f * Color.red(p.fondo) + 0.587f * Color.green(p.fondo) +
+            0.114f * Color.blue(p.fondo)) / 255f > 0.6f
+        val bmp = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(bmp)
+        val w = ancho.toFloat()
+        val h = alto.toFloat()
+
+        // 1) Degradado base en diagonal, derivado del color del banner: arriba más claro, abajo más
+        //    oscuro (así el banner que va abajo y su texto se leen sin pelear con el fondo).
+        val arriba = mezclar(p.fondo, Color.WHITE, if (claro) 0.30f else 0.16f)
+        val abajo = mezclar(p.fondo, Color.BLACK, if (claro) 0.22f else 0.62f)
+        val base = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(
+                0f, 0f, w * 0.55f, h,
+                arriba, abajo, Shader.TileMode.CLAMP
+            )
+        }
+        cv.drawRect(0f, 0f, w, h, base)
+
+        // 2) Manchas. Cada una es un círculo con degradado radial (centro con color, borde
+        //    transparente). Se dibujan estiradas para que no parezcan círculos perfectos.
+        //    El alfa es bajo a propósito: el fondo acompaña, no compite con el área de juego.
+        data class Mancha(
+            val x: Float,
+            val y: Float,
+            val radio: Float,
+            val estirado: Float,
+            val color: Int,
+            val alfa: Float,
+        )
+
+        val acento = p.franjaTexto
+        val manchas = listOf(
+            Mancha(0.16f, 0.08f, 0.58f, 1.30f, acento, 0.46f),
+            Mancha(0.90f, 0.26f, 0.46f, 1.10f, acento, 0.26f),
+            Mancha(0.62f, 0.50f, 0.60f, 0.85f, p.franja, if (claro) 0.60f else 0.80f),
+            Mancha(0.10f, 0.66f, 0.50f, 1.20f, acento, 0.22f),
+            Mancha(0.82f, 0.84f, 0.46f, 1.00f, acento, 0.18f),
+        )
+        val pincel = Paint(Paint.ANTI_ALIAS_FLAG)
+        manchas.forEach { m ->
+            val r = m.radio * minOf(w, h)
+            if (r <= 1f) return@forEach
+            val centro = Color.argb((m.alfa * 255).toInt(), Color.red(m.color), Color.green(m.color), Color.blue(m.color))
+            val medio = Color.argb((m.alfa * 255 * 0.55f).toInt(), Color.red(m.color), Color.green(m.color), Color.blue(m.color))
+            val fuera = Color.argb(0, Color.red(m.color), Color.green(m.color), Color.blue(m.color))
+            pincel.shader = RadialGradient(
+                0f, 0f, r, intArrayOf(centro, medio, fuera), floatArrayOf(0f, 0.55f, 1f),
+                Shader.TileMode.CLAMP
+            )
+            cv.save()
+            cv.translate(m.x * w, m.y * h)
+            cv.scale(m.estirado, 1f / m.estirado)
+            cv.drawCircle(0f, 0f, r, pincel)
+            cv.restore()
+        }
+        pincel.shader = null
+        return bmp
+    }
 
     /**
      * Dibuja el banner completo y devuelve el bitmap listo para el compositor.

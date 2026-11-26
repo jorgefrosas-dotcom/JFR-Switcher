@@ -9255,14 +9255,23 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
     }
 
     private fun cambiarEstadoTcg(nuevo: EstadoTcg) {
+        val cambioPaleta = nuevo.paleta != estadoTcg.paleta
         estadoTcg = nuevo
         guardarEstadoTcg()
+        dibujarFondoTcg()
         dibujarBannerTcg()
         // El marco de las cámaras de jugador toma el color del banner: se repinta con cada cambio.
         actualizarMarcosTcg()
         // Y los iconos grandes del mazo debajo de la cámara, por si cambió el mazo elegido.
         actualizarIconosMazo()
         dibujarChipsTcg()
+        // El cronómetro se dibuja con el color del banner: si cambió la paleta hay que volver a
+        // pintarlo aunque el tiempo sea el mismo (se salta el redibujado si el texto no cambió).
+        if (cambioPaleta) {
+            cronoTexto = ""
+            dibujarCronometroTcg()
+            acomodarCronometroTcg()
+        }
         panelTcg?.refrescar(nuevo)
     }
 
@@ -9373,6 +9382,49 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
             runCatching { b.canvas.requestRender() }
         }
         anim.start()
+    }
+
+    /** Fondo del modo: degradado con manchas difusas del color del banner (va detrás de todo). */
+    private var fondoTcg: ImageItem? = null
+
+    /** Paleta con la que se pintó [fondoTcg], para no rehacer el mapa de bits si no cambió. */
+    private var paletaFondoTcg = -1
+
+    /**
+     * Dibuja el fondo del programa: **degradado con manchas difusas del color del banner**, para que
+     * el monitor no sea un vacío negro.
+     *
+     * Se vuelve a pintar cuando cambia la paleta (el botón «Banner» o Ajustes), así que el fondo y el
+     * banner siempre van juntos. Va al **principio de la lista** de la escena: detrás de cámaras,
+     * banner, chips y cronómetro (Jorge, 26/11/2026).
+     */
+    private fun dibujarFondoTcg() {
+        if (!modoTcg) return
+        val escena = b.canvas.scene
+        val item = fondoTcg
+        if (item != null && paletaFondoTcg == estadoTcg.paleta && !item.bitmap.isRecycled) {
+            // El mismo fondo: solo se asegura de que siga al fondo de la lista y a pantalla completa.
+            item.rect.set(0f, 0f, 1f, 1f)
+            if (escena.items.firstOrNull() !== item) {
+                runCatching {
+                    escena.items.remove(item)
+                    escena.items.add(0, item)
+                }
+            }
+            return
+        }
+        val imagen = com.jfrmedia.switcher.studio.tcg.Banners
+            .fondoVivo(estadoTcg.paleta, 540, 960)
+        // Se quita el anterior ANTES de agregar: si no, el índice se corre y el fondo queda delante.
+        item?.let { runCatching { escena.items.remove(it) } }
+        val nuevo = ImageItem(escena.nextId(), imagen, "Fondo", null)
+        nuevo.rect.set(0f, 0f, 1f, 1f)
+        nuevo.radiusDp = 0f
+        escena.items.add(0, nuevo)
+        fondoTcg = nuevo
+        paletaFondoTcg = estadoTcg.paleta
+        if (escena.selectedId == nuevo.id) escena.selectedId = null
+        runCatching { b.canvas.requestRender() }
     }
 
     private fun dibujarBannerTcg() {
@@ -11115,6 +11167,8 @@ class StudioActivity : AppCompatActivity(), CompositorView.Listener {
      */
     private fun aplicarEscenaTcg() {
         val escena = b.canvas.scene
+        // El fondo del programa (degradado con manchas del color del banner) va primero: detrás de todo.
+        dibujarFondoTcg()
         escena.cams().forEach { runCatching { quitarCamaraDelLienzo(it) } }
         // Si la cámara que estaba al aire ya no está (se desconectó o se apagó), vuelve la mesa.
         if (!camaraTcgDisponible(vistaTcg)) vistaTcg = VISTA_MESA
